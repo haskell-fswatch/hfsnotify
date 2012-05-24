@@ -1,0 +1,28 @@
+Name:                   fsnotify
+Version:                0.0.1
+Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>
+Maintainer:             Mark Dittmer <mark.s.dittmer@gmail.com>
+License:                BSD3
+License-File:           LICENSE
+Synopsis:               Cross platform library for file creation, modification,
+                        and deletion notification.
+Description:            Cross platform library for file creation, modification,
+                        and deletion notification. This library builds upon
+                        existing libraries for platform-specific Window, Mac,
+                        and Linux filesystem event notification.
+Category:               Filesystem
+Cabal-Version:          >= 1.6
+Build-Type:             Simple
+
+Library
+  Extensions:           MultiParamTypeClasses
+  Build-Depends:        base == 4.5.*, regex-tdfa >= 1.1.8, filemanip >= 0.3.5.2
+  Exposed-Modules:      System.IO.FSNotify
+  if os(linux)
+    CPP-Options:   -DOS_Linux
+    Other-Modules: System.IO.FSNotify.Linux
+    Build-Depends: hinotify == 0.3.2
+
+-- Source-Repository head
+--   Type:                 git
+--   Location:             git://github.com/TODO-create-user/TODO-create-repo
