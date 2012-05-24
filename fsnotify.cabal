@@ -23,6 +23,6 @@ Library
     Other-Modules: System.IO.FSNotify.Linux
     Build-Depends: hinotify == 0.3.2
 
--- Source-Repository head
---   Type:                 git
---   Location:             git://github.com/TODO-create-user/TODO-create-repo
+Source-Repository head
+  Type:                 git
+  Location:             git://github.com/mdittmer/hfsnotify
