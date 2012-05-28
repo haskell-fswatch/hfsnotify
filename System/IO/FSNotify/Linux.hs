@@ -7,40 +7,56 @@ module System.IO.FSNotify.Linux
   (
   ) where
 
-import System.IO
-import Text.Regex.TDFA
-import System.FilePath.Find as Find
+import Prelude hiding (FilePath)
 
+import Filesystem.Path.CurrentOS
+import System.FilePath.Find
+import System.IO hiding (FilePath)
 import System.IO.FSNotify
 import qualified System.INotify as INo
 
-fsnEvent :: INo.Event -> Event
-fsnEvent (INo.Created  _ name) = Created  name
-fsnEvent (INo.Modified _ name) = Modified name
-fsnEvent (INo.Deleted  _ name) = Deleted  name
+-- Helper functions for dealing with String vs. FileSystem.Path.CurrentOS.FilePath
+fp :: String -> FilePath
+fp = decodeString
+str :: FilePath -> String
+str = encodeString
 
-actWhenMatched :: FilePath -> FilePattern -> Action -> INo.Event -> IO ()
-actWhenMatched path pattern action event
-  | (path =~ pattern) = action (fsnEvent event)
-  | otherwise         = return ()
+fsnEvent :: INo.Event -> Maybe Event
+fsnEvent (INo.Created False name)          = Just (Added (fp name))
+fsnEvent (INo.MovedIn False name cookie)   = Just (Added (fp name))
+fsnEvent (INo.Modified False (Just name))  = Just (Modified (fp name))
+fsnEvent (INo.Deleted  False name)         = Just (Removed (fp name))
+fsnEvent (INo.MovedOut  False name cookie) = Just (Removed (fp name))
+fsnEvent _                                 = Nothing
+
+handleInoEvent :: ActionPredicate -> Action -> INo.Event -> IO ()
+handleInoEvent actPred action inoEvent = handleEvent actPred action (fsnEvent inoEvent)
+handleEvent :: ActionPredicate -> Action -> Maybe Event -> IO ()
+handleEvent actPred action (Just event) = if actPred event then action event else return ()
+handlEvent _ _ Nothing = return ()
 
 instance ListenerSession INo.INotify where
   initSession = INo.initINotify
   killSession = INo.killINotify
 
 instance FileListener INo.INotify INo.WatchDescriptor where
-  listen iNotify path pattern action =
-    INo.addWatch iNotify varieties path realAction
+  listen iNotify path actPred action =
+    INo.addWatch iNotify varieties (str path) handler
     where
-    varieties = [INo.Created, INo.Modified, INo.Deleted]
-    realAction = actWhenMatched path pattern action
+      varieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
+      handler :: INo.Event -> IO ()
+      handler = handleInoEvent actPred action
 
-  rlisten iNotify path pattern action = do
-    paths <- Find.find always (fileType ==? Directory) path
-    mapM (\fd -> INo.addWatch iNotify newDirVarieties (Find.filePath fd) newDirAction) paths
-    mapM (\fd -> INo.addWatch iNotify actionVarieties (Find.filePath fd) realAction) paths
+  rlisten iNotify path actPred action = do
+    paths <- find always (fileType ==? Directory) (str path)
+    mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties filePath newDirHandler) paths
+    mapM (\filePath -> INo.addWatch iNotify actionVarieties filePath handler) paths
     where
-    newDirVarieties = [INo.Created]
-    actionVarieties = [INo.Created, INo.Modified, INo.Deleted]
-    newDirAction (INo.Created _ name) = rlisten iNotify (path ++ "/" ++ name) pattern action
-    realAction = actWhenMatched path pattern action
+      newDirVarieties = [INo.Create]
+      actionVarieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
+      newDirHandler :: INo.Event -> IO ()
+      newDirHandler (INo.Created _ name) = do
+        (rlisten iNotify  (path </> (fp name)) actPred action) :: IO [INo.WatchDescriptor]
+        return ()
+      handler :: INo.Event -> IO ()
+      handler = handleInoEvent actPred action

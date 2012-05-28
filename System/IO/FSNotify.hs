@@ -4,30 +4,33 @@
 --
 
 module System.IO.FSNotify
-  ( FilePattern
-  , Action
-  , Event(..)
-  , ListenerSession(..)
-  , FileListener(..)
-  ) where
+       ( ActionPredicate
+       , Action
+       , Event(..)
+       , ListenerSession(..)
+       , FileListener(..)
+       ) where
 
-import System.IO
+import Prelude hiding (FilePath)
 
-type FilePattern = String
+import Filesystem.Path.CurrentOS
+import System.IO hiding (FilePath)
 
 data Event =
-    Created
-      { filePath :: FilePath }
-  | Modified
-      { maybeFilePath :: Maybe FilePath }
-  | Deleted
-      { filePath :: FilePath }
+    Added    FilePath
+  | Modified FilePath
+  | Removed  FilePath
+
+type ActionPredicate = Event -> Bool
 type Action = Event -> IO ()
+
+act :: ActionPredicate
+act event = True
 
 class ListenerSession sessionType where
   initSession :: IO sessionType
   killSession :: sessionType -> IO ()
 
 class FileListener sessionType handleType where
-  listen  :: sessionType -> FilePath -> FilePattern -> Action -> IO  handleType
-  rlisten :: sessionType -> FilePath -> FilePattern -> Action -> IO [handleType]
+  listen  :: sessionType -> FilePath -> ActionPredicate -> Action -> IO  handleType
+  rlisten :: sessionType -> FilePath -> ActionPredicate -> Action -> IO [handleType]
