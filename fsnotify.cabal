@@ -16,12 +16,17 @@ Build-Type:             Simple
 
 Library
   Extensions:           MultiParamTypeClasses
-  Build-Depends:        base == 4.5.*, filemanip >= 0.3.5.2, system-filepath >= 0.4.6
+  Build-Depends:        base >= 4.3.1.0, system-filepath >= 0.4.6
   Exposed-Modules:      System.IO.FSNotify
   if os(linux)
     CPP-Options:   -DOS_Linux
     Other-Modules: System.IO.FSNotify.Linux
-    Build-Depends: hinotify == 0.3.2
+    Build-Depends: filemanip >= 0.3.5.2, hinotify == 0.3.2
+  else
+    if os(windows)
+      CPP-Options:   -DOS_Linux
+      Other-Modules: System.IO.FSNotify.Win32
+      Build-Depends: Win32-notify == 0.2
 
 Source-Repository head
   Type:                 git
