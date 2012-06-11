@@ -5,8 +5,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module System.IO.FSNotify.Win32
-  (
-  ) where
+       ( initSession
+       , killSession
+       , listen
+       , rlisten
+       ) where
 
 import Prelude hiding (FilePath)
 
