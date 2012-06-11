@@ -5,7 +5,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module System.IO.FSNotify.Polling
-  ( initSession
+  ( PollManager
+  , initSession
   , killSession
   , listen
   , rlisten
@@ -18,12 +19,12 @@ import Control.Concurrent.Chan
 import Control.Monad
 import Data.Map (Map)
 import Data.Maybe
-import Filesystem.Path.CurrentOS hiding (concat)
-import System.Directory
-import System.FilePath hiding (FilePath, (</>))
+import Data.Time.Clock (UTCTime)
+import Filesystem
+import Filesystem.Path
 import System.IO hiding (FilePath)
 import System.IO.FSNotify
-import System.Time
+import System.IO.FSNotify.Path
 import qualified Data.Map as Map
 
 data EventType =
@@ -31,16 +32,18 @@ data EventType =
   | ModifiedEvent
   | RemovedEvent
 
--- Helper functions for dealing with String vs. FileSystem.Path.CurrentOS.FilePath
--- TODO: These should get pushed to the parent module
-fp :: String -> FilePath
-fp = decodeString
-str :: FilePath -> String
-str = encodeString
-mapFP :: [String] -> [FilePath]
-mapFP = map fp
-mapStr :: [FilePath] -> [String]
-mapStr = map str
+type WatchMap = Map ThreadId Action
+data PollManager = PollManager (MVar WatchMap)
+
+initPollManager :: IO PollManager
+initPollManager =  do
+  mvarMap <- newMVar Map.empty
+  return (PollManager mvarMap)
+
+killPollManager :: PollManager -> IO ()
+killPollManager (PollManager mvarMap) = do
+  watchMap <- readMVar mvarMap
+  flip mapM_ (Map.keys watchMap) $ killThread
 
 generateEvent :: EventType -> FilePath -> Maybe Event
 generateEvent AddedEvent    filePath = Just (Added    filePath)
@@ -55,56 +58,25 @@ handleEvent actPred action event
   | actPred event = action event
   | otherwise     = return ()
 
-getDirectoryContentsPath :: FilePath -> IO [FilePath]
-getDirectoryContentsPath filePath = do
-  contents <- getDirectoryContents (str filePath)
-  let contents' = mapFP contents
-  return  $ map ((</>) filePath) $ filter (`notElem` [fp ".", fp ".."]) contents'
-
-findImmediateFiles :: FilePath -> IO [FilePath]
-findImmediateFiles filePath = do
-  contents <- getDirectoryContentsPath filePath
-  let contents' = mapStr contents
-  files <- filterM doesFileExist contents'
-  return (mapFP files)
-
-findDirs :: FilePath -> IO [FilePath]
-findDirs filePath = do
-  contents <- getDirectoryContentsPath filePath
-  let contents' = mapStr contents
-  dirs <- filterM doesDirectoryExist contents'
-  return (mapFP dirs)
-
-findAllFiles :: FilePath -> IO [FilePath]
-findAllFiles filePath = do
-  files <- findImmediateFiles filePath
-  dirs  <- findDirs           filePath
-  nestedFiles <- mapM findAllFiles dirs
-  return (files ++ concat nestedFiles)
-
-findFiles :: Bool -> FilePath -> IO [FilePath]
-findFiles True filePath = findAllFiles filePath
-findFiles False filePath = findImmediateFiles filePath
-
-pathModMap :: Bool -> FilePath -> IO (Map FilePath ClockTime)
+pathModMap :: Bool -> FilePath -> IO (Map FilePath UTCTime)
 pathModMap True path = do
-  files <- findAllFiles path
+  files <- findFiles True path
   pathModMap' path files
 pathModMap False path = do
-  files <- findImmediateFiles path
+  files <- findFiles False path
   pathModMap' path files
 
-pathModMap' :: FilePath -> [FilePath] -> IO (Map FilePath ClockTime)
+pathModMap' :: FilePath -> [FilePath] -> IO (Map FilePath UTCTime)
 pathModMap' path files = do
   mapList <- mapM pathAndTime files
   return (Map.fromList mapList)
   where
-    pathAndTime :: FilePath -> IO (FilePath, ClockTime)
+    pathAndTime :: FilePath -> IO (FilePath, UTCTime)
     pathAndTime path = do
-      modTime <- getModificationTime (str path)
+      modTime <- getModified path
       return (path, modTime)
 
-pollPath :: Bool -> FilePath -> ActionPredicate -> Action -> Map FilePath ClockTime -> IO ()
+pollPath :: Bool -> FilePath -> ActionPredicate -> Action -> Map FilePath UTCTime -> IO ()
 pollPath recursive filePath actPred action oldPathMap = do
   threadDelay 1000000
   newPathMap  <- pathModMap recursive filePath
@@ -117,24 +89,27 @@ pollPath recursive filePath actPred action oldPathMap = do
   handleEvents $ generateEvents RemovedEvent  $ Map.keys deletedMap
   pollPath' newPathMap
   where
-    modifiedDifference :: ClockTime -> ClockTime -> Maybe ClockTime
+    modifiedDifference :: UTCTime -> UTCTime -> Maybe UTCTime
     modifiedDifference newTime oldTime
       | (oldTime /= newTime) = Just newTime
       | otherwise            = Nothing
     handleEvents :: [Event] -> IO ()
     handleEvents = mapM_ (handleEvent actPred action)
-    pollPath' :: Map FilePath ClockTime -> IO ()
+    pollPath' :: Map FilePath UTCTime -> IO ()
     pollPath' = pollPath recursive filePath actPred action
 
-instance ListenerSession () where
-  initSession   = return ()
-  killSession _ = return ()
+instance ListenerSession PollManager where
+  initSession = initPollManager
+  killSession = killPollManager
 
-instance FileListener () ThreadId where
-  listen nil path actPred action  = do
+instance FileListener PollManager ThreadId where
+  listen (PollManager mvarMap) path actPred action  = do
     pmMap <- pathModMap False path
-    forkIO $ pollPath False path actPred action pmMap
-  rlisten nil path actPred action = do
+    tid <- forkIO $ pollPath False path actPred action pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
+    return tid
+  rlisten (PollManager mvarMap) path actPred action = do
     pmMap <- pathModMap True  path
     tid <- forkIO $ pollPath True  path actPred action pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
     return [tid]

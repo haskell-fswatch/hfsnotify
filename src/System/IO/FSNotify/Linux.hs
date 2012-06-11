@@ -14,16 +14,10 @@ module System.IO.FSNotify.Linux
 import Prelude hiding (FilePath)
 
 import Filesystem.Path.CurrentOS
-import System.FilePath.Find
 import System.IO hiding (FilePath)
 import System.IO.FSNotify
+import System.IO.FSNotify.Path
 import qualified System.INotify as INo
-
--- Helper functions for dealing with String vs. FileSystem.Path.CurrentOS.FilePath
-fp :: String -> FilePath
-fp = decodeString
-str :: FilePath -> String
-str = encodeString
 
 fsnEvent :: INo.Event -> Maybe Event
 fsnEvent (INo.Created False name)          = Just (Added (fp name))
@@ -45,14 +39,14 @@ instance ListenerSession INo.INotify where
 
 instance FileListener INo.INotify INo.WatchDescriptor where
   listen iNotify path actPred action =
-    INo.addWatch iNotify varieties (str path) handler
+    INo.addWatch iNotify varieties (encodeString path) handler
     where
       varieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
       handler :: INo.Event -> IO ()
       handler = handleInoEvent actPred action
 
   rlisten iNotify path actPred action = do
-    paths <- find always (fileType ==? Directory) (str path)
+    paths <- findDirs True path
     mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties filePath newDirHandler) paths
     mapM (\filePath -> INo.addWatch iNotify actionVarieties filePath handler) paths
     where

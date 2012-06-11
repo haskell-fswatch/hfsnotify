@@ -6,8 +6,6 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent
 import Filesystem.Path.CurrentOS
-import System.Directory
-import System.IO hiding (FilePath)
 import System.IO.FSNotify.Types
 
 fp :: String -> FilePath
@@ -23,10 +21,9 @@ mapStr = map str
 
 main :: IO ()
 main = do
-    initSession :: IO ()
-    hid <- (listen () (fp "/tmp/hfsnotify") (\event -> True) print :: IO ThreadId)
-    print hid
-    putStrLn "Listens to /tmp/inotify. Hit enter to terminate."
+    pollMan <- initSession :: IO PollManager
+    pollId <- listen pollMan (fp ".") (\event -> True) print
+    print pollId
+    putStrLn "Listens to '.'; Hit enter to terminate."
     getLine
-    killThread hid
-    killSession ()
+    killSession pollMan

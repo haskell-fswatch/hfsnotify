@@ -5,7 +5,8 @@
 {-# LANGUAGE MultiParamTypeClasses, CPP #-}
 
 module System.IO.FSNotify.Types
-       ( initSession
+       ( PollManager
+       , initSession
        , killSession
        , listen
        , rlisten
