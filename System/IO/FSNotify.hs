@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module System.IO.FSNotify
        ( ActionPredicate
@@ -20,6 +21,7 @@ data Event =
     Added    FilePath
   | Modified FilePath
   | Removed  FilePath
+  deriving (Show)
 
 type ActionPredicate = Event -> Bool
 type Action = Event -> IO ()
