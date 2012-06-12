@@ -47,8 +47,8 @@ instance FileListener INo.INotify INo.WatchDescriptor where
 
   rlisten iNotify path actPred action = do
     paths <- findDirs True path
-    mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties filePath newDirHandler) paths
-    mapM (\filePath -> INo.addWatch iNotify actionVarieties filePath handler) paths
+    mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties (fp filePath) newDirHandler) paths
+    mapM (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
     where
       newDirVarieties = [INo.Create]
       actionVarieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
