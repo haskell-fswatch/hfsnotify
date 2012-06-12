@@ -8,8 +8,8 @@ module System.IO.FSNotify
        ( ActionPredicate
        , Action
        , Event(..)
-       , ListenerSession(..)
        , FileListener(..)
+       , act
        ) where
 
 import Prelude hiding (FilePath)
@@ -29,10 +29,8 @@ type Action = Event -> IO ()
 act :: ActionPredicate
 act event = True
 
-class ListenerSession sessionType where
+class FileListener sessionType where
   initSession :: IO sessionType
   killSession :: sessionType -> IO ()
-
-class FileListener sessionType handleType where
-  listen  :: sessionType -> FilePath -> ActionPredicate -> Action -> IO  handleType
-  rlisten :: sessionType -> FilePath -> ActionPredicate -> Action -> IO [handleType]
+  listen  :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()
+  rlisten :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()

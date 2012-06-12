@@ -39,21 +39,22 @@ handleWNoEvent actPred action inoEvent = do
 handleEvent :: ActionPredicate -> Action -> Event -> IO ()
 handleEvent actPred action event = if actPred event then action event else return ()
 
-instance ListenerSession WNo.WatchManager where
+instance FileListener WNo.WatchManager where
   initSession = WNo.initWatchManager
+
   killSession = WNo.killWatchManager
 
-instance FileListener WNo.WatchManager WNo.WatchId where
-  listen watchManager path actPred action =
+  listen watchManager path actPred action = do
     WNo.watchDirectory watchManager (str path) False varieties handler
+    return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
       handler :: WNo.Event -> IO ()
       handler = handleWNoEvent actPred action
 
   rlisten watchManager path actPred action = do
-    watchIdHandle <- WNo.watchDirectory watchManager (str path) True varieties handler
-    return [watchIdHandle]
+    WNo.watchDirectory watchManager (str path) True varieties handler
+    return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
       handler :: WNo.Event -> IO ()

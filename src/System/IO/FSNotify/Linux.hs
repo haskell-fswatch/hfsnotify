@@ -33,13 +33,14 @@ handleEvent :: ActionPredicate -> Action -> Maybe Event -> IO ()
 handleEvent actPred action (Just event) = if actPred event then action event else return ()
 handlEvent _ _ Nothing = return ()
 
-instance ListenerSession INo.INotify where
+instance FileListener INo.INotify where
   initSession = INo.initINotify
+
   killSession = INo.killINotify
 
-instance FileListener INo.INotify INo.WatchDescriptor where
-  listen iNotify path actPred action =
+  listen iNotify path actPred action = do
     INo.addWatch iNotify varieties (encodeString path) handler
+    return ()
     where
       varieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
       handler :: INo.Event -> IO ()
@@ -49,12 +50,13 @@ instance FileListener INo.INotify INo.WatchDescriptor where
     paths <- findDirs True path
     mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties (fp filePath) newDirHandler) paths
     mapM (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
+    return ()
     where
       newDirVarieties = [INo.Create]
       actionVarieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
       newDirHandler :: INo.Event -> IO ()
       newDirHandler (INo.Created _ name) = do
-        (rlisten iNotify  (path </> (fp name)) actPred action) :: IO [INo.WatchDescriptor]
+        rlisten iNotify  (path </> (fp name)) actPred action
         return ()
       handler :: INo.Event -> IO ()
       handler = handleInoEvent actPred action

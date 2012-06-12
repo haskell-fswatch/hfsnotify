@@ -98,18 +98,19 @@ pollPath recursive filePath actPred action oldPathMap = do
     pollPath' :: Map FilePath UTCTime -> IO ()
     pollPath' = pollPath recursive filePath actPred action
 
-instance ListenerSession PollManager where
+instance FileListener PollManager where
   initSession = initPollManager
+
   killSession = killPollManager
 
-instance FileListener PollManager ThreadId where
   listen (PollManager mvarMap) path actPred action  = do
     pmMap <- pathModMap False path
     tid <- forkIO $ pollPath False path actPred action pmMap
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
-    return tid
+    return ()
+
   rlisten (PollManager mvarMap) path actPred action = do
     pmMap <- pathModMap True  path
     tid <- forkIO $ pollPath True  path actPred action pmMap
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
-    return [tid]
+    return ()
