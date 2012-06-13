@@ -4,19 +4,19 @@
 --
 
 module System.IO.FSNotify.Linux
-       ( initSession
-       , killSession
-       , listen
-       , rlisten
+       ( FileListener(..)
+       , ListenManager
        ) where
 
 import Prelude hiding (FilePath)
 
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
-import System.IO.FSNotify
+import System.IO.FSNotify.Types
 import System.IO.FSNotify.Path
 import qualified System.INotify as INo
+
+type ListenManager = INo.INotify
 
 fsnEvent :: INo.Event -> Maybe Event
 fsnEvent (INo.Created False name)          = Just (Added (fp name))

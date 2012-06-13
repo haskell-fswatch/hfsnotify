@@ -4,11 +4,7 @@
 --
 
 module System.IO.FSNotify.Polling
-  ( PollManager
-  , initSession
-  , killSession
-  , listen
-  , rlisten
+  ( PollManager(..), FileListener(..)
   ) where
 
 import Prelude hiding (FilePath)
@@ -23,7 +19,7 @@ import Data.Time.Clock (UTCTime)
 import Filesystem
 import Filesystem.Path
 import System.IO hiding (FilePath)
-import System.IO.FSNotify
+import System.IO.FSNotify.Types
 import System.IO.FSNotify.Path
 import qualified Data.Map as Map
 
