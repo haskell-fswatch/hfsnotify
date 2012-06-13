@@ -14,6 +14,7 @@ module System.IO.FSNotify.Polling
 import Prelude hiding (FilePath)
 
 import Control.Concurrent
+import Control.Concurrent.MVar
 import Control.Concurrent.Chan
 import Control.Monad
 import Data.Map (Map)
@@ -31,7 +32,8 @@ data EventType =
   | ModifiedEvent
   | RemovedEvent
 
-type WatchMap = Map ThreadId Action
+data WatchData = WatchData ThreadId Action
+type WatchMap = Map FilePath WatchData
 data PollManager = PollManager (MVar WatchMap)
 
 generateEvent :: EventType -> FilePath -> Maybe Event
@@ -94,16 +96,19 @@ instance FileListener PollManager where
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    flip mapM_ (Map.keys watchMap) $ killThread
+    flip mapM_ (Map.elems watchMap) $ killThread'
+    where
+      killThread' :: WatchData -> IO ()
+      killThread' (WatchData threadId _) = killThread threadId
 
   listen (PollManager mvarMap) path actPred action  = do
     pmMap <- pathModMap False path
-    tid <- forkIO $ pollPath False path actPred action pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
+    threadId <- forkIO $ pollPath False path actPred action pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData threadId action) watchMap)
     return ()
 
   rlisten (PollManager mvarMap) path actPred action = do
     pmMap <- pathModMap True  path
-    tid <- forkIO $ pollPath True  path actPred action pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert tid action watchMap)
+    threadId <- forkIO $ pollPath True  path actPred action pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData threadId action) watchMap)
     return ()

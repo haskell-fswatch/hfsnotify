@@ -12,8 +12,11 @@ module System.IO.FSNotify.OSX
 
 import Prelude hiding (FilePath)
 
+import Control.Concurrent.MVar
 import Control.Monad
+import Data.Bits
 import Data.Map (Map)
+import Data.Word
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 import System.IO.FSNotify
@@ -27,13 +30,16 @@ data WatchData = WatchData FSE.EventStream ListenType Action
 type WatchMap = Map FilePath WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 
+nil :: Word64
+nil = 0x00
+
 fsnEvent :: FSE.Event -> Maybe Event
-fsnEvent fseEvent =
-  | FSE.eventFlags .&. FSE.eventFlagItemCreated  = Just (Added (fp name))
-  | FSE.eventFlags .&. FSE.eventFlagItemModified = Just (Altered (fp name))
-  | FSE.eventFlags .&. FSE.eventFlagItemRenamed  = Just (Added (fp name))
-  | FSE.eventFlags .&. FSE.eventFlagItemRemoved  = Just (Removed (fp name))
-  | otherwise                                    = Nothing
+fsnEvent fseEvent
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemCreated  /= nil = Just (Added (fp $ FSE.eventPath fseEvent))
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemModified /= nil = Just (Modified (fp $ FSE.eventPath fseEvent))
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRenamed  /= nil = Just (Added (fp $ FSE.eventPath fseEvent))
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed (fp $ FSE.eventPath fseEvent))
+  | otherwise                                                    = Nothing
 
 handleFSEEvent :: ActionPredicate -> Action -> FSE.Event -> IO ()
 handleFSEEvent actPred action fseEvent = handleEvent actPred action (fsnEvent fseEvent)
@@ -46,9 +52,12 @@ instance FileListener OSXManager where
     mvarMap <- newMVar Map.empty
     return (OSXManager mvarMap)
 
-  killSession = do
+  killSession (OSXManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    flip mapM_ (Map.values watchMap) $ eventStreamDestroy
+    flip mapM_ (Map.elems watchMap) eventStreamDestroy'
+    where
+      eventStreamDestroy' :: WatchData -> IO ()
+      eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
   -- TODO: This will listen recursively; more code is needed to extract
   -- the directory part of file event paths and compare it to the listen type
@@ -57,7 +66,7 @@ instance FileListener OSXManager where
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive action) watchMap)
     return ()
     where
-      handler :: INo.Event -> IO ()
+      handler :: FSE.Event -> IO ()
       handler = handleFSEEvent actPred action
 
   rlisten (OSXManager mvarMap) path actPred action = do
@@ -65,5 +74,5 @@ instance FileListener OSXManager where
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream Recursive action) watchMap)
     return ()
     where
-      handler :: INo.Event -> IO ()
+      handler :: FSE.Event -> IO ()
       handler = handleFSEEvent actPred action
