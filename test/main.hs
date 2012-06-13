@@ -6,7 +6,7 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent
 import Filesystem.Path.CurrentOS
-import System.IO.FSNotify.Types
+import System.IO.FSNotify
 
 fp :: String -> FilePath
 fp = decodeString
@@ -19,9 +19,9 @@ mapStr = map str
 
 main :: IO ()
 main = do
-    pollMan <- initSession :: IO PollManager -- Test polling implementation
-    pollId <- listen pollMan (fp ".") (\event -> True) print
+    pollMan <- startManager
+    pollId  <- watch pollMan (fp ".") (\event -> True) print
     print pollId
     putStrLn "Listens to '.'; Hit enter to terminate."
     getLine
-    killSession pollMan
+    stopManager pollMan
