@@ -14,6 +14,7 @@ Category:               Filesystem
 Cabal-Version:          >= 1.8
 Build-Type:             Simple
 
+
 Library
   Build-Depends:          base >= 4.3.1.0
                         , system-filepath >= 0.4.6
@@ -37,6 +38,11 @@ Library
       CPP-Options:      -DOS_Win32
       Other-Modules:    System.IO.FSNotify.Win32
       Build-Depends:    Win32-notify == 0.2
+    else
+      if os(darwin)
+        CPP-Options:    -DOS_Mac
+        Other-Modules:  System.IO.FSNotify.OSX
+        Build-Depends:  hfsevents >= 0.1
 
 
 Test-Suite test

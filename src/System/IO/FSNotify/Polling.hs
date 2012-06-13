@@ -2,7 +2,6 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 module System.IO.FSNotify.Polling
   ( PollManager
@@ -34,16 +33,6 @@ data EventType =
 
 type WatchMap = Map ThreadId Action
 data PollManager = PollManager (MVar WatchMap)
-
-initPollManager :: IO PollManager
-initPollManager =  do
-  mvarMap <- newMVar Map.empty
-  return (PollManager mvarMap)
-
-killPollManager :: PollManager -> IO ()
-killPollManager (PollManager mvarMap) = do
-  watchMap <- readMVar mvarMap
-  flip mapM_ (Map.keys watchMap) $ killThread
 
 generateEvent :: EventType -> FilePath -> Maybe Event
 generateEvent AddedEvent    filePath = Just (Added    filePath)
@@ -99,9 +88,13 @@ pollPath recursive filePath actPred action oldPathMap = do
     pollPath' = pollPath recursive filePath actPred action
 
 instance FileListener PollManager where
-  initSession = initPollManager
+  initSession = do
+    mvarMap <- newMVar Map.empty
+    return (PollManager mvarMap)
 
-  killSession = killPollManager
+  killSession (PollManager mvarMap) = do
+    watchMap <- readMVar mvarMap
+    flip mapM_ (Map.keys watchMap) $ killThread
 
   listen (PollManager mvarMap) path actPred action  = do
     pmMap <- pathModMap False path

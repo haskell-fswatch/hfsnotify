@@ -17,11 +17,9 @@ mapFP = map fp
 mapStr :: [FilePath] -> [String]
 mapStr = map str
 
--- TODO: This uses () to use polling
-
 main :: IO ()
 main = do
-    pollMan <- initSession :: IO PollManager
+    pollMan <- initSession :: IO PollManager -- Test polling implementation
     pollId <- listen pollMan (fp ".") (\event -> True) print
     print pollId
     putStrLn "Listens to '.'; Hit enter to terminate."
