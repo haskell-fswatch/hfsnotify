@@ -14,14 +14,9 @@ import Prelude hiding (FilePath)
 
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
-import System.IO.FSNotify
+import System.IO.FSNotify.Path
+import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
-
--- Helper functions for dealing with String vs. FileSystem.Path.CurrentOS.FilePath
-fp :: String -> FilePath
-fp = decodeString
-str :: FilePath -> String
-str = encodeString
 
 fsnEvents :: WNo.Event -> [Event]
 fsnEvents (WNo.Created  False name)                   = [Added (fp name)]
@@ -39,6 +34,9 @@ handleEvent :: ActionPredicate -> Action -> Event -> IO ()
 handleEvent actPred action event = if actPred event then action event else return ()
 
 instance FileListener WNo.WatchManager where
+  -- TODO: This should actually lookup a Windows API version and possibly throw
+  -- a ListenUnsupportedException if the calls we need are not available.
+  -- This will require that API version information be exposed by Win32-notify.
   initSession = WNo.initWatchManager
 
   killSession = WNo.killWatchManager

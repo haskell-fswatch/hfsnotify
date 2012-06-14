@@ -3,12 +3,20 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 {-# LANGUAGE CPP, ScopedTypeVariables #-}
+
 module System.IO.FSNotify
-( startManager
-, stopManager
-, watch
-, WatchManager
-) where
+       ( startManager
+       , stopManager
+       , watch
+       , rwatch
+       , WatchManager
+       ) where
+
+import Prelude hiding (catch)
+
+import Control.Exception
+import System.IO.FSNotify.Polling
+import System.IO.FSNotify.Types
 
 #ifdef OS_Linux
 import System.IO.FSNotify.Linux
@@ -22,16 +30,11 @@ import System.IO.FSNotify.OSX
 #  endif
 #endif
 
-import System.IO.FSNotify.Polling
-
-import Prelude hiding (catch)
-import Control.Exception
-
 data WatchManager = WatchManager (Either PollManager ListenManager)
 
 startManager :: IO WatchManager
 startManager =
-  (initSession >>= return . WatchManager . Right) `catch` (\(_::SomeException) ->
+  (initSession  >>= return . WatchManager . Right) `catch` (\(_::ListenUnsupportedException) ->
     initSession >>= return . WatchManager . Left)
 
 stopManager :: WatchManager -> IO ()
@@ -44,3 +47,8 @@ watch (WatchManager wm) =
   case wm of
     Right native -> listen native
     Left poll    -> listen poll
+
+rwatch (WatchManager wm) =
+  case wm of
+    Right native -> rlisten native
+    Left poll    -> rlisten poll

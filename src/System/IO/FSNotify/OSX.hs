@@ -10,17 +10,18 @@ module System.IO.FSNotify.OSX
        , rlisten
        ) where
 
-import Prelude hiding (FilePath)
+import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.MVar
+import Control.Exception
 import Control.Monad
 import Data.Bits
 import Data.Map (Map)
 import Data.Word
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
-import System.IO.FSNotify
 import System.IO.FSNotify.Path
+import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
 
@@ -49,8 +50,12 @@ handlEvent _ _ Nothing = return ()
 
 instance FileListener OSXManager where
   initSession = do
-    mvarMap <- newMVar Map.empty
-    return (OSXManager mvarMap)
+    (v1, v2, _) <- FSE.osVersion
+    if v1 > 10 || (v1 == 10 && v2 > 6) then
+      throw ListenUnsupportedException
+      else do
+      mvarMap <- newMVar Map.empty
+      return (OSXManager mvarMap)
 
   killSession (OSXManager mvarMap) = do
     watchMap <- readMVar mvarMap

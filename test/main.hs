@@ -20,7 +20,7 @@ mapStr = map str
 main :: IO ()
 main = do
     pollMan <- startManager
-    pollId  <- watch pollMan (fp ".") (\event -> True) print
+    pollId  <- watch pollMan (fp ".") (\_ -> True) print
     print pollId
     putStrLn "Listens to '.'; Hit enter to terminate."
     getLine
