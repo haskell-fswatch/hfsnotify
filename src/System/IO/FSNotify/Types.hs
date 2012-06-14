@@ -5,7 +5,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module System.IO.FSNotify.Types
-       ( ListenUnsupportedException
+       ( ListenUnsupportedException(..)
        , Event(..)
        , ActionPredicate
        , Action

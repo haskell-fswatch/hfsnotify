@@ -4,10 +4,8 @@
 --
 
 module System.IO.FSNotify.Win32
-       ( initSession
-       , killSession
-       , listen
-       , rlisten
+       ( FileListener(..)
+       , ListenManager
        ) where
 
 import Prelude hiding (FilePath)
@@ -17,6 +15,8 @@ import System.IO hiding (FilePath)
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
+
+type ListenManager = WNo.WatchManager
 
 fsnEvents :: WNo.Event -> [Event]
 fsnEvents (WNo.Created  False name)                   = [Added (fp name)]
