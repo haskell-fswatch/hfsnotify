@@ -28,6 +28,6 @@ type ActionPredicate = Event -> Bool
 -- | An action to be performed in response to an event.
 type Action = Event -> IO ()
 
--- | Predicate for "always act".
+-- | Predicate to always act.
 act :: ActionPredicate
 act event = True
