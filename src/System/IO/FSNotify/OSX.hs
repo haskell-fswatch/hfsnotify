@@ -50,7 +50,7 @@ fsnEventPath (Removed path)  = path
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> Action -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleEvent dirPath actPred action (fsnEvent fseEvent)
+handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleNonRecursiveEvent dirPath actPred action (fsnEvent fseEvent)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> Action -> Maybe Event -> IO ()
 handleNonRecursiveEvent dirPath actPred action (Just event)
   | directory dirPath == directory (fsnEventPath event) && actPred event = action event
