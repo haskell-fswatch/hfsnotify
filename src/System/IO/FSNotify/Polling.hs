@@ -21,8 +21,9 @@ import Data.Time.Clock (UTCTime)
 import Filesystem
 import Filesystem.Path
 import System.IO hiding (FilePath)
-import System.IO.FSNotify.Types
+import System.IO.FSNotify.InternalTypes
 import System.IO.FSNotify.Path
+import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 
 data EventType =
@@ -87,6 +88,8 @@ pollPath recursive filePath actPred action oldPathMap = do
     pollPath' :: Map FilePath UTCTime -> IO ()
     pollPath' = pollPath recursive filePath actPred action
 
+-- Additional init funciton exported to allow startManager to unconditionally
+-- create a poll manager as a fallback when other managers will not instantiate.
 createPollManager :: IO PollManager
 createPollManager = do
   mvarMap <- newMVar Map.empty

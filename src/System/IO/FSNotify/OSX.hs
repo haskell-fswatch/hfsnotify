@@ -18,6 +18,7 @@ import Data.Map (Map)
 import Data.Word
 import Filesystem.Path
 import System.IO hiding (FilePath)
+import System.IO.FSNotify.InternalTypes
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
@@ -46,6 +47,8 @@ fsnEventPath (Added path)    = path
 fsnEventPath (Modified path) = path
 fsnEventPath (Removed path)  = path
 
+-- Separate logic is needed for non-recursive events in OSX because the
+-- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> Action -> FSE.Event -> IO ()
 handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleEvent dirPath actPred action (fsnEvent fseEvent)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> Action -> Maybe Event -> IO ()

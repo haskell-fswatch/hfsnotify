@@ -27,7 +27,9 @@ Library
                         , time >= 1.4
   Exposed-Modules:        System.IO.FSNotify
                         , System.IO.FSNotify.Types
-  Other-Modules:        System.IO.FSNotify.Path, System.IO.FSNotify.Polling
+  Other-Modules:          System.IO.FSNotify.InternalTypes
+                        , System.IO.FSNotify.Path
+                        , System.IO.FSNotify.Polling
   Hs-Source-Dirs:       src
   if os(linux)
     CPP-Options:        -DOS_Linux
