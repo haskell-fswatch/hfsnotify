@@ -5,7 +5,7 @@
 
 module System.IO.FSNotify.OSX
        ( FileListener(..)
-       , ListenManager
+       , NativeManager
        ) where
 
 import Prelude hiding (FilePath, catch)
@@ -16,7 +16,7 @@ import Control.Monad
 import Data.Bits
 import Data.Map (Map)
 import Data.Word
-import Filesystem.Path.CurrentOS
+import Filesystem.Path
 import System.IO hiding (FilePath)
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
@@ -28,7 +28,7 @@ data WatchData = WatchData FSE.EventStream ListenType Action
 
 type WatchMap = Map FilePath WatchData
 data OSXManager = OSXManager (MVar WatchMap)
-type ListenManager = OSXManager
+type NativeManager = OSXManager
 
 nil :: Word64
 nil = 0x00
@@ -41,6 +41,19 @@ fsnEvent fseEvent
   | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed (fp $ FSE.eventPath fseEvent))
   | otherwise                                                    = Nothing
 
+fsnEventPath :: Event -> FilePath
+fsnEventPath (Added path)    = path
+fsnEventPath (Modified path) = path
+fsnEventPath (Removed path)  = path
+
+handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> Action -> FSE.Event -> IO ()
+handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleEvent dirPath actPred action (fsnEvent fseEvent)
+handleNonRecursiveEvent :: FilePath -> ActionPredicate -> Action -> Maybe Event -> IO ()
+handleNonRecursiveEvent dirPath actPred action (Just event)
+  | directory dirPath == directory (fsnEventPath event) && actPred event = action event
+  | otherwise                                                            = return ()
+handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
+
 handleFSEEvent :: ActionPredicate -> Action -> FSE.Event -> IO ()
 handleFSEEvent actPred action fseEvent = handleEvent actPred action (fsnEvent fseEvent)
 handleEvent :: ActionPredicate -> Action -> Maybe Event -> IO ()
@@ -50,11 +63,10 @@ handlEvent _ _ Nothing = return ()
 instance FileListener OSXManager where
   initSession = do
     (v1, v2, _) <- FSE.osVersion
-    if v1 < 10 || (v1 == 10 && v2 <= 6) then
-      throw ListenUnsupportedException
-      else do
-      mvarMap <- newMVar Map.empty
-      return (OSXManager mvarMap)
+    if v1 >= 10 || (v1 == 10 && v2 > 6) then
+      newMVar Map.empty >>= return . Just . OSXManager
+      else
+      return Nothing
 
   killSession (OSXManager mvarMap) = do
     watchMap <- readMVar mvarMap
@@ -63,15 +75,13 @@ instance FileListener OSXManager where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
-  -- TODO: This will listen recursively; more code is needed to extract
-  -- the directory part of file event paths and compare it to the listen type
   listen (OSXManager mvarMap) path actPred action = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive action) watchMap)
     return ()
     where
       handler :: FSE.Event -> IO ()
-      handler = handleFSEEvent actPred action
+      handler = handleNonRecursiveFSEEvent path actPred action
 
   rlisten (OSXManager mvarMap) path actPred action = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler

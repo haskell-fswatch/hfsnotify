@@ -5,8 +5,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module System.IO.FSNotify.Types
-       ( ListenUnsupportedException(..)
-       , Event(..)
+       ( Event(..)
        , ActionPredicate
        , Action
        , act
@@ -20,11 +19,8 @@ import Data.Typeable
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 
-data ListenUnsupportedException = ListenUnsupportedException deriving (Typeable, Show)
-instance Exception ListenUnsupportedException
-
 class FileListener sessionType where
-  initSession :: IO sessionType
+  initSession :: IO (Maybe sessionType)
   killSession :: sessionType -> IO ()
   listen  :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()
   rlisten :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()

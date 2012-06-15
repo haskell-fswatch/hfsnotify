@@ -26,16 +26,20 @@ import System.IO.FSNotify.Win32
 #  else
 #    ifdef OS_Mac
 import System.IO.FSNotify.OSX
+#    else
+type NativeManager = PollManager
 #    endif
 #  endif
 #endif
 
-data WatchManager = WatchManager (Either PollManager ListenManager)
+data WatchManager = WatchManager (Either PollManager NativeManager)
+
+createManager :: Maybe NativeManager -> IO WatchManager
+createManager (Just nativeManager) = return $ WatchManager $ Right nativeManager
+createManager Nothing = createPollManager >>= return . WatchManager . Left
 
 startManager :: IO WatchManager
-startManager =
-  (initSession  >>= return . WatchManager . Right) `catch` (\(_::ListenUnsupportedException) ->
-    initSession >>= return . WatchManager . Left)
+startManager = initSession >>= createManager
 
 stopManager :: WatchManager -> IO ()
 stopManager (WatchManager wm) =

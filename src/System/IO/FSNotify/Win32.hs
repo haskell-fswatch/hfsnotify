@@ -34,10 +34,10 @@ handleEvent :: ActionPredicate -> Action -> Event -> IO ()
 handleEvent actPred action event = if actPred event then action event else return ()
 
 instance FileListener WNo.WatchManager where
-  -- TODO: This should actually lookup a Windows API version and possibly throw
-  -- a ListenUnsupportedException if the calls we need are not available.
-  -- This will require that API version information be exposed by Win32-notify.
-  initSession = WNo.initWatchManager
+  -- TODO: This should actually lookup a Windows API version and possibly return
+  -- Nothing the calls we need are not available. This will require that API
+  -- version information be exposed by Win32-notify.
+  initSession = WNo.initWatchManager >>= return . Just
 
   killSession = WNo.killWatchManager
 

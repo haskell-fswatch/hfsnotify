@@ -4,7 +4,9 @@
 --
 
 module System.IO.FSNotify.Polling
-  ( PollManager(..), FileListener(..)
+  ( createPollManager
+  , PollManager(..)
+  , FileListener(..)
   ) where
 
 import Prelude hiding (FilePath)
@@ -85,10 +87,13 @@ pollPath recursive filePath actPred action oldPathMap = do
     pollPath' :: Map FilePath UTCTime -> IO ()
     pollPath' = pollPath recursive filePath actPred action
 
+createPollManager :: IO PollManager
+createPollManager = do
+  mvarMap <- newMVar Map.empty
+  return (PollManager mvarMap)
+
 instance FileListener PollManager where
-  initSession = do
-    mvarMap <- newMVar Map.empty
-    return (PollManager mvarMap)
+  initSession = createPollManager >>= return . Just
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap

@@ -5,7 +5,7 @@
 
 module System.IO.FSNotify.Linux
        ( FileListener(..)
-       , ListenManager
+       , NativeManager
        ) where
 
 import Prelude hiding (FilePath)
@@ -16,7 +16,7 @@ import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified System.INotify as INo
 
-type ListenManager = INo.INotify
+type NativeManager = INo.INotify
 
 fsnEvent :: INo.Event -> Maybe Event
 fsnEvent (INo.Created False name)          = Just (Added (fp name))
@@ -33,7 +33,7 @@ handleEvent actPred action (Just event) = if actPred event then action event els
 handlEvent _ _ Nothing = return ()
 
 instance FileListener INo.INotify where
-  initSession = INo.initINotify
+  initSession = INo.initINotify >>= return . Just
 
   killSession = INo.killINotify
 
