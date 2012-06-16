@@ -59,13 +59,13 @@ stopManager (WatchManager wm) =
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watch (WatchManager wm) = case wm of
+watchDir (WatchManager wm) = case wm of
     Right native -> listen native
     Left poll    -> listen poll
 
 -- | Watch all the contents of a directory.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
-rwatch (WatchManager wm) = case wm of
+watchTree (WatchManager wm) = case wm of
     Right native -> rlisten native
     Left poll    -> rlisten poll
