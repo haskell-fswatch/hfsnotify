@@ -18,7 +18,7 @@ import Data.Map (Map)
 import Data.Word
 import Filesystem.Path
 import System.IO hiding (FilePath)
-import System.IO.FSNotify.InternalTypes
+import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map

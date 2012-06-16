@@ -9,8 +9,8 @@
 module System.IO.FSNotify
        ( startManager
        , stopManager
-       , watch
-       , rwatch
+       , watchDir
+       , watchTree
        , WatchManager
        ) where
 
