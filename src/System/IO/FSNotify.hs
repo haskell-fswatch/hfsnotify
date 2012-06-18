@@ -9,16 +9,22 @@
 module System.IO.FSNotify
        ( startManager
        , stopManager
-       , watchDir
-       , watchTree
+       , watchDirChan
+       , watchDirAction
+       , watchTreeChan
+       , watchTreeAction
        , WatchManager
        ) where
 
-import Prelude hiding (catch)
+import Prelude hiding (FilePath, catch)
 
+import Control.Concurrent
 import Control.Exception
+import Data.Map (Map)
+import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Polling
 import System.IO.FSNotify.Types
+import qualified Data.Map as Map
 
 #ifdef OS_Linux
 import System.IO.FSNotify.Linux
@@ -55,17 +61,75 @@ stopManager (WatchManager wm) =
     Right native -> killSession native
     Left poll    -> killSession poll
 
--- | Watch the immediate contents of a directory.
+-- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watchDir (WatchManager wm) = case wm of
-    Right native -> listen native
-    Left poll    -> listen poll
+watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchDirChan (WatchManager wm) = case wm of
+  Right native -> listen native
+  Left  poll   -> listen poll
 
--- | Watch all the contents of a directory.
+-- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
-watchTree (WatchManager wm) = case wm of
-    Right native -> rlisten native
-    Left poll    -> rlisten poll
+watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchTreeChan (WatchManager wm) = case wm of
+  Right native -> rlisten native
+  Left  poll   -> rlisten poll
+
+-- | Watch the immediate contents of a directory by committing an Action for each event.
+-- Watching the immediate contents of a directory will only report events
+-- associated with files within the specified directory, and not files
+-- within its subdirectories. No two events pertaining to the same FilePath will
+-- be executed concurrently.
+watchDirAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchDirAction (WatchManager wm) path actPred action = case wm of
+  Right native -> do
+    chan <- newChan
+    _    <- forkIO $ readEvents chan action Map.empty
+    listen native path actPred chan
+  Left  poll   ->  do
+    chan <- newChan
+    _    <- forkIO $ readEvents chan action Map.empty
+    listen poll path actPred chan
+
+-- | Watch all the contents of a directory by committing an Action for each event.
+-- Watching all the contents of a directory will report events associated with
+-- files within the specified directory and its subdirectories. No two events
+-- pertaining to the same FilePath will be executed concurrently.
+watchTreeAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchTreeAction (WatchManager wm) path actPred action = case wm of
+  Right native -> do
+    chan <- newChan
+    _    <- forkIO $ readEvents chan action Map.empty
+    rlisten native path actPred chan
+  Left  poll   -> do
+    chan <- newChan
+    _    <- forkIO $ readEvents chan action Map.empty
+    rlisten poll path actPred chan
+
+-- TODO: Get block-on-FilePath safeguard working; currently causes
+-- "thread blocked indefinitely on an MVar operation"
+type ThreadLock = MVar ()
+type PathLockMap = Map FilePath ThreadLock
+
+readEvents :: EventChannel -> Action  -> PathLockMap -> IO ()
+readEvents chan action  pathMap = do
+  event <- readChan chan
+  let path = eventPath event
+  mVar <- getMVar $ Map.lookup path pathMap
+  _ <- takeMVar mVar >> (forkIO $ action event  `finally` putMVar mVar ())
+  readEvents chan action  $ Map.insert path mVar pathMap
+  where
+    getMVar :: Maybe ThreadLock -> IO ThreadLock
+    getMVar (Just tl) = return tl
+    getMVar Nothing   = newMVar ()
+
+{-
+readEvents :: EventChannel -> Action  -> IO ()
+readEvents chan action = do
+  event <- readChan chan
+  _     <- forkIO $ action event
+  readEvents chan action
+-}

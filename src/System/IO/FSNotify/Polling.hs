@@ -12,9 +12,6 @@ module System.IO.FSNotify.Polling
 import Prelude hiding (FilePath)
 
 import Control.Concurrent
-import Control.Concurrent.MVar
-import Control.Concurrent.Chan
-import Control.Monad
 import Data.Map (Map)
 import Data.Maybe
 import Data.Time.Clock (UTCTime)
@@ -31,8 +28,9 @@ data EventType =
   | ModifiedEvent
   | RemovedEvent
 
-data WatchData = WatchData ThreadId Action
-type WatchMap = Map FilePath WatchData
+data WatchKey = WatchKey ThreadId deriving (Eq, Ord)
+data WatchData = WatchData FilePath EventChannel
+type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
 generateEvent :: EventType -> FilePath -> Maybe Event
@@ -43,21 +41,21 @@ generateEvent RemovedEvent  filePath = Just (Removed  filePath)
 generateEvents :: EventType -> [FilePath] -> [Event]
 generateEvents eventType paths = mapMaybe (generateEvent eventType) paths
 
-handleEvent :: ActionPredicate -> Action -> Event -> IO ()
-handleEvent actPred action event
-  | actPred event = action event
+handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
+handleEvent chan actPred event
+  | actPred event = writeChan chan event
   | otherwise     = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath UTCTime)
 pathModMap True path = do
   files <- findFiles True path
-  pathModMap' path files
+  pathModMap' files
 pathModMap False path = do
   files <- findFiles False path
-  pathModMap' path files
+  pathModMap' files
 
-pathModMap' :: FilePath -> [FilePath] -> IO (Map FilePath UTCTime)
-pathModMap' path files = do
+pathModMap' :: [FilePath] -> IO (Map FilePath UTCTime)
+pathModMap' files = do
   mapList <- mapM pathAndTime files
   return (Map.fromList mapList)
   where
@@ -66,8 +64,8 @@ pathModMap' path files = do
       modTime <- getModified path
       return (path, modTime)
 
-pollPath :: Bool -> FilePath -> ActionPredicate -> Action -> Map FilePath UTCTime -> IO ()
-pollPath recursive filePath actPred action oldPathMap = do
+pollPath :: Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()
+pollPath recursive chan filePath actPred oldPathMap = do
   threadDelay 1000000
   newPathMap  <- pathModMap recursive filePath
   let deletedMap = Map.difference oldPathMap newPathMap
@@ -84,9 +82,9 @@ pollPath recursive filePath actPred action oldPathMap = do
       | (oldTime /= newTime) = Just newTime
       | otherwise            = Nothing
     handleEvents :: [Event] -> IO ()
-    handleEvents = mapM_ (handleEvent actPred action)
+    handleEvents = mapM_ (handleEvent chan actPred)
     pollPath' :: Map FilePath UTCTime -> IO ()
-    pollPath' = pollPath recursive filePath actPred action
+    pollPath' = pollPath recursive chan filePath actPred
 
 -- Additional init funciton exported to allow startManager to unconditionally
 -- create a poll manager as a fallback when other managers will not instantiate.
@@ -100,19 +98,17 @@ instance FileListener PollManager where
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    flip mapM_ (Map.elems watchMap) $ killThread'
+    flip mapM_ (Map.keys watchMap) $ killThread'
     where
-      killThread' :: WatchData -> IO ()
-      killThread' (WatchData threadId _) = killThread threadId
+      killThread' :: WatchKey -> IO ()
+      killThread' (WatchKey threadId) = killThread threadId
 
-  listen (PollManager mvarMap) path actPred action  = do
+  listen (PollManager mvarMap) path actPred chan  = do
     pmMap <- pathModMap False path
-    threadId <- forkIO $ pollPath False path actPred action pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData threadId action) watchMap)
-    return ()
+    threadId <- forkIO $ pollPath False chan path actPred pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert (WatchKey threadId) (WatchData path chan) watchMap)
 
-  rlisten (PollManager mvarMap) path actPred action = do
+  rlisten (PollManager mvarMap) path actPred chan = do
     pmMap <- pathModMap True  path
-    threadId <- forkIO $ pollPath True  path actPred action pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData threadId action) watchMap)
-    return ()
+    threadId <- forkIO $ pollPath True chan path actPred pmMap
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert (WatchKey threadId) (WatchData path chan) watchMap)

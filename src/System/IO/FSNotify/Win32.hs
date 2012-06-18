@@ -10,6 +10,7 @@ module System.IO.FSNotify.Win32
 
 import Prelude hiding (FilePath)
 
+import Control.Concurrent.Chan
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
@@ -27,12 +28,12 @@ fsnEvents (WNo.Modified False (Just name))            = [Modified (fp name)]
 fsnEvents (WNo.Deleted  False name)                   = [Removed (fp name)]
 fsnEvents _                                           = []
 
-handleWNoEvent :: ActionPredicate -> Action -> WNo.Event -> IO ()
-handleWNoEvent actPred action inoEvent = do
-  mapM_ (handleEvent actPred action) (fsnEvents inoEvent)
+handleWNoEvent :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
+handleWNoEvent actPred chan inoEvent = do
+  mapM_ (handleEvent actPred chan) (fsnEvents inoEvent)
   return ()
-handleEvent :: ActionPredicate -> Action -> Event -> IO ()
-handleEvent actPred action event = if actPred event then action event else return ()
+handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()
+handleEvent actPred chan event = if actPred event then writeChan event chan else return ()
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -42,18 +43,18 @@ instance FileListener WNo.WatchManager where
 
   killSession = WNo.killWatchManager
 
-  listen watchManager path actPred action = do
+  listen watchManager path actPred chan = do
     WNo.watchDirectory watchManager (str path) False varieties handler
     return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
       handler :: WNo.Event -> IO ()
-      handler = handleWNoEvent actPred action
+      handler = handleWNoEvent actPred chan
 
-  rlisten watchManager path actPred action = do
+  rlisten watchManager path actPred chan = do
     WNo.watchDirectory watchManager (str path) True varieties handler
     return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
       handler :: WNo.Event -> IO ()
-      handler = handleWNoEvent actPred action
+      handler = handleWNoEvent actPred chan

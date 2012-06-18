@@ -31,6 +31,7 @@ Library
                         , System.IO.FSNotify.Path
                         , System.IO.FSNotify.Polling
   Hs-Source-Dirs:       src
+  GHC-Options:          -Wall -threaded
   if os(linux)
     CPP-Options:        -DOS_Linux
     Other-Modules:      System.IO.FSNotify.Linux
@@ -51,7 +52,7 @@ Test-Suite test
   Type:                 exitcode-stdio-1.0
   Main-Is:              main.hs
   Hs-Source-Dirs:       test
-  GHC-Options:          -Wall
+  GHC-Options:          -Wall -threaded
   Build-depends:          base >= 4.3.1.0
                         , fsnotify >= 0.0.1
                         , directory >= 1.1.0.2

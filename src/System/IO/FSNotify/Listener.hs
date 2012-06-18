@@ -30,10 +30,10 @@ class FileListener sessionType where
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen  :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()
+  listen :: sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  rlisten :: sessionType -> FilePath -> ActionPredicate -> Action -> IO ()
+  rlisten :: sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()

@@ -10,6 +10,7 @@ module System.IO.FSNotify.OSX
 
 import Prelude hiding (FilePath, catch)
 
+import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
@@ -25,8 +26,10 @@ import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
 
 data ListenType = NonRecursive | Recursive
-data WatchData = WatchData FSE.EventStream ListenType Action
+data WatchData = WatchData FSE.EventStream ListenType EventChannel
 
+-- TODO: We really should use something other than FilePath as a key to allow
+-- for more than one listener per FilePath.
 type WatchMap = Map FilePath WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 type NativeManager = OSXManager
@@ -49,18 +52,18 @@ fsnEventPath (Removed path)  = path
 
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
-handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> Action -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleNonRecursiveEvent dirPath actPred action (fsnEvent fseEvent)
-handleNonRecursiveEvent :: FilePath -> ActionPredicate -> Action -> Maybe Event -> IO ()
-handleNonRecursiveEvent dirPath actPred action (Just event)
-  | directory dirPath == directory (fsnEventPath event) && actPred event = action event
+handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
+handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent)
+handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
+handleNonRecursiveEvent dirPath actPred chan (Just event)
+  | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan event chan
   | otherwise                                                            = return ()
 handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
 
-handleFSEEvent :: ActionPredicate -> Action -> FSE.Event -> IO ()
-handleFSEEvent actPred action fseEvent = handleEvent actPred action (fsnEvent fseEvent)
-handleEvent :: ActionPredicate -> Action -> Maybe Event -> IO ()
-handleEvent actPred action (Just event) = if actPred event then action event else return ()
+handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
+handleFSEEvent actPred chan fseEvent = handleEvent actPred chan (fsnEvent fseEvent)
+handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
+handleEvent actPred chan (Just event) = if actPred event then writeChan event chan else return ()
 handlEvent _ _ Nothing = return ()
 
 instance FileListener OSXManager where
@@ -78,18 +81,18 @@ instance FileListener OSXManager where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
-  listen (OSXManager mvarMap) path actPred action = do
+  listen (OSXManager mvarMap) path actPred chan = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive action) watchMap)
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive chan) watchMap)
     return ()
     where
       handler :: FSE.Event -> IO ()
-      handler = handleNonRecursiveFSEEvent path actPred action
+      handler = handleNonRecursiveFSEEvent path actPred chan
 
-  rlisten (OSXManager mvarMap) path actPred action = do
+  rlisten (OSXManager mvarMap) path actPred chan = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream Recursive action) watchMap)
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream Recursive chan) watchMap)
     return ()
     where
       handler :: FSE.Event -> IO ()
-      handler = handleFSEEvent actPred action
+      handler = handleFSEEvent actPred chan

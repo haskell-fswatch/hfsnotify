@@ -5,6 +5,8 @@
 
 module System.IO.FSNotify.Types
        ( Event(..)
+       , eventPath
+       , EventChannel
        , ActionPredicate
        , Action
        , act
@@ -12,6 +14,7 @@ module System.IO.FSNotify.Types
 
 import Prelude hiding (FilePath)
 
+import Control.Concurrent.Chan
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 
@@ -22,6 +25,14 @@ data Event =
   | Removed  FilePath
   deriving (Show)
 
+-- | Helper for extracting the path associated with an event.
+eventPath :: Event -> FilePath
+eventPath (Added    path) = path
+eventPath (Modified path) = path
+eventPath (Removed  path) = path
+
+type EventChannel = Chan Event
+
 -- | A predicate used to determine whether to act on an event.
 type ActionPredicate = Event -> Bool
 
@@ -30,4 +41,4 @@ type Action = Event -> IO ()
 
 -- | Predicate to always act.
 act :: ActionPredicate
-act event = True
+act _ = True

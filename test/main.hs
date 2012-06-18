@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 module Main where
 
 import Prelude hiding (FilePath)
@@ -7,6 +5,7 @@ import Prelude hiding (FilePath)
 import Control.Concurrent
 import Filesystem.Path.CurrentOS
 import System.IO.FSNotify
+import System.IO.FSNotify.Types
 
 fp :: String -> FilePath
 fp = decodeString
@@ -20,8 +19,12 @@ mapStr = map str
 main :: IO ()
 main = do
     pollMan <- startManager
-    pollId  <- watchDir pollMan (fp ".") (\_ -> True) print
+    pollId  <- watchDirAction pollMan (fp ".") act (\event -> do
+                                                       print event
+                                                       print "Blocking on path"
+                                                       threadDelay 5000000
+                                                       print "Unblocking on path")
     print pollId
     putStrLn "Listens to '.'; Hit enter to terminate."
-    getLine
+    _       <- getLine
     stopManager pollMan
