@@ -109,12 +109,10 @@ watchTreeAction (WatchManager wm) path actPred action = case wm of
     _    <- forkIO $ readEvents chan action Map.empty
     rlisten poll path actPred chan
 
--- TODO: Get block-on-FilePath safeguard working; currently causes
--- "thread blocked indefinitely on an MVar operation"
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock
 
-readEvents :: EventChannel -> Action  -> PathLockMap -> IO ()
+readEvents :: EventChannel -> Action -> PathLockMap -> IO ()
 readEvents chan action  pathMap = do
   event <- readChan chan
   let path = eventPath event
@@ -127,7 +125,7 @@ readEvents chan action  pathMap = do
     getMVar Nothing   = newMVar ()
 
 {-
-readEvents :: EventChannel -> Action  -> IO ()
+readEvents :: EventChannel -> Action -> IO ()
 readEvents chan action = do
   event <- readChan chan
   _     <- forkIO $ action event

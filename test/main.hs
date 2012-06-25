@@ -21,9 +21,9 @@ main = do
     pollMan <- startManager
     pollId  <- watchDirAction pollMan (fp ".") act (\event -> do
                                                        print event
-                                                       print "Blocking on path"
+                                                       putStrLn $ "Blocking on " ++ encodeString (eventPath event)
                                                        threadDelay 5000000
-                                                       print "Unblocking on path")
+                                                       putStrLn $ "Unblocking on " ++ encodeString (eventPath event))
     print pollId
     putStrLn "Listens to '.'; Hit enter to terminate."
     _       <- getLine
