@@ -1,30 +1,54 @@
 module Main where
 
-import Prelude hiding (FilePath)
+import Prelude hiding (FilePath, writeFile)
 
-import Control.Concurrent
-import Filesystem.Path.CurrentOS
-import System.IO.FSNotify
+import Data.ByteString (empty)
+import Filesystem
+import Filesystem.Path hiding (empty)
+import Filesystem.Path.CurrentOS hiding (empty)
 import System.IO.FSNotify.Types
+import Util
 
-fp :: String -> FilePath
-fp = decodeString
-str :: FilePath -> String
-str = encodeString
-mapFP :: [String] -> [FilePath]
-mapFP = map fp
-mapStr :: [FilePath] -> [String]
-mapStr = map str
+data EventCounter = EventCounter {
+    addedCount   :: Int
+  , removedCount :: Int
+  }
+
+newCounter :: EventCounter
+newCounter = EventCounter 0 0
+
+testFile :: FilePath -> FilePath
+testFile path = (path </> (decodeString "test.txt"))
+
+write :: FilePath -> IO ()
+write path = writeFile (testFile path) empty
+
+delete :: FilePath -> IO ()
+delete path = removeFile (testFile path)
+
+action :: FilePath -> IO ()
+action path = do
+  write path
+  delete path
+
+verify :: EventProcessor
+verify report@(TestReport _ events) = if addedCount counter == 1 && removedCount counter == 1 then
+                                 TestResult True "" report
+                               else
+                                 TestResult False "Expected 1 Added, 1 Removed event in stream" report
+  where
+    counter = countEvents report newCounter
+
+countEvents :: TestReport -> EventCounter -> EventCounter
+countEvents (TestReport path ((Added eventPath):events)) (EventCounter added removed)
+  | path == eventPath = countEvents (TestReport path events) (EventCounter (added + 1) removed)
+  | otherwise         = countEvents (TestReport path events) (EventCounter added removed)
+countEvents (TestReport path ((Removed eventPath):events)) (EventCounter added removed)
+  | path == eventPath = countEvents (TestReport path events) (EventCounter added (removed + 1))
+  | otherwise         = countEvents (TestReport path events) (EventCounter added removed)
+countEvents (TestReport path (_:events)) (EventCounter added removed) =
+                        countEvents (TestReport path events) (EventCounter added removed)
+countEvents (TestReport _ _) counter = counter
 
 main :: IO ()
-main = do
-    pollMan <- startManager
-    pollId  <- watchDirAction pollMan (fp ".") act (\event -> do
-                                                       print event
-                                                       putStrLn $ "Blocking on " ++ encodeString (eventPath event)
-                                                       threadDelay 5000000
-                                                       putStrLn $ "Unblocking on " ++ encodeString (eventPath event))
-    print pollId
-    putStrLn "Listens to '.'; Hit enter to terminate."
-    _       <- getLine
-    stopManager pollMan
+main = inEnv ChanEnv DirEnv act action verify
