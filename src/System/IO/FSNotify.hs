@@ -9,6 +9,7 @@
 module System.IO.FSNotify
        ( startManager
        , stopManager
+       , withManager
        , watchDirChan
        , watchDirAction
        , watchTreeChan
@@ -42,15 +43,18 @@ type NativeManager = PollManager
 
 data WatchManager = WatchManager (Either PollManager NativeManager)
 
-createManager :: Maybe NativeManager -> IO WatchManager
-createManager (Just nativeManager) = return $ WatchManager $ Right nativeManager
-createManager Nothing = createPollManager >>= return . WatchManager . Left
+withManager :: (WatchManager -> IO a) -> IO a
+withManager = bracket startManager stopManager
 
 -- | Start a file watch manager.
--- Directories can only be watched when they are managed by an started watch
+-- Directories can only be watched when they are managed by a started watch
 -- watch manager.
-startManager :: IO WatchManager -- ^ The watch manager. Use this to watch directories and clean up when done.
+startManager :: IO WatchManager -- ^ The watch manager. Hold on to this to clean up when done.
 startManager = initSession >>= createManager
+  where
+    createManager :: Maybe NativeManager -> IO WatchManager
+    createManager (Just nativeManager) = return $ WatchManager $ Right nativeManager
+    createManager Nothing = fmap (WatchManager . Left) createPollManager 
 
 -- | Stop a file watch manager.
 -- Stopping a watch manager will immediately stop processing events on all paths
@@ -66,17 +70,13 @@ stopManager (WatchManager wm) =
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchDirChan (WatchManager wm) = case wm of
-  Right native -> listen native
-  Left  poll   -> listen poll
+watchDirChan (WatchManager wm) = either listen listen wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchTreeChan (WatchManager wm) = case wm of
-  Right native -> rlisten native
-  Left  poll   -> rlisten poll
+watchTreeChan (WatchManager wm) = either rlisten rlisten wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
@@ -84,30 +84,35 @@ watchTreeChan (WatchManager wm) = case wm of
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
 watchDirAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchDirAction (WatchManager wm) path actPred action = case wm of
-  Right native -> do
-    chan <- newChan
-    _    <- forkIO $ readEvents chan action Map.empty
-    listen native path actPred chan
-  Left  poll   ->  do
-    chan <- newChan
-    _    <- forkIO $ readEvents chan action Map.empty
-    listen poll path actPred chan
+watchDirAction (WatchManager wm) = either runFallback runNative wm
+  where
+    runFallback = threadChanFallback listen
+    runNative   = threadChanNative listen
+
+threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
+threadChanNative listener iface path actPred action =
+      threadChan action $ listener iface path actPred
+
+threadChanFallback :: (PollManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> PollManager -> FilePath -> ActionPredicate -> Action -> IO b
+threadChanFallback listener iface path actPred action =
+      threadChan action $ listener iface path actPred
+
+threadChan :: Action -> (Chan Event -> IO b) -> IO b
+threadChan action runListener = do
+      chan <- newChan
+      _    <- forkIO $ readEvents chan action Map.empty
+      runListener chan
+
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
 watchTreeAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchTreeAction (WatchManager wm) path actPred action = case wm of
-  Right native -> do
-    chan <- newChan
-    _    <- forkIO $ readEvents chan action Map.empty
-    rlisten native path actPred chan
-  Left  poll   -> do
-    chan <- newChan
-    _    <- forkIO $ readEvents chan action Map.empty
-    rlisten poll path actPred chan
+watchTreeAction (WatchManager wm) = either runFallback runNative wm
+  where
+    runFallback = threadChanFallback listen
+    runNative   = threadChanNative listen
 
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock
@@ -117,17 +122,9 @@ readEvents chan action  pathMap = do
   event <- readChan chan
   let path = eventPath event
   mVar <- getMVar $ Map.lookup path pathMap
-  _ <- takeMVar mVar >> (forkIO $ action event  `finally` putMVar mVar ())
+  _ <- takeMVar mVar >> (forkIO $ action event `finally` putMVar mVar ())
   readEvents chan action  $ Map.insert path mVar pathMap
   where
     getMVar :: Maybe ThreadLock -> IO ThreadLock
     getMVar (Just tl) = return tl
     getMVar Nothing   = newMVar ()
-
-{-
-readEvents :: EventChannel -> Action -> IO ()
-readEvents chan action = do
-  event <- readChan chan
-  _     <- forkIO $ action event
-  readEvents chan action
--}

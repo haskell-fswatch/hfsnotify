@@ -16,7 +16,6 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Filesystem.Path.CurrentOS
-import System.IO hiding (FilePath)
 
 -- | A file event reported by a file watcher.
 data Event =
