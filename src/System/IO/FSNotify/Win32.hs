@@ -5,7 +5,7 @@
 
 module System.IO.FSNotify.Win32
        ( FileListener(..)
-       , ListenManager
+       , NativeManager
        ) where
 
 import Prelude hiding (FilePath)
@@ -18,7 +18,7 @@ import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
 
-type ListenManager = WNo.WatchManager
+type NativeManager = WNo.WatchManager
 
 fsnEvents :: WNo.Event -> [Event]
 fsnEvents (WNo.Created  False name)                   = [Added (fp name)]
@@ -33,7 +33,12 @@ handleWNoEvent actPred chan inoEvent = do
   mapM_ (handleEvent actPred chan) (fsnEvents inoEvent)
   return ()
 handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()
-handleEvent actPred chan event = if actPred event then writeChan event chan else return ()
+handleEvent actPred chan event = if actPred event then
+                                   do
+                                     putStrLn $ "FSNotify: " ++ show event
+                                     writeChan chan event
+                                 else
+                                   return ()
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -44,7 +49,7 @@ instance FileListener WNo.WatchManager where
   killSession = WNo.killWatchManager
 
   listen watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (str path) False varieties handler
+    WNo.watchDirectory watchManager (fp path) False varieties handler
     return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
@@ -52,7 +57,7 @@ instance FileListener WNo.WatchManager where
       handler = handleWNoEvent actPred chan
 
   rlisten watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (str path) True varieties handler
+    WNo.watchDirectory watchManager (fp path) True varieties handler
     return ()
     where
       varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]

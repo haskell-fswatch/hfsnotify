@@ -20,9 +20,9 @@ data DirTreeEnv =
 data TestContext = TestContext ChanActionEnv DirTreeEnv ActionPredicate
 
 data TestReport = TestReport FilePath [Event] deriving (Show)
-data TestResult = TestResult Bool String TestReport
+data TestResult = TestResult Bool String TestReport deriving (Show)
 type TestAction = FilePath -> IO ()
-type EventProcessor = TestReport -> TestResult
+type EventProcessor = TestReport -> IO TestResult
 
 testName :: IO String
 testName = do
@@ -32,23 +32,40 @@ testName = do
 withTempDir :: (String -> IO ()) -> IO ()
 withTempDir fn = do
     path <- testName
-    bracket (createDirectory path >> return path) removeDirectoryRecursive fn
+    bracket
+      (do
+       putStrLn $ "Creating " ++ path
+       createDirectory path
+       putStrLn $ path ++ " created"
+       return path)
+      (\dir -> do
+       putStrLn $ "Removing " ++ path
+       removeDirectoryRecursive dir
+       putStrLn $ path ++ " removed")
+      (fn)
 
 actAndReport :: TestAction -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
 actAndReport action path chan processor = do
+  putStrLn "Performing test action"
   _      <- action path
-  events <- getChanContents chan
-  return $ processor (TestReport path events)
-
-withWatchManager :: (WatchManager -> IO ()) -> IO ()
-withWatchManager action = bracket startManager action stopManager
+  putStrLn "Test action complete"
+  putStrLn "Getting chan contents"
+  event <- readChan chan
+  let events = [event]
+  putStrLn $ "Chan contents retrieved: " ++ (show events)
+  putStrLn "Processing chan contents"
+  rtn <- processor (TestReport path events)
+  putStrLn "Chan contents processed"
+  return rtn
 
 inEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> IO ()
 inEnv caEnv dtEnv reportPred action eventProcessor = withTempDir $ \pathString ->
-  withWatchManager $ \manager -> do
+  withManager $ \manager -> do
     chan <- newChan
     let path = decodeString pathString
+    putStrLn $ "Creating watch: " ++ pathString
     _ <- watchInEnv caEnv dtEnv manager path reportPred chan
+    putStrLn $ "Watch created: " ++ pathString
     actAndReport action path chan eventProcessor >>= exitStatus
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
@@ -61,8 +78,15 @@ watchInEnv ActionEnv DirEnv  = actionAsChan watchDirAction
 watchInEnv ActionEnv TreeEnv = actionAsChan watchTreeAction
 
 exitStatus :: TestResult -> IO ()
-exitStatus (TestResult True  _ _)  = testSuccess
-exitStatus (TestResult False explanation report) = explainFailure explanation report >> testFailure
+exitStatus (TestResult True  _ _)  = do
+  putStrLn "Should exit success"
+  testSuccess
+exitStatus (TestResult False explanation report) = do
+  putStrLn "Should exit failure"
+  explainFailure explanation report >> testFailure
+exitStatus _ = do
+  putStrLn "Exiting on missing pattern!"
+  testFailure
 
 explainFailure :: String -> TestReport -> IO ()
 explainFailure explanation report = do
@@ -70,7 +94,11 @@ explainFailure explanation report = do
     putStrLn $ "Events: " ++ show report
 
 testFailure :: IO ()
-testFailure = exitFailure
+testFailure = do
+  putStrLn "Exiting with failure"
+  exitFailure
 
 testSuccess :: IO ()
-testSuccess = exitWith ExitSuccess
+testSuccess = do
+  putStrLn "Exiting with success"
+  exitWith ExitSuccess

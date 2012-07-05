@@ -32,10 +32,14 @@ action path = do
   delete path
 
 verify :: EventProcessor
-verify report@(TestReport _ events) = if addedCount counter == 1 && removedCount counter == 1 then
-                                 TestResult True "" report
-                               else
-                                 TestResult False "Expected 1 Added, 1 Removed event in stream" report
+verify report@(TestReport _ events) = do
+  putStrLn "Performing event verification"
+  res <- return (if addedCount counter == 1 && removedCount counter == 1 then
+    TestResult True "" report
+    else
+    TestResult False "Expected 1 Added, 1 Removed event in stream" report)
+  putStrLn $ "Verification complete: " ++ (show res)
+  return res
   where
     counter = countEvents report newCounter
 
@@ -50,5 +54,11 @@ countEvents (TestReport path (_:events)) (EventCounter added removed) =
                         countEvents (TestReport path events) (EventCounter added removed)
 countEvents (TestReport _ _) counter = counter
 
+-- countEvents (TestReport path ((Added   eventPath):events)) (EventCounter added removed)
+-- countEvents (TestReport path ((Removed eventPath):events)) (EventCounter added removed)
+-- countEvents (TestReport path ((_                ):events)) (EventCounter added removed)
+-- countEvents (TestReport _      _                         )  counter
+
+
 main :: IO ()
-main = inEnv ChanEnv DirEnv act action verify
+main = inEnv ActionEnv DirEnv act action verify
