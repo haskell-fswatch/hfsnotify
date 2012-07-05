@@ -53,7 +53,8 @@ fsnEventPath (Removed path)  = path
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent dirPath actPred action fseEvent = handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent)
+handleNonRecursiveFSEEvent dirPath actPred action fseEvent =
+  handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleNonRecursiveEvent dirPath actPred chan (Just event)
   | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan event chan
@@ -61,22 +62,23 @@ handleNonRecursiveEvent dirPath actPred chan (Just event)
 handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
-handleFSEEvent actPred chan fseEvent = handleEvent actPred chan (fsnEvent fseEvent)
+handleFSEEvent actPred chan fseEvent =
+  handleEvent actPred chan (fsnEvent fseEvent)
+
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
-handleEvent actPred chan (Just event) = if actPred event then writeChan event chan else return ()
-handlEvent _ _ Nothing = return ()
+handleEvent actPred chan (Just event) =
+  when (actPred event) writeChan event chan
+handleEvent _ _ Nothing = return ()
 
 instance FileListener OSXManager where
   initSession = do
     (v1, v2, _) <- FSE.osVersion
-    if v1 >= 10 || (v1 == 10 && v2 > 6) then
-      newMVar Map.empty >>= return . Just . OSXManager
-      else
-      return Nothing
+    if not $ v1 >= 10 || (v1 == 10 && v2 > 6) then return Nothing else
+      fmap (Just . OSXManager) newMVar Map.empty
 
   killSession (OSXManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    flip mapM_ (Map.elems watchMap) eventStreamDestroy'
+    mapM_ (Map.elems watchMap) eventStreamDestroy'
     where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
@@ -84,7 +86,6 @@ instance FileListener OSXManager where
   listen (OSXManager mvarMap) path actPred chan = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive chan) watchMap)
-    return ()
     where
       handler :: FSE.Event -> IO ()
       handler = handleNonRecursiveFSEEvent path actPred chan
@@ -92,7 +93,6 @@ instance FileListener OSXManager where
   rlisten (OSXManager mvarMap) path actPred chan = do
     eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream Recursive chan) watchMap)
-    return ()
     where
       handler :: FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan
