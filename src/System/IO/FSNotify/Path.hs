@@ -28,24 +28,28 @@ instance ConvertFilePath String String where fp     = id
 instance ConvertFilePath FilePath FilePath where fp = id
 
 getDirectoryContentsPath :: FilePath -> IO [FilePath]
-getDirectoryContentsPath path = listDirectory path >>= return . map (path </>)
+getDirectoryContentsPath path = fmap (map (path </>)) $ listDirectory path
 
-findImmediateFiles :: FilePath -> IO [FilePath]
-findImmediateFiles path = getDirectoryContentsPath path >>= filterM isFile
-
-findImmediateDirs :: FilePath -> IO [FilePath]
-findImmediateDirs path = getDirectoryContentsPath path >>= filterM isDirectory
+fileDirContents :: FilePath -> IO ([FilePath],[FilePath])
+fileDirContents path = do
+  contents <- getDirectoryContentsPath path
+  files <- filterM isFile contents
+  dirs <- filterM isDirectory contents
+  return (files, dirs)
 
 findAllFiles :: FilePath -> IO [FilePath]
 findAllFiles path = do
-  files <- findImmediateFiles path
-  dirs  <- findImmediateDirs  path
+  (files, dirs) <- fileDirContents path
   nestedFiles <- mapM findAllFiles dirs
   return (files ++ concat nestedFiles)
 
+findImmediateFiles, findImmediateDirs :: FilePath -> IO [FilePath]
+findImmediateFiles = getDirectoryContentsPath >=> filterM isFile
+findImmediateDirs  = getDirectoryContentsPath >=> filterM isDirectory
+
 findAllDirs :: FilePath -> IO [FilePath]
 findAllDirs path = do
-  dirs  <- findImmediateDirs path
+  dirs <- findImmediateDirs path
   nestedDirs <- mapM findAllDirs dirs
   return (dirs ++ concat nestedDirs)
 

@@ -33,28 +33,26 @@ handleWNoEvent actPred chan inoEvent = do
   mapM_ (handleEvent actPred chan) (fsnEvents inoEvent)
   return ()
 handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()
-handleEvent actPred chan event = if actPred event then writeChan event chan else return ()
+handleEvent actPred chan event = when (actPred event) writeChan event chan
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
   -- Nothing the calls we need are not available. This will require that API
   -- version information be exposed by Win32-notify.
-  initSession = WNo.initWatchManager >>= return . Just
+  initSession = fmap Just WNo.initWatchManager
 
   killSession = WNo.killWatchManager
 
   listen watchManager path actPred chan = do
     WNo.watchDirectory watchManager (str path) False varieties handler
     return ()
-    where
-      varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
-      handler :: WNo.Event -> IO ()
-      handler = handleWNoEvent actPred chan
 
   rlisten watchManager path actPred chan = do
     WNo.watchDirectory watchManager (str path) True varieties handler
     return ()
-    where
-      varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
-      handler :: WNo.Event -> IO ()
-      handler = handleWNoEvent actPred chan
+
+handler :: WNo.Event -> IO ()
+handler = handleWNoEvent actPred chan
+
+varieties :: [WNo.Event]
+varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]

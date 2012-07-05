@@ -3,6 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.IO.FSNotify.Linux
        ( FileListener(..)
@@ -15,7 +16,6 @@ import Control.Concurrent.Chan
 import Control.Exception
 import Data.Typeable
 import Filesystem.Path.CurrentOS
-import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
@@ -37,6 +37,7 @@ fsnEvent _                                  = Nothing
 
 handleInoEvent ::  ActionPredicate -> EventChannel -> INo.Event -> IO ()
 handleInoEvent actPred chan inoEvent = handleEvent actPred chan (fsnEvent inoEvent)
+
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleEvent actPred chan (Just event)
   | actPred event       = writeChan chan event
@@ -44,7 +45,7 @@ handleEvent actPred chan (Just event)
 handleEvent _ _ Nothing = return ()
 
 instance FileListener INo.INotify where
-  initSession = INo.initINotify >>= return . Just
+  initSession = fmap Just INo.initINotify
 
   killSession = INo.killINotify
 
@@ -59,14 +60,15 @@ instance FileListener INo.INotify where
   rlisten iNotify path actPred chan = do
     paths <- findDirs True path
     mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties (fp filePath) newDirHandler) paths
-    _ <- mapM (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
-    return ()
+    mapM_ (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
     where
       newDirVarieties = [INo.Create]
       actionVarieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
+
       newDirHandler :: INo.Event -> IO ()
-      newDirHandler (INo.Created _ name) = do
-        rlisten iNotify (path </> (fp name)) actPred chan
+      newDirHandler (INo.Created _ name) =
+        rlisten iNotify (path </> fp name) actPred chan
       newDirHandler _ = throw EventVarietyMismatchException
+
       handler :: INo.Event -> IO ()
       handler = handleInoEvent actPred chan
