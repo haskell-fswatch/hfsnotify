@@ -12,7 +12,7 @@ import Util
 data EventCounter = EventCounter {
     addedCount   :: Int
   , removedCount :: Int
-  } deriving (Show)
+  }
 
 newCounter :: EventCounter
 newCounter = EventCounter 0 0
@@ -34,16 +34,15 @@ action path = do
   write path
   delete path
 
+expectation :: String
+expectation = "1 Added, 1 Removed event in stream"
+
 verify :: EventProcessor
-verify report@(TestReport _ events) = do
-  putStrLn "Performing event verification"
-  putStrLn $ "Event counts: " ++ show counter
-  res <- return (if addedCount counter == 1 && removedCount counter == 1 then
-    TestResult True "" report
+verify report@(TestReport _ events) =
+  if addedCount counter == 1 && removedCount counter == 1 then
+    return (TestResult True ("Found " ++ expectation) report)
     else
-    TestResult False "Expected 1 Added, 1 Removed event in stream" report)
-  putStrLn $ "Verification complete: " ++ (show res)
-  return res
+    return (TestResult False ("Expected " ++ expectation) report)
   where
     counter = countEvents report
 
@@ -60,12 +59,6 @@ countEvents' (EventCounter added removed) (TestReport path ((Removed eventPath):
 countEvents' (EventCounter added removed) (TestReport path (_:events)) =
                                 countEvents' (EventCounter  added  removed     ) (TestReport path events)
 countEvents' counter _ = counter
-
--- countEvents (TestReport path ((Added   eventPath):events)) (EventCounter added removed)
--- countEvents (TestReport path ((Removed eventPath):events)) (EventCounter added removed)
--- countEvents (TestReport path ((_                ):events)) (EventCounter added removed)
--- countEvents (TestReport _      _                         )  counter
-
 
 main :: IO ()
 main = inEnv ActionEnv DirEnv act action verify

@@ -4,6 +4,7 @@ import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
 import Control.Exception
+import Control.Monad (when)
 import Data.Unique.Id
 import Filesystem.Path.CurrentOS
 import System.Directory
@@ -36,38 +37,26 @@ withTempDir :: (String -> IO ()) -> IO ()
 withTempDir fn = do
   idSupply <- randomIO >>= initIdSupply
   path <- testName
-  bracket
-    (do
-        putStrLn $ "Creating " ++ path
-        createDirectory path
-        putStrLn $ path ++ " created"
-        return path)
-    (\dir -> do
-        putStrLn $ "Attempting to remove " ++ path
-        catch
-          (removeDirectoryRecursive dir)
-          (\e -> if isPermissionError e then return () else throw e)
-        putStrLn $ path ++ " removal attempt complete")
-    (fn)
+  bracket (createDirectory path >> return path) attemptDirectoryRemoval fn
+  where
+    attemptDirectoryRemoval :: String -> IO ()
+    attemptDirectoryRemoval path = catch
+        (removeDirectoryRecursive path)
+        (\e -> when
+               (not $ isPermissionError e)
+               (throw e))
 
 performAction :: TestAction -> FilePath -> IO ()
-performAction action path = do
-  putStrLn "Performing test action"
-  _      <- action path
-  putStrLn "Test action complete"
+performAction action path = action path
 
 reportOnAction :: FilePath -> EventChannel -> EventProcessor -> IO TestResult
 reportOnAction = reportOnAction' []
 
 reportOnAction' :: [Event] -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
 reportOnAction' events path chan processor = do
-  putStrLn $ "Processing events: " ++ show events
   result@(TestResult status _ _) <- processor (TestReport path events)
-  putStrLn "Events processed"
   if not status then do
-    putStrLn "Getting event from chan"
     event <- readChan chan
-    putStrLn $ "event retrieved: " ++ show event
     reportOnAction' (event:events) path chan processor
     else
     return result
@@ -82,10 +71,8 @@ inEnv caEnv dtEnv reportPred action eventProcessor = withTempDir $ \pathString -
   withManager $ \manager -> do
     chan <- newChan
     let path = decodeString pathString
-    putStrLn $ "Creating watch: " ++ pathString
-    _ <- watchInEnv caEnv dtEnv manager path reportPred chan
-    putStrLn $ "Watch created: " ++ pathString
-    actAndReport action path chan eventProcessor >>= exitStatus
+    watchInEnv caEnv dtEnv manager path reportPred chan
+    actAndReport action path chan eventProcessor >>= explainResult >>= exitStatus
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
@@ -96,28 +83,24 @@ watchInEnv ChanEnv   TreeEnv = watchTreeChan
 watchInEnv ActionEnv DirEnv  = actionAsChan watchDirAction
 watchInEnv ActionEnv TreeEnv = actionAsChan watchTreeAction
 
-exitStatus :: TestResult -> IO ()
-exitStatus (TestResult True  _ _)  = do
-  putStrLn "Should exit success"
-  testSuccess
-exitStatus (TestResult False explanation report) = do
-  putStrLn "Should exit failure"
-  explainFailure explanation report >> testFailure
-exitStatus _ = do
-  putStrLn "Exiting on missing pattern!"
-  testFailure
+exitStatus :: Bool -> IO ()
+exitStatus True  = testSuccess
+exitStatus False = testFailure
 
-explainFailure :: String -> TestReport -> IO ()
-explainFailure explanation report = do
-    putStrLn explanation
-    putStrLn $ "Events: " ++ show report
+explainResult :: TestResult -> IO Bool
+explainResult (TestResult status explanation report) = do
+  putStrLn ""
+  if status then
+     putStrLn " :: TEST SUCCESS"
+     else
+     putStrLn " !! TEST FAILURE"
+  putStrLn ""
+  putStrLn explanation
+  putStrLn $ "Test report: " ++ show report
+  return status
 
 testFailure :: IO ()
-testFailure = do
-  putStrLn "Exiting with failure"
-  exitFailure
+testFailure = exitFailure
 
 testSuccess :: IO ()
-testSuccess = do
-  putStrLn "Exiting with success"
-  exitWith ExitSuccess
+testSuccess = exitWith ExitSuccess
