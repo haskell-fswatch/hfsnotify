@@ -12,13 +12,11 @@ import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Exception
 import Control.Monad
 import Data.Bits
 import Data.Map (Map)
 import Data.Word
 import Filesystem.Path
-import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
@@ -53,11 +51,11 @@ fsnEventPath (Removed path)  = path
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent dirPath actPred action fseEvent =
+handleNonRecursiveFSEEvent dirPath actPred chan fseEvent =
   handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleNonRecursiveEvent dirPath actPred chan (Just event)
-  | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan event chan
+  | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan chan event
   | otherwise                                                            = return ()
 handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
 
@@ -67,18 +65,18 @@ handleFSEEvent actPred chan fseEvent =
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleEvent actPred chan (Just event) =
-  when (actPred event) writeChan event chan
+  when (actPred event) $ writeChan chan event
 handleEvent _ _ Nothing = return ()
 
 instance FileListener OSXManager where
   initSession = do
     (v1, v2, _) <- FSE.osVersion
     if not $ v1 >= 10 || (v1 == 10 && v2 > 6) then return Nothing else
-      fmap (Just . OSXManager) newMVar Map.empty
+      fmap (Just . OSXManager) $ newMVar Map.empty
 
   killSession (OSXManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    mapM_ (Map.elems watchMap) eventStreamDestroy'
+    forM_ (Map.elems watchMap) eventStreamDestroy'
     where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
