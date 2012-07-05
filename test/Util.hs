@@ -44,19 +44,32 @@ withTempDir fn = do
        putStrLn $ path ++ " removed")
       (fn)
 
-actAndReport :: TestAction -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
-actAndReport action path chan processor = do
+performAction :: TestAction -> FilePath -> IO ()
+performAction action path = do
   putStrLn "Performing test action"
   _      <- action path
   putStrLn "Test action complete"
-  putStrLn "Getting chan contents"
-  event <- readChan chan
-  let events = [event]
-  putStrLn $ "Chan contents retrieved: " ++ (show events)
-  putStrLn "Processing chan contents"
-  rtn <- processor (TestReport path events)
-  putStrLn "Chan contents processed"
-  return rtn
+
+reportOnAction :: FilePath -> EventChannel -> EventProcessor -> IO TestResult
+reportOnAction = reportOnAction' []
+
+reportOnAction' :: [Event] -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
+reportOnAction' events path chan processor = do
+  putStrLn $ "Processing events: " ++ show events
+  result@(TestResult status _ _) <- processor (TestReport path events)
+  putStrLn "Events processed"
+  if not status then do
+    putStrLn "Getting event from chan"
+    event <- readChan chan
+    putStrLn $ "event retrieved: " ++ show event
+    reportOnAction' (event:events) path chan processor
+    else
+    return result
+
+actAndReport :: TestAction -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
+actAndReport action path chan processor = do
+  performAction action path
+  reportOnAction path chan processor
 
 inEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> IO ()
 inEnv caEnv dtEnv reportPred action eventProcessor = withTempDir $ \pathString ->
