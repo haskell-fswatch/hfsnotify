@@ -17,11 +17,11 @@ import Data.Maybe
 import Data.Time.Clock (UTCTime)
 import Filesystem
 import Filesystem.Path
-import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
+import Control.Monad (forM_)
 
 data EventType =
     AddedEvent
@@ -39,7 +39,7 @@ generateEvent ModifiedEvent filePath = Just (Modified filePath)
 generateEvent RemovedEvent  filePath = Just (Removed  filePath)
 
 generateEvents :: EventType -> [FilePath] -> [Event]
-generateEvents eventType paths = mapMaybe (generateEvent eventType) paths
+generateEvents eventType = mapMaybe (generateEvent eventType)
 
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
 handleEvent chan actPred event
@@ -47,17 +47,11 @@ handleEvent chan actPred event
   | otherwise     = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath UTCTime)
-pathModMap True path = do
-  files <- findFiles True path
-  pathModMap' files
-pathModMap False path = do
-  files <- findFiles False path
-  pathModMap' files
+pathModMap True  path = findFiles True path >>= pathModMap'
+pathModMap False path = findFiles False path >>= pathModMap'
 
 pathModMap' :: [FilePath] -> IO (Map FilePath UTCTime)
-pathModMap' files = do
-  mapList <- mapM pathAndTime files
-  return (Map.fromList mapList)
+pathModMap' files = fmap Map.fromList $ mapM pathAndTime files
   where
     pathAndTime :: FilePath -> IO (FilePath, UTCTime)
     pathAndTime path = do
@@ -79,26 +73,27 @@ pollPath recursive chan filePath actPred oldPathMap = do
   where
     modifiedDifference :: UTCTime -> UTCTime -> Maybe UTCTime
     modifiedDifference newTime oldTime
-      | (oldTime /= newTime) = Just newTime
+      | oldTime /= newTime = Just newTime
       | otherwise            = Nothing
+
     handleEvents :: [Event] -> IO ()
     handleEvents = mapM_ (handleEvent chan actPred)
+
     pollPath' :: Map FilePath UTCTime -> IO ()
     pollPath' = pollPath recursive chan filePath actPred
+
 
 -- Additional init funciton exported to allow startManager to unconditionally
 -- create a poll manager as a fallback when other managers will not instantiate.
 createPollManager :: IO PollManager
-createPollManager = do
-  mvarMap <- newMVar Map.empty
-  return (PollManager mvarMap)
+createPollManager = fmap PollManager $ newMVar Map.empty
 
 instance FileListener PollManager where
-  initSession = createPollManager >>= return . Just
+  initSession = fmap Just createPollManager
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    flip mapM_ (Map.keys watchMap) $ killThread'
+    forM_ (Map.keys watchMap) killThread'
     where
       killThread' :: WatchKey -> IO ()
       killThread' (WatchKey threadId) = killThread threadId
@@ -106,9 +101,9 @@ instance FileListener PollManager where
   listen (PollManager mvarMap) path actPred chan  = do
     pmMap <- pathModMap False path
     threadId <- forkIO $ pollPath False chan path actPred pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert (WatchKey threadId) (WatchData path chan) watchMap)
+    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path chan)
 
   rlisten (PollManager mvarMap) path actPred chan = do
     pmMap <- pathModMap True  path
     threadId <- forkIO $ pollPath True chan path actPred pmMap
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert (WatchKey threadId) (WatchData path chan) watchMap)
+    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path chan)

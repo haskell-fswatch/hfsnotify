@@ -10,7 +10,6 @@ module System.IO.FSNotify.Listener
 import Prelude hiding (FilePath)
 
 import Filesystem.Path.CurrentOS
-import System.IO hiding (FilePath)
 import System.IO.FSNotify.Types
 
 -- | A typeclass that imposes structure on watch managers capable of listening
