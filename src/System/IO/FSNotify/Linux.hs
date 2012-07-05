@@ -29,6 +29,7 @@ instance Exception EventVarietyMismatchException
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
 fsnEvent :: INo.Event -> Maybe Event
+fsnEvent (INo.Created  False       name   ) = Just (Added    (fp name))
 fsnEvent (INo.Closed   False (Just name) _) = Just (Modified (fp name))
 fsnEvent (INo.MovedOut False       name  _) = Just (Removed  (fp name))
 fsnEvent (INo.MovedIn  False       name  _) = Just (Added    (fp name))

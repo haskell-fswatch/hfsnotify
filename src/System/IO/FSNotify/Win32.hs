@@ -5,7 +5,7 @@
 
 module System.IO.FSNotify.Win32
        ( FileListener(..)
-       , ListenManager
+       , NativeManager
        ) where
 
 import Prelude hiding (FilePath)
@@ -18,7 +18,7 @@ import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
 
-type ListenManager = WNo.WatchManager
+type NativeManager = WNo.WatchManager
 
 fsnEvents :: WNo.Event -> [Event]
 fsnEvents (WNo.Created  False name)                   = [Added (fp name)]
@@ -44,11 +44,11 @@ instance FileListener WNo.WatchManager where
   killSession = WNo.killWatchManager
 
   listen watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (str path) False varieties handler
+    WNo.watchDirectory watchManager (fp path) False varieties handler
     return ()
 
   rlisten watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (str path) True varieties handler
+    WNo.watchDirectory watchManager (fp path) True varieties handler
     return ()
 
 handler :: WNo.Event -> IO ()
