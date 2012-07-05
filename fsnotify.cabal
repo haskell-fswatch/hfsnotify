@@ -57,8 +57,12 @@ Test-Suite test
                         , bytestring >= 0.9.2.1
                         , fsnotify >= 0.0.1
                         , directory >= 1.1.0.2
+                        , random >= 1.0.1.1
                         , system-filepath >= 0.4.6
                         , system-fileio >= 0.3.7
+                        , uniqueid >= 0.1.1
+  if os(windows)
+    Build-Depends:      ghc >= 7.4.2
 
 
 Source-Repository head

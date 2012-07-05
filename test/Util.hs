@@ -1,15 +1,18 @@
 module Util where
 
-import Prelude hiding (FilePath)
+import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
 import Control.Exception
+import Data.Unique.Id
 import Filesystem.Path.CurrentOS
 import System.Directory
 import System.Environment
 import System.Exit
+import System.IO.Error (isPermissionError)
 import System.IO.FSNotify
 import System.IO.FSNotify.Types
+import System.Random
 
 data ChanActionEnv =
     ChanEnv
@@ -26,23 +29,26 @@ type EventProcessor = TestReport -> IO TestResult
 
 testName :: IO String
 testName = do
-    n <- getProgName
-    return (n ++ "-sandbox")
+  id <- randomIO >>= initIdSupply >>= return . show . hashedId . idFromSupply
+  return ("sandbox-" ++ id)
 
 withTempDir :: (String -> IO ()) -> IO ()
 withTempDir fn = do
-    path <- testName
-    bracket
-      (do
-       putStrLn $ "Creating " ++ path
-       createDirectory path
-       putStrLn $ path ++ " created"
-       return path)
-      (\dir -> do
-       putStrLn $ "Removing " ++ path
-       removeDirectoryRecursive dir
-       putStrLn $ path ++ " removed")
-      (fn)
+  idSupply <- randomIO >>= initIdSupply
+  path <- testName
+  bracket
+    (do
+        putStrLn $ "Creating " ++ path
+        createDirectory path
+        putStrLn $ path ++ " created"
+        return path)
+    (\dir -> do
+        putStrLn $ "Attempting to remove " ++ path
+        catch
+          (removeDirectoryRecursive dir)
+          (\e -> if isPermissionError e then return () else throw e)
+        putStrLn $ path ++ " removal attempt complete")
+    (fn)
 
 performAction :: TestAction -> FilePath -> IO ()
 performAction action path = do
