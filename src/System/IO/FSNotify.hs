@@ -15,6 +15,7 @@ module System.IO.FSNotify
        , watchTreeChan
        , watchTreeAction
        , WatchManager
+       , Event(..)
        ) where
 
 import Prelude hiding (FilePath, catch)
