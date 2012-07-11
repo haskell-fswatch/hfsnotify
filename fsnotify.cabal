@@ -45,7 +45,7 @@ Library
       if os(darwin)
         CPP-Options:    -DOS_Mac
         Other-Modules:  System.IO.FSNotify.OSX
-        Build-Depends:  hfsevents >= 0.1
+        Build-Depends:  hfsevents >= 0.1.2
 
 
 Test-Suite test
