@@ -12,17 +12,17 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Monad (when)
-import Data.Time (UTCTime, getCurrentTime)
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
+import System.Time (ClockTime, getClockTime)
 import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
 
-fsnEvents :: UTCTime -> WNo.Event -> [Event]
+fsnEvents :: ClockTime -> WNo.Event -> [Event]
 fsnEvents timestamp (WNo.Created  False name)                   = [Added (fp name) timestamp]
 fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
 fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
@@ -32,7 +32,7 @@ fsnEvents _         _                                           = []
 
 handleWNoEvent :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
 handleWNoEvent actPred chan inoEvent = do
-  currentTime <- getCurrentTime
+  currentTime <- getClockTime
   mapM_ (handleEvent actPred chan) (fsnEvents currentTime inoEvent)
   return ()
 handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()

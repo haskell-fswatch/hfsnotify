@@ -14,12 +14,13 @@ import Prelude hiding (FilePath)
 import Control.Concurrent
 import Data.Map (Map)
 import Data.Maybe
-import Data.Time (UTCTime, getCurrentTime)
+import Data.Time.Clock (UTCTime)
 import Filesystem
 import Filesystem.Path
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
+import System.Time (ClockTime, getClockTime)
 import qualified Data.Map as Map
 import Control.Monad (forM_)
 
@@ -33,12 +34,12 @@ data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
-generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
+generateEvent :: ClockTime -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp)
 generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp)
 generateEvent timestamp RemovedEvent  filePath = Just (Removed  filePath timestamp)
 
-generateEvents :: UTCTime -> EventType -> [FilePath] -> [Event]
+generateEvents :: ClockTime -> EventType -> [FilePath] -> [Event]
 generateEvents timestamp eventType = mapMaybe (generateEvent timestamp eventType)
 
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
@@ -62,7 +63,7 @@ pollPath :: Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath 
 pollPath recursive chan filePath actPred oldPathMap = do
   threadDelay 1000000
   newPathMap  <- pathModMap recursive filePath
-  currentTime <- getCurrentTime
+  currentTime <- getClockTime
   let deletedMap = Map.difference oldPathMap newPathMap
       createdMap = Map.difference newPathMap oldPathMap
       modifiedAndCreatedMap = Map.differenceWith modifiedDifference newPathMap oldPathMap

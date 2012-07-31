@@ -19,6 +19,7 @@ import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
+import System.Time (ClockTime, getClockTime)
 import qualified System.INotify as INo
 
 type NativeManager = INo.INotify
@@ -28,16 +29,18 @@ instance Exception EventVarietyMismatchException
 
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: INo.Event -> Maybe Event
-fsnEvent (INo.Created  False       name   ) = Just (Added    (fp name))
-fsnEvent (INo.Closed   False (Just name) _) = Just (Modified (fp name))
-fsnEvent (INo.MovedOut False       name  _) = Just (Removed  (fp name))
-fsnEvent (INo.MovedIn  False       name  _) = Just (Added    (fp name))
-fsnEvent (INo.Deleted  False       name   ) = Just (Removed  (fp name))
-fsnEvent _                                  = Nothing
+fsnEvent :: ClockTime -> INo.Event -> Maybe Event
+fsnEvent timestamp (INo.Created  False       name   ) = Just (Added    (fp name) timestamp)
+fsnEvent timestamp (INo.Closed   False (Just name) _) = Just (Modified (fp name) timestamp)
+fsnEvent timestamp (INo.MovedOut False       name  _) = Just (Removed  (fp name) timestamp)
+fsnEvent timestamp (INo.MovedIn  False       name  _) = Just (Added    (fp name) timestamp)
+fsnEvent timestamp (INo.Deleted  False       name   ) = Just (Removed  (fp name) timestamp)
+fsnEvent _         _                                  = Nothing
 
-handleInoEvent ::  ActionPredicate -> EventChannel -> INo.Event -> IO ()
-handleInoEvent actPred chan inoEvent = handleEvent actPred chan (fsnEvent inoEvent)
+handleInoEvent :: ActionPredicate -> EventChannel -> INo.Event -> IO ()
+handleInoEvent actPred chan inoEvent = do
+  currentTime <- getClockTime
+  handleEvent actPred chan (fsnEvent currentTime inoEvent)
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleEvent actPred chan (Just event)
