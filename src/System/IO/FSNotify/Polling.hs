@@ -14,7 +14,7 @@ import Prelude hiding (FilePath)
 import Control.Concurrent
 import Data.Map (Map)
 import Data.Maybe
-import Data.Time.Clock (UTCTime)
+import Data.Time (UTCTime, getCurrentTime)
 import Filesystem
 import Filesystem.Path
 import System.IO.FSNotify.Listener
@@ -33,13 +33,13 @@ data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
-generateEvent :: EventType -> FilePath -> Maybe Event
-generateEvent AddedEvent    filePath = Just (Added    filePath)
-generateEvent ModifiedEvent filePath = Just (Modified filePath)
-generateEvent RemovedEvent  filePath = Just (Removed  filePath)
+generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
+generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp)
+generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp)
+generateEvent timestamp RemovedEvent  filePath = Just (Removed  filePath timestamp)
 
-generateEvents :: EventType -> [FilePath] -> [Event]
-generateEvents eventType = mapMaybe (generateEvent eventType)
+generateEvents :: UTCTime -> EventType -> [FilePath] -> [Event]
+generateEvents timestamp eventType = mapMaybe (generateEvent timestamp eventType)
 
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
 handleEvent chan actPred event
@@ -62,13 +62,15 @@ pollPath :: Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath 
 pollPath recursive chan filePath actPred oldPathMap = do
   threadDelay 1000000
   newPathMap  <- pathModMap recursive filePath
+  currentTime <- getCurrentTime
   let deletedMap = Map.difference oldPathMap newPathMap
       createdMap = Map.difference newPathMap oldPathMap
       modifiedAndCreatedMap = Map.differenceWith modifiedDifference newPathMap oldPathMap
       modifiedMap = Map.difference modifiedAndCreatedMap createdMap
-  handleEvents $ generateEvents AddedEvent    $ Map.keys createdMap
-  handleEvents $ generateEvents ModifiedEvent $ Map.keys modifiedMap
-  handleEvents $ generateEvents RemovedEvent  $ Map.keys deletedMap
+      generateEvents' = generateEvents currentTime
+  handleEvents $ generateEvents' AddedEvent    $ Map.keys createdMap
+  handleEvents $ generateEvents' ModifiedEvent $ Map.keys modifiedMap
+  handleEvents $ generateEvents' RemovedEvent  $ Map.keys deletedMap
   pollPath' newPathMap
   where
     modifiedDifference :: UTCTime -> UTCTime -> Maybe UTCTime

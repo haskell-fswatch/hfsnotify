@@ -11,6 +11,8 @@ module System.IO.FSNotify.Win32
 import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
+import Control.Monad (when)
+import Data.Time (UTCTime, getCurrentTime)
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
@@ -20,20 +22,21 @@ import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
 
-fsnEvents :: WNo.Event -> [Event]
-fsnEvents (WNo.Created  False name)                   = [Added (fp name)]
-fsnEvents (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName), Added (fp newName)]
-fsnEvents (WNo.Renamed  False Nothing newName)        = [Added (fp newName)]
-fsnEvents (WNo.Modified False (Just name))            = [Modified (fp name)]
-fsnEvents (WNo.Deleted  False name)                   = [Removed (fp name)]
-fsnEvents _                                           = []
+fsnEvents :: UTCTime -> WNo.Event -> [Event]
+fsnEvents timestamp (WNo.Created  False name)                   = [Added (fp name) timestamp]
+fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
+fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
+fsnEvents timestamp (WNo.Modified False (Just name))            = [Modified (fp name) timestamp]
+fsnEvents timestamp (WNo.Deleted  False name)                   = [Removed (fp name) timestamp]
+fsnEvents _         _                                           = []
 
 handleWNoEvent :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
 handleWNoEvent actPred chan inoEvent = do
-  mapM_ (handleEvent actPred chan) (fsnEvents inoEvent)
+  currentTime <- getCurrentTime
+  mapM_ (handleEvent actPred chan) (fsnEvents currentTime inoEvent)
   return ()
 handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()
-handleEvent actPred chan event = when (actPred event) writeChan event chan
+handleEvent actPred chan event = when (actPred event) (writeChan chan event)
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -44,15 +47,15 @@ instance FileListener WNo.WatchManager where
   killSession = WNo.killWatchManager
 
   listen watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (fp path) False varieties handler
+    _ <- WNo.watchDirectory watchManager (fp path) False varieties (handler actPred chan)
     return ()
 
   rlisten watchManager path actPred chan = do
-    WNo.watchDirectory watchManager (fp path) True varieties handler
+    _ <- WNo.watchDirectory watchManager (fp path) True varieties (handler actPred chan)
     return ()
 
-handler :: WNo.Event -> IO ()
-handler = handleWNoEvent actPred chan
+handler :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
+handler = handleWNoEvent
 
-varieties :: [WNo.Event]
+varieties :: [WNo.EventVariety]
 varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
