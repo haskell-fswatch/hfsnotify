@@ -44,27 +44,22 @@ fsnEvent timestamp fseEvent
   | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed  (fp $ FSE.eventPath fseEvent) timestamp)
   | otherwise                                                    = Nothing
 
-fsnEventPath :: Event -> FilePath
-fsnEventPath (Added path)    = path
-fsnEventPath (Modified path) = path
-fsnEventPath (Removed path)  = path
-
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
 handleNonRecursiveFSEEvent dirPath actPred chan fseEvent = do
   currentTime <- getCurrentTime
-  handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent currentTime)
+  handleNonRecursiveEvent dirPath actPred chan (fsnEvent currentTime fseEvent)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleNonRecursiveEvent dirPath actPred chan (Just event)
-  | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan chan event
+  | directory dirPath == directory (eventPath event) && actPred event = writeChan chan event
   | otherwise                                                            = return ()
 handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
 handleFSEEvent actPred chan fseEvent = do
   currentTime <- getCurrentTime
-  handleEvent actPred chan (fsnEvent fseEvent currentTime)
+  handleEvent actPred chan (fsnEvent currentTime fseEvent)
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleEvent actPred chan (Just event) =

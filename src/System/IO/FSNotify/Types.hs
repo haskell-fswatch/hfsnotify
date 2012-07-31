@@ -6,6 +6,7 @@
 module System.IO.FSNotify.Types
        ( Event(..)
        , eventPath
+       , eventTime
        , EventChannel
        , ActionPredicate
        , Action
