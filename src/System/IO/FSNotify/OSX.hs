@@ -15,6 +15,7 @@ import Control.Concurrent.MVar
 import Control.Monad
 import Data.Bits
 import Data.Map (Map)
+import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
 import Filesystem.Path
 import System.IO.FSNotify.Listener
@@ -35,12 +36,12 @@ type NativeManager = OSXManager
 nil :: Word64
 nil = 0x00
 
-fsnEvent :: FSE.Event -> Maybe Event
-fsnEvent fseEvent
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemCreated  /= nil = Just (Added (fp $ FSE.eventPath fseEvent))
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemModified /= nil = Just (Modified (fp $ FSE.eventPath fseEvent))
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRenamed  /= nil = Just (Added (fp $ FSE.eventPath fseEvent))
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed (fp $ FSE.eventPath fseEvent))
+fsnEvent :: UTCTime -> FSE.Event -> Maybe Event
+fsnEvent timestamp fseEvent
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemCreated  /= nil = Just (Added    (fp $ FSE.eventPath fseEvent) timestamp)
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemModified /= nil = Just (Modified (fp $ FSE.eventPath fseEvent) timestamp)
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRenamed  /= nil = Just (Added    (fp $ FSE.eventPath fseEvent) timestamp)
+  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed  (fp $ FSE.eventPath fseEvent) timestamp)
   | otherwise                                                    = Nothing
 
 fsnEventPath :: Event -> FilePath
@@ -51,8 +52,9 @@ fsnEventPath (Removed path)  = path
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent dirPath actPred chan fseEvent =
-  handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent)
+handleNonRecursiveFSEEvent dirPath actPred chan fseEvent = do
+  currentTime <- getCurrentTime
+  handleNonRecursiveEvent dirPath actPred chan (fsnEvent fseEvent currentTime)
 handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleNonRecursiveEvent dirPath actPred chan (Just event)
   | directory dirPath == directory (fsnEventPath event) && actPred event = writeChan chan event
@@ -60,8 +62,9 @@ handleNonRecursiveEvent dirPath actPred chan (Just event)
 handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
-handleFSEEvent actPred chan fseEvent =
-  handleEvent actPred chan (fsnEvent fseEvent)
+handleFSEEvent actPred chan fseEvent = do
+  currentTime <- getCurrentTime
+  handleEvent actPred chan (fsnEvent fseEvent currentTime)
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
 handleEvent actPred chan (Just event) =
