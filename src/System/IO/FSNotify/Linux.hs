@@ -14,12 +14,12 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Exception
+import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Listener
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
-import System.Time (ClockTime, getClockTime)
 import qualified System.INotify as INo
 
 type NativeManager = INo.INotify
@@ -29,7 +29,7 @@ instance Exception EventVarietyMismatchException
 
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: ClockTime -> INo.Event -> Maybe Event
+fsnEvent :: UTCTime -> INo.Event -> Maybe Event
 fsnEvent timestamp (INo.Created  False       name   ) = Just (Added    (fp name) timestamp)
 fsnEvent timestamp (INo.Closed   False (Just name) _) = Just (Modified (fp name) timestamp)
 fsnEvent timestamp (INo.MovedOut False       name  _) = Just (Removed  (fp name) timestamp)
@@ -39,7 +39,7 @@ fsnEvent _         _                                  = Nothing
 
 handleInoEvent :: ActionPredicate -> EventChannel -> INo.Event -> IO ()
 handleInoEvent actPred chan inoEvent = do
-  currentTime <- getClockTime
+  currentTime <- getCurrentTime
   handleEvent actPred chan (fsnEvent currentTime inoEvent)
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()

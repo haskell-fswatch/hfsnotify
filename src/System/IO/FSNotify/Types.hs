@@ -15,14 +15,15 @@ module System.IO.FSNotify.Types
 import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
+import Data.Time ()
+import Data.Time.Clock (UTCTime)
 import Filesystem.Path.CurrentOS
-import System.Time (ClockTime)
 
 -- | A file event reported by a file watcher.
 data Event =
-    Added    FilePath ClockTime
-  | Modified FilePath ClockTime
-  | Removed  FilePath ClockTime
+    Added    FilePath UTCTime
+  | Modified FilePath UTCTime
+  | Removed  FilePath UTCTime
   deriving (Show)
 
 -- | Helper for extracting the path associated with an event.
@@ -32,7 +33,7 @@ eventPath (Modified path _) = path
 eventPath (Removed  path _) = path
 
 -- | Helper for extracting the time associated with an event.
-eventTime :: Event -> ClockTime
+eventTime :: Event -> UTCTime
 eventTime (Added    _ timestamp) = timestamp
 eventTime (Modified _ timestamp) = timestamp
 eventTime (Removed  _ timestamp) = timestamp
