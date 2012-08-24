@@ -15,10 +15,10 @@ import Control.Concurrent
 import Data.Map (Map)
 import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import Filesystem
+import Filesystem hiding (canonicalizePath)
 import Filesystem.Path
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (fp, canonicalizePath)
+import System.IO.FSNotify.Path (fp, findFiles, canonicalizePath)
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import Control.Monad (forM_)

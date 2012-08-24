@@ -85,7 +85,7 @@ instance FileListener OSXManager where
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
     where
       handler :: FilePath -> FSE.Event -> IO ()
-      handler path = handleNonRecursiveFSEEvent path actPred chan
+      handler listenPath = handleNonRecursiveFSEEvent listenPath actPred chan
 
   rlisten (OSXManager mvarMap) path actPred chan = do
     path' <- canonicalizePath path
