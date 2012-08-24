@@ -18,7 +18,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path
+import System.IO.FSNotify.Path (fp, canonicalizePath)
 import System.IO.FSNotify.Types
 import qualified System.INotify as INo
 
@@ -54,7 +54,8 @@ instance FileListener INo.INotify where
   killSession = INo.killINotify
 
   listen iNotify path actPred chan = do
-    _ <- INo.addWatch iNotify varieties (encodeString path) handler
+    path' <- canonicalizePath path
+    INo.addWatch iNotify varieties (encodeString path') handler
     return ()
     where
       varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
@@ -62,7 +63,8 @@ instance FileListener INo.INotify where
       handler = handleInoEvent actPred chan
 
   rlisten iNotify path actPred chan = do
-    paths <- findDirs True path
+    path' <- canonicalizePath path
+    paths <- findDirs True path'
     mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties (fp filePath) newDirHandler) paths
     mapM_ (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
     where

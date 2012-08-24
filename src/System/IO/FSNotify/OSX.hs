@@ -19,7 +19,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
 import Filesystem.Path
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path
+import System.IO.FSNotify.Path (fp, canonicalizePath)
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
@@ -80,15 +80,17 @@ instance FileListener OSXManager where
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
   listen (OSXManager mvarMap) path actPred chan = do
-    eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream NonRecursive chan) watchMap)
+    path' <- canonicalizePath path
+    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path')
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
     where
-      handler :: FSE.Event -> IO ()
-      handler = handleNonRecursiveFSEEvent path actPred chan
+      handler :: FilePath -> FSE.Event -> IO ()
+      handler path = handleNonRecursiveFSEEvent path actPred chan
 
   rlisten (OSXManager mvarMap) path actPred chan = do
-    eventStream <- FSE.eventStreamCreate [fp path] 0.0 True False True handler
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path (WatchData eventStream Recursive chan) watchMap)
+    path' <- canonicalizePath path
+    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True handler
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
     where
       handler :: FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan

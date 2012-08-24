@@ -16,7 +16,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Filesystem.Path.CurrentOS
 import System.IO hiding (FilePath)
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path
+import System.IO.FSNotify.Path (fp, canonicalizePath)
 import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
 
@@ -47,12 +47,12 @@ instance FileListener WNo.WatchManager where
   killSession = WNo.killWatchManager
 
   listen watchManager path actPred chan = do
-    _ <- WNo.watchDirectory watchManager (fp path) False varieties (handler actPred chan)
-    return ()
+    path' <- canonicalizePath path
+    WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan)
 
   rlisten watchManager path actPred chan = do
-    _ <- WNo.watchDirectory watchManager (fp path) True varieties (handler actPred chan)
-    return ()
+    path' <- canonicalizePath path
+    WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan)
 
 handler :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
 handler = handleWNoEvent

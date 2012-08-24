@@ -18,7 +18,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Filesystem
 import Filesystem.Path
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path
+import System.IO.FSNotify.Path (fp, canonicalizePath)
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import Control.Monad (forM_)
@@ -101,11 +101,13 @@ instance FileListener PollManager where
       killThread' (WatchKey threadId) = killThread threadId
 
   listen (PollManager mvarMap) path actPred chan  = do
-    pmMap <- pathModMap False path
-    threadId <- forkIO $ pollPath False chan path actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path chan)
+    path' <- canonicalizePath path
+    pmMap <- pathModMap False path'
+    threadId <- forkIO $ pollPath False chan path' actPred pmMap
+    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
 
   rlisten (PollManager mvarMap) path actPred chan = do
-    pmMap <- pathModMap True  path
-    threadId <- forkIO $ pollPath True chan path actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path chan)
+    path' <- canonicalizePath path
+    pmMap <- pathModMap True  path'
+    threadId <- forkIO $ pollPath True chan path' actPred pmMap
+    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)

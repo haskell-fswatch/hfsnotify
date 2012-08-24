@@ -31,11 +31,11 @@ type EventProcessor = TestReport -> IO TestResult
 testName :: IO String
 testName = do
   id <- randomIO >>= initIdSupply >>= return . show . hashedId . idFromSupply
-  return ("sandbox-" ++ id)
+  return $ encodeString (decodeString ("sandbox-" ++ id) </> empty)
 
 withTempDir :: (String -> IO ()) -> IO ()
 withTempDir fn = do
-  idSupply <- randomIO >>= initIdSupply
+  -- idSupply <- randomIO >>= initIdSupply
   path <- testName
   bracket (createDirectory path >> return path) attemptDirectoryRemoval fn
   where
