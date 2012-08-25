@@ -80,8 +80,8 @@ actionAsChan actionFunction wm fp ap ec = actionFunction wm fp ap (writeChan ec)
 
 watchInEnv ChanEnv   DirEnv  = watchDirChan
 watchInEnv ChanEnv   TreeEnv = watchTreeChan
-watchInEnv ActionEnv DirEnv  = actionAsChan watchDirAction
-watchInEnv ActionEnv TreeEnv = actionAsChan watchTreeAction
+watchInEnv ActionEnv DirEnv  = actionAsChan watchDir
+watchInEnv ActionEnv TreeEnv = actionAsChan watchTree
 
 exitStatus :: Bool -> IO ()
 exitStatus True  = testSuccess

@@ -11,9 +11,9 @@ module System.IO.FSNotify
        , stopManager
        , withManager
        , watchDirChan
-       , watchDirAction
+       , watchDir
        , watchTreeChan
-       , watchTreeAction
+       , watchTree
        , WatchManager
        , Event(..)
        ) where
@@ -55,7 +55,7 @@ startManager = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
     createManager (Just nativeManager) = return $ WatchManager $ Right nativeManager
-    createManager Nothing = fmap (WatchManager . Left) createPollManager 
+    createManager Nothing = fmap (WatchManager . Left) createPollManager
 
 -- | Stop a file watch manager.
 -- Stopping a watch manager will immediately stop processing events on all paths
@@ -84,8 +84,8 @@ watchTreeChan (WatchManager wm) = either rlisten rlisten wm
 -- associated with files within the specified directory, and not files
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
-watchDirAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchDirAction (WatchManager wm) = either runFallback runNative wm
+watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchDir (WatchManager wm) = either runFallback runNative wm
   where
     runFallback = threadChanFallback listen
     runNative   = threadChanNative listen
@@ -109,8 +109,8 @@ threadChan action runListener = do
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
-watchTreeAction :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchTreeAction (WatchManager wm) = either runFallback runNative wm
+watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchTree (WatchManager wm) = either runFallback runNative wm
   where
     runFallback = threadChanFallback listen
     runNative   = threadChanNative listen
