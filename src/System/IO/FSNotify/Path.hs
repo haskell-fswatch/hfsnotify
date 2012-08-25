@@ -8,6 +8,7 @@ module System.IO.FSNotify.Path
        ( fp
        , findFiles
        , findDirs
+       , canonicalizeDirPath
        , canonicalizePath
        ) where
 
@@ -71,8 +72,11 @@ addTrailingSlash p =
  if FP.null (FP.filename p) then p else
    p FP.</> FP.empty
 
+canonicalizeDirPath :: FilePath -> IO FilePath
+canonicalizeDirPath path = addTrailingSlash `fmap` FS.canonicalizePath path
+
 -- | bugfix older version of canonicalizePath (system-fileio <= 0.3.7) loses trailing slash
 canonicalizePath :: FilePath -> IO FilePath
-canonicalizePath p = let was_dir = FP.null (FP.filename p) in
-  if not was_dir then FS.canonicalizePath p
-  else addTrailingSlash `fmap` FS.canonicalizePath p
+canonicalizePath path = let was_dir = FP.null (FP.filename path) in
+  if not was_dir then FS.canonicalizePath path
+  else canonicalizeDirPath path

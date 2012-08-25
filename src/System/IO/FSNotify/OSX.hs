@@ -17,9 +17,10 @@ import Data.Bits
 import Data.Map (Map)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
-import Filesystem.Path
+import Filesystem (isFile)
+import Filesystem.Path hiding (concat)
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (fp, canonicalizePath)
+import System.IO.FSNotify.Path (fp, canonicalizeDirPath)
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
@@ -36,35 +37,59 @@ type NativeManager = OSXManager
 nil :: Word64
 nil = 0x00
 
-fsnEvent :: UTCTime -> FSE.Event -> Maybe Event
-fsnEvent timestamp fseEvent
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemCreated  /= nil = Just (Added    (fp $ FSE.eventPath fseEvent) timestamp)
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemModified /= nil = Just (Modified (fp $ FSE.eventPath fseEvent) timestamp)
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRenamed  /= nil = Just (Added    (fp $ FSE.eventPath fseEvent) timestamp)
-  | FSE.eventFlags fseEvent .&. FSE.eventFlagItemRemoved  /= nil = Just (Removed  (fp $ FSE.eventPath fseEvent) timestamp)
-  | otherwise                                                    = Nothing
+-- OS X reports the absolute (canonical) path without a trailing slash. Add
+-- the trailing slash when the path refers to a directory
+canonicalEventPath :: FSE.Event -> FilePath
+canonicalEventPath event =
+  if flags .&. dirFlag /= nil then path </> empty else path
+  where
+    flags = FSE.eventFlags event
+    dirFlag = FSE.eventFlagItemIsDir
+    path = fp $ FSE.eventPath event
+
+fsnEvents :: UTCTime -> FSE.Event -> IO [Event]
+fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) (eventFunctions timestamp)
+  where
+    eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
+    eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t]
+    addedFn t e = if hasFlag e FSE.eventFlagItemCreated      then return [Added    (path e) t] else return []
+    modifFn t e = if hasFlag e FSE.eventFlagItemModified     then return [Modified (path e) t] else return []
+    removFn t e = if hasFlag e FSE.eventFlagItemRemoved      then return [Removed  (path e) t] else return []
+    renamFn t e = if hasFlag e FSE.eventFlagItemRenamed then
+                    isFile (path e) >>= \exists -> if exists then return [Added    (path e) t] else return [Removed (path e) t]
+                  else
+                    return []
+    path = canonicalEventPath
+    hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
+
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
 handleNonRecursiveFSEEvent dirPath actPred chan fseEvent = do
   currentTime <- getCurrentTime
-  handleNonRecursiveEvent dirPath actPred chan (fsnEvent currentTime fseEvent)
-handleNonRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> Maybe Event -> IO ()
-handleNonRecursiveEvent dirPath actPred chan (Just event)
-  | directory dirPath == directory (eventPath event) && actPred event = writeChan chan event
-  | otherwise                                                            = return ()
-handleNonRecursiveEvent _ _ _ Nothing                                    = return ()
+  events <- fsnEvents currentTime fseEvent
+  handleNonRecursiveEvents dirPath actPred chan events
+handleNonRecursiveEvents :: FilePath -> ActionPredicate -> EventChannel -> [Event] -> IO ()
+handleNonRecursiveEvents dirPath actPred chan (event:events)
+  | directory dirPath == directory (eventPath event) && actPred event = do
+    writeChan chan event
+    handleNonRecursiveEvents dirPath actPred chan events
+  | otherwise                                                         = handleNonRecursiveEvents dirPath actPred chan events
+handleNonRecursiveEvents _ _ _ []                                     = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
 handleFSEEvent actPred chan fseEvent = do
   currentTime <- getCurrentTime
-  handleEvent actPred chan (fsnEvent currentTime fseEvent)
+  events <- fsnEvents currentTime fseEvent
+  handleEvents actPred chan events
 
-handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
-handleEvent actPred chan (Just event) =
-  when (actPred event) $ writeChan chan event
-handleEvent _ _ Nothing = return ()
+handleEvents :: ActionPredicate -> EventChannel -> [Event] -> IO ()
+handleEvents actPred chan (event:events) =
+  when (actPred event) $ do
+    writeChan chan event
+    handleEvents actPred chan events
+handleEvents _ _ [] = return ()
 
 instance FileListener OSXManager where
   initSession = do
@@ -80,7 +105,7 @@ instance FileListener OSXManager where
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
   listen (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizePath path
+    path' <- canonicalizeDirPath path
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path')
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
     where
@@ -88,7 +113,7 @@ instance FileListener OSXManager where
       handler listenPath = handleNonRecursiveFSEEvent listenPath actPred chan
 
   rlisten (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizePath path
+    path' <- canonicalizeDirPath path
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True handler
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
     where

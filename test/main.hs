@@ -1,6 +1,10 @@
 module Main where
 
--- TODO: cabal'ize existing tests with HUnit and hook them up in here.
+import Test.Hspec (hspec, Spec)
+import qualified Path as P
 
 main :: IO ()
-main = return ()
+main = hspec spec
+
+spec :: Spec
+spec = P.spec

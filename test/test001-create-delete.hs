@@ -51,10 +51,10 @@ countEvents = countEvents' newCounter
 
 countEvents' :: EventCounter -> TestReport -> EventCounter
 countEvents' (EventCounter added removed) (TestReport path ((Added eventPath _):events))
-  | eventPath == testFileName = countEvents' (EventCounter (added + 1)  removed) (TestReport path events)
+  | filename eventPath == testFileName = countEvents' (EventCounter (added + 1)  removed) (TestReport path events)
   | otherwise                 = countEvents' (EventCounter  added       removed) (TestReport path events)
 countEvents' (EventCounter added removed) (TestReport path ((Removed eventPath _):events))
-  | eventPath == testFileName = countEvents' (EventCounter  added (removed + 1)) (TestReport path events)
+  | filename eventPath == testFileName = countEvents' (EventCounter  added (removed + 1)) (TestReport path events)
   | otherwise                 = countEvents' (EventCounter  added  removed     ) (TestReport path events)
 countEvents' (EventCounter added removed) (TestReport path (_:events)) =
                                 countEvents' (EventCounter  added  removed     ) (TestReport path events)
