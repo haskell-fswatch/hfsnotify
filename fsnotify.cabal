@@ -20,11 +20,14 @@ Library
                         , containers >= 0.4.2.1
                         , directory >= 1.1.0.2
                         , filepath >= 1.3.0.0
+                        , Glob >= 0.7.1
                         , old-time >= 1.1.0.0
                         , system-fileio >= 0.3.8
                         , system-filepath >= 0.4.6
+                        , text >= 0.11.2.0
                         , time >= 1.4
   Exposed-Modules:        System.IO.FSNotify
+                        , System.IO.FSNotify.Devel
                         , System.IO.FSNotify.Types
   Other-Modules:          System.IO.FSNotify.Listener
                         , System.IO.FSNotify.Path
@@ -64,6 +67,7 @@ Test-Suite test
                         , random >= 1.0.1.1
                         , system-filepath >= 0.4.6
                         , system-fileio >= 0.3.7
+                        , text >= 0.11.2.0
                         , time >= 1.4
                         , QuickCheck >= 2.4.2
                         , uniqueid >= 0.1.1
