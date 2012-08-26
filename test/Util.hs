@@ -6,12 +6,13 @@ import Control.Concurrent.Chan
 import Control.Exception
 import Control.Monad (when)
 import Data.Unique.Id
-import Filesystem.Path.CurrentOS
+import Filesystem.Path.CurrentOS hiding (concat)
 import System.Directory
 import System.Environment
 import System.Exit
 import System.IO.Error (isPermissionError)
 import System.IO.FSNotify
+import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import System.Random
 
@@ -27,24 +28,52 @@ data TestReport = TestReport FilePath [Event] deriving (Show)
 data TestResult = TestResult Bool String TestReport deriving (Show)
 type TestAction = FilePath -> IO ()
 type EventProcessor = TestReport -> IO TestResult
+data EventPredicate = EventPredicate String (Event -> Bool)
 
-testName :: IO String
+predicateName :: EventPredicate -> String
+predicateName (EventPredicate name _) = name
+
+matchEvents :: [EventPredicate] -> EventProcessor
+matchEvents preds@((EventPredicate _ pred):restPreds) (TestReport path (event:events))
+  | pred event = matchEvents restPreds (TestReport path events)
+  | otherwise  = matchEvents preds    (TestReport path events)
+matchEvents preds@(pred:resPreds) report@(TestReport path []) =
+  return (TestResult False (concat $ map predicateName preds) report)
+matchEvents [] report = return (TestResult True "" report)
+
+newId :: IO String
+newId = randomIO >>= initIdSupply >>= return . show . hashedId . idFromSupply
+
+testFileName :: String -> IO FilePath
+testFileName ext = do
+  uId <- newId
+  return $ fp ("test-" ++ uId ++ "." ++ ext)
+
+testName :: IO FilePath
 testName = do
-  id <- randomIO >>= initIdSupply >>= return . show . hashedId . idFromSupply
-  return $ encodeString (decodeString ("sandbox-" ++ id) </> empty)
+  uId <- newId
+  return $ fp ("sandbox-" ++ uId) </> empty
 
-withTempDir :: (String -> IO ()) -> IO ()
-withTempDir fn = do
-  -- idSupply <- randomIO >>= initIdSupply
-  path <- testName
-  bracket (createDirectory path >> return path) attemptDirectoryRemoval fn
+withTempDir :: (FilePath -> IO ()) -> IO ()
+withTempDir fn = withNestedTempDir empty fn
+
+withNestedTempDir :: FilePath -> (FilePath -> IO ()) -> IO ()
+withNestedTempDir firstPath fn = do
+  secondPath <- testName
+  let path = if firstPath /= empty then
+               fp $ firstPath </> secondPath
+             else
+               fp secondPath
+  bracket (createDirectory path >> return path) (attemptDirectoryRemoval . fp) (fn . fp)
+
+attemptDirectoryRemoval :: FilePath -> IO ()
+attemptDirectoryRemoval path = catch
+                               (removeDirectoryRecursive pathString)
+                               (\e -> when
+                                      (not $ isPermissionError e)
+                                      (throw e))
   where
-    attemptDirectoryRemoval :: String -> IO ()
-    attemptDirectoryRemoval path = catch
-        (removeDirectoryRecursive path)
-        (\e -> when
-               (not $ isPermissionError e)
-               (throw e))
+    pathString = fp path
 
 performAction :: TestAction -> FilePath -> IO ()
 performAction action path = action path
@@ -67,40 +96,34 @@ actAndReport action path chan processor = do
   reportOnAction path chan processor
 
 inEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> IO ()
-inEnv caEnv dtEnv reportPred action eventProcessor = withTempDir $ \pathString ->
+inEnv caEnv dtEnv reportPred action eventProcessor =
+  withTempDir $ inTempDirEnv caEnv dtEnv reportPred action eventProcessor
+
+inTempDirEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> IO ()
+inTempDirEnv caEnv dtEnv reportPred action eventProcessor path =
   withManager $ \manager -> do
     chan <- newChan
-    let path = decodeString pathString
     watchInEnv caEnv dtEnv manager path reportPred chan
-    actAndReport action path chan eventProcessor >>= explainResult >>= exitStatus
+    actAndReport action path chan eventProcessor >>= outputOnFail
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 actionAsChan actionFunction wm fp ap ec = actionFunction wm fp ap (writeChan ec)
 
+watchInEnv :: ChanActionEnv
+           -> DirTreeEnv
+           -> WatchManager
+           -> FilePath
+           -> ActionPredicate
+           -> EventChannel
+           -> IO ()
 watchInEnv ChanEnv   DirEnv  = watchDirChan
 watchInEnv ChanEnv   TreeEnv = watchTreeChan
 watchInEnv ActionEnv DirEnv  = actionAsChan watchDir
 watchInEnv ActionEnv TreeEnv = actionAsChan watchTree
 
-exitStatus :: Bool -> IO ()
-exitStatus True  = testSuccess
-exitStatus False = testFailure
-
-explainResult :: TestResult -> IO Bool
-explainResult (TestResult status explanation report) = do
-  putStrLn ""
-  if status then
-     putStrLn " :: TEST SUCCESS"
-     else
-     putStrLn " !! TEST FAILURE"
-  putStrLn ""
-  putStrLn explanation
-  putStrLn $ "Test report: " ++ show report
-  return status
-
-testFailure :: IO ()
-testFailure = exitFailure
-
-testSuccess :: IO ()
-testSuccess = exitWith ExitSuccess
+outputOnFail :: TestResult -> IO ()
+outputOnFail (TestResult False explanation report) = do
+  print explanation
+  print report
+outputOnFail (TestResult True _ _) = return ()

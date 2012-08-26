@@ -38,6 +38,8 @@ handleWNoEvent actPred chan inoEvent = do
 handleEvent :: ActionPredicate -> EventChannel -> Event -> IO ()
 handleEvent actPred chan event = when (actPred event) (writeChan chan event)
 
+void = return ()
+
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
   -- Nothing the calls we need are not available. This will require that API
@@ -48,11 +50,13 @@ instance FileListener WNo.WatchManager where
 
   listen watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan)
+    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan)
+    void
 
   rlisten watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan)
+    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan)
+    void
 
 handler :: ActionPredicate -> EventChannel -> WNo.Event -> IO ()
 handler = handleWNoEvent
