@@ -18,7 +18,7 @@ import Prelude hiding (FilePath, catch)
 
 import Data.Text
 import Filesystem.Path.CurrentOS
-import System.FilePath.Glob
+import System.FilePath.Glob (match, Pattern)
 import System.IO.FSNotify
 import System.IO.FSNotify.Path (fp)
 import System.IO.FSNotify.Types
