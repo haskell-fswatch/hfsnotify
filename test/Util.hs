@@ -15,6 +15,7 @@ import System.IO.FSNotify
 import System.IO.FSNotify.Path
 import System.IO.FSNotify.Types
 import System.Random
+import System.Timeout (timeout)
 
 data ChanActionEnv =
     ChanEnv
@@ -95,16 +96,27 @@ actAndReport action path chan processor = do
   performAction action path
   reportOnAction path chan processor
 
+testTimeout :: Int
+testTimeout = 3000000
+
+timeoutTest :: Maybe () -> IO ()
+timeoutTest Nothing = error "Test timed out"
+timeoutTest (Just _) = return ()
+
 inEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> IO ()
 inEnv caEnv dtEnv reportPred action eventProcessor =
   withTempDir $ inTempDirEnv caEnv dtEnv reportPred action eventProcessor
 
+runTest :: IO () -> IO ()
+runTest test = timeout testTimeout test >>= timeoutTest
+
 inTempDirEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> IO ()
 inTempDirEnv caEnv dtEnv reportPred action eventProcessor path =
-  withManager $ \manager -> do
-    chan <- newChan
-    watchInEnv caEnv dtEnv manager path reportPred chan
-    actAndReport action path chan eventProcessor >>= outputOnFail
+  runTest $ do
+    withManager $ \manager -> do
+      chan <- newChan
+      watchInEnv caEnv dtEnv manager path reportPred chan
+      actAndReport action path chan eventProcessor >>= outputOnFail
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
@@ -124,6 +136,5 @@ watchInEnv ActionEnv TreeEnv = actionAsChan watchTree
 
 outputOnFail :: TestResult -> IO ()
 outputOnFail (TestResult False explanation report) = do
-  print explanation
-  print report
+  error $ show explanation ++ " " ++ show report
 outputOnFail (TestResult True _ _) = return ()

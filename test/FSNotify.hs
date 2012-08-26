@@ -64,10 +64,11 @@ createFileSpecR :: ChanActionEnv -> FilePath -> Assertion
 createFileSpecR envType fileName = do
   withTempDir $ \envDir -> do
     withNestedTempDir envDir $ \envPath -> do
-      inTempDirEnv envType TreeEnv act action (matchEvents matchers) envDir
+      inTempDirEnv envType TreeEnv act (action envPath) (matchEvents matchers) envDir
   where
-    action :: FilePath -> IO ()
-    action envPath = writeFile (envPath </> fileName) empty
+    action :: FilePath -> FilePath -> IO ()
+    action envPath _ = do
+      writeFile (envPath </> fileName) empty
     matchers :: [EventPredicate]
     matchers = [EventPredicate "File creation" (matchCreate fileName)]
 
@@ -76,10 +77,11 @@ removeFileSpecR envType fileName = do
   withTempDir $ \envDir -> do
     withNestedTempDir envDir $ \envPath -> do
       writeFile (envPath </> fileName) empty
-      inTempDirEnv envType TreeEnv act action (matchEvents matchers) envDir
+      inTempDirEnv envType TreeEnv act (action envPath) (matchEvents matchers) envDir
   where
-    action :: FilePath -> IO ()
-    action envPath = removeFile (envPath </> fileName)
+    action :: FilePath -> FilePath -> IO ()
+    action envPath _ = do
+      removeFile (envPath </> fileName)
     matchers :: [EventPredicate]
     matchers = [EventPredicate "File deletion" (matchRemove fileName)]
 
@@ -88,10 +90,10 @@ renameFileSpecR envType (oldFileName, newFileName) = do
   withTempDir $ \envDir -> do
     withNestedTempDir envDir $ \envPath -> do
       writeFile (envPath </> oldFileName) empty
-      inTempDirEnv envType TreeEnv act action (matchEvents matchers) envDir
+      inTempDirEnv envType TreeEnv act (action envPath) (matchEvents matchers) envDir
   where
-    action :: FilePath -> IO ()
-    action envPath = rename (envPath </> oldFileName) (envPath </> newFileName)
+    action :: FilePath -> FilePath -> IO ()
+    action envPath _ = rename (envPath </> oldFileName) (envPath </> newFileName)
     matchers :: [EventPredicate]
     matchers = [ EventPredicate "Rename: File deletion" (matchRemove oldFileName)
                , EventPredicate "Rename: File creation" (matchCreate newFileName) ]
