@@ -112,8 +112,8 @@ threadChan action runListener = do
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
 watchTree (WatchManager wm) = either runFallback runNative wm
   where
-    runFallback = threadChanFallback listen
-    runNative   = threadChanNative listen
+    runFallback = threadChanFallback rlisten
+    runNative   = threadChanNative rlisten
 
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock

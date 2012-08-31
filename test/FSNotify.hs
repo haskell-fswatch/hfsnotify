@@ -1,3 +1,8 @@
+--
+-- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
+-- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
+--
+
 module FSNotify (spec) where
 
 import Prelude hiding (FilePath, writeFile)
@@ -19,14 +24,18 @@ spec = do
     it "Create file" $ testFileName "txt" >>= createFileSpec ActionEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
     it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
-  describe "watchDir" $ do
-    it "Create file" $ testFileName "txt" >>= createFileSpec ActionEnv
-    it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
-    it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
+  describe "watchDirChan" $ do
+    it "Create file" $ testFileName "txt" >>= createFileSpec ChanEnv
+    it "Remove file" $ testFileName "txt" >>= removeFileSpec ChanEnv
+    it "Rename file" $ renameInput        >>= renameFileSpec ChanEnv
   describe "watchTree" $ do
     it "Create file" $ testFileName "txt" >>= createFileSpecR ActionEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpecR ActionEnv
     it "Rename file" $ renameInput        >>= renameFileSpecR ActionEnv
+  describe "watchTreeChan" $ do
+    it "Create file" $ testFileName "txt" >>= createFileSpecR ChanEnv
+    it "Remove file" $ testFileName "txt" >>= removeFileSpecR ChanEnv
+    it "Rename file" $ renameInput        >>= renameFileSpecR ChanEnv
 
 createFileSpec :: ChanActionEnv -> FilePath -> Assertion
 createFileSpec envType fileName = do

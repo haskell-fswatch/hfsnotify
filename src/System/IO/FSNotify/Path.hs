@@ -49,8 +49,14 @@ findAllFiles path = do
   return (files ++ concat nestedFiles)
 
 findImmediateFiles, findImmediateDirs :: FilePath -> IO [FilePath]
-findImmediateFiles = getDirectoryContentsPath >=> filterM FS.isFile
-findImmediateDirs  = getDirectoryContentsPath >=> filterM FS.isDirectory
+findImmediateFiles = getDirectoryContentsPath >=> filterM FS.isFile >=> canonicalize
+  where
+    canonicalize :: [FilePath] -> IO [FilePath]
+    canonicalize files = mapM FS.canonicalizePath files
+findImmediateDirs  = getDirectoryContentsPath >=> filterM FS.isDirectory >=> canonicalize
+  where
+    canonicalize :: [FilePath] -> IO [FilePath]
+    canonicalize dirs = mapM canonicalizeDirPath dirs
 
 findAllDirs :: FilePath -> IO [FilePath]
 findAllDirs path = do
@@ -59,12 +65,12 @@ findAllDirs path = do
   return (dirs ++ concat nestedDirs)
 
 findFiles :: Bool -> FilePath -> IO [FilePath]
-findFiles True path  = findAllFiles       path
-findFiles False path = findImmediateFiles path
+findFiles True path  = findAllFiles       =<< canonicalizeDirPath path
+findFiles False path = findImmediateFiles =<<  canonicalizeDirPath path
 
 findDirs :: Bool -> FilePath -> IO [FilePath]
-findDirs True path  = findAllDirs       path
-findDirs False path = findImmediateDirs path
+findDirs True path  = findAllDirs       =<< canonicalizeDirPath path
+findDirs False path = findImmediateDirs =<< canonicalizeDirPath path
 
 -- | add a trailing slash to ensure the path indicates a directory
 addTrailingSlash :: FilePath -> FilePath

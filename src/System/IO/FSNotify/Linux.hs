@@ -16,9 +16,10 @@ import Control.Concurrent.Chan
 import Control.Exception
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
+-- import Debug.Trace (trace)
 import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (fp, canonicalizeDirPath)
+import System.IO.FSNotify.Path (findDirs, fp, canonicalizeDirPath)
 import System.IO.FSNotify.Types
 import qualified System.INotify as INo
 
@@ -29,24 +30,31 @@ instance Exception EventVarietyMismatchException
 
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: UTCTime -> INo.Event -> Maybe Event
-fsnEvent timestamp (INo.Created  False       name   ) = Just (Added    (fp name) timestamp)
-fsnEvent timestamp (INo.Closed   False (Just name) _) = Just (Modified (fp name) timestamp)
-fsnEvent timestamp (INo.MovedOut False       name  _) = Just (Removed  (fp name) timestamp)
-fsnEvent timestamp (INo.MovedIn  False       name  _) = Just (Added    (fp name) timestamp)
-fsnEvent timestamp (INo.Deleted  False       name   ) = Just (Removed  (fp name) timestamp)
-fsnEvent _         _                                  = Nothing
+fsnEvent :: FilePath -> UTCTime -> INo.Event -> Maybe Event
+fsnEvent basePath timestamp (INo.Created  False       name   ) = Just (Added    (basePath </> (fp name)) timestamp)
+fsnEvent basePath timestamp (INo.Closed   False (Just name) _) = Just (Modified (basePath </> (fp name)) timestamp)
+fsnEvent basePath timestamp (INo.MovedOut False       name  _) = Just (Removed  (basePath </> (fp name)) timestamp)
+fsnEvent basePath timestamp (INo.MovedIn  False       name  _) = Just (Added    (basePath </> (fp name)) timestamp)
+fsnEvent basePath timestamp (INo.Deleted  False       name   ) = Just (Removed  (basePath </> (fp name)) timestamp)
+fsnEvent _        _         _                                  = Nothing
 
-handleInoEvent :: ActionPredicate -> EventChannel -> INo.Event -> IO ()
-handleInoEvent actPred chan inoEvent = do
+handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> INo.Event -> IO ()
+-- handleInoEvent _       _    basePath inoEvent | trace ("Linux: handleInoEvent " ++ show basePath ++ " " ++ show inoEvent) False = undefined
+handleInoEvent actPred chan basePath inoEvent = do
   currentTime <- getCurrentTime
-  handleEvent actPred chan (fsnEvent currentTime inoEvent)
+  let maybeFsnEvent = fsnEvent basePath currentTime inoEvent
+  handleEvent actPred chan maybeFsnEvent
 
 handleEvent :: ActionPredicate -> EventChannel -> Maybe Event -> IO ()
+-- handleEvent actPred _    (Just event) | trace ("Linux: handleEvent " ++ show (actPred event) ++ " " ++ show event) False = undefined
 handleEvent actPred chan (Just event)
   | actPred event       = writeChan chan event
   | otherwise           = return ()
+-- handleEvent _ _ Nothing | trace ("Linux handleEvent Nothing") False = undefined
 handleEvent _ _ Nothing = return ()
+
+varieties :: [INo.EventVariety]
+varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
   initSession = fmap Just INo.initINotify
@@ -55,26 +63,25 @@ instance FileListener INo.INotify where
 
   listen iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
-    INo.addWatch iNotify varieties (encodeString path') handler
+    INo.addWatch iNotify varieties (encodeString path') (handler path')
     return ()
     where
-      varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
-      handler :: INo.Event -> IO ()
+      handler :: FilePath -> INo.Event -> IO ()
       handler = handleInoEvent actPred chan
 
+  -- rlisten iNotify path actPred chan | trace ("Linux: rlisten " ++ fp path) False = undefined
   rlisten iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
     paths <- findDirs True path'
-    mapM_ (\filePath -> INo.addWatch iNotify newDirVarieties (fp filePath) newDirHandler) paths
-    mapM_ (\filePath -> INo.addWatch iNotify actionVarieties (fp filePath) handler) paths
+    mapM_ pathHandler (path':paths)
     where
-      newDirVarieties = [INo.Create]
-      actionVarieties = [INo.MoveIn, INo.MoveOut, INo.CloseWrite]
-
-      newDirHandler :: INo.Event -> IO ()
-      newDirHandler (INo.Created _ name) =
-        rlisten iNotify (path </> fp name) actPred chan
-      newDirHandler _ = throw EventVarietyMismatchException
-
-      handler :: INo.Event -> IO ()
-      handler = handleInoEvent actPred chan
+      pathHandler :: FilePath -> IO ()
+      -- pathHandler filePath | trace ("Linux: rlisten pathHandler " ++ show filePath) False = undefined
+      pathHandler filePath = do
+        INo.addWatch iNotify varieties (fp filePath) (handler filePath)
+        return ()
+        where
+          handler :: FilePath -> INo.Event -> IO ()
+          -- handler _ event | trace ("Linux: rlisten handler " ++ show event) False = undefined
+          handler _    (INo.Created True  dirPath) = rlisten iNotify (fp dirPath) actPred chan
+          handler path event                       = handleInoEvent actPred chan path event

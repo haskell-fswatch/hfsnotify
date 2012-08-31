@@ -1,8 +1,14 @@
+--
+-- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
+-- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
+--
+
 module Util where
 
 import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
+import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar, tryPutMVar, tryTakeMVar)
 import Control.Exception
 import Control.Monad (when)
 import Data.Unique.Id
@@ -28,19 +34,42 @@ data TestContext = TestContext ChanActionEnv DirTreeEnv ActionPredicate
 data TestReport = TestReport FilePath [Event] deriving (Show)
 data TestResult = TestResult Bool String TestReport deriving (Show)
 type TestAction = FilePath -> IO ()
-type EventProcessor = TestReport -> IO TestResult
+type MTestResult = MVar TestResult
+type TestCase = MTestResult -> IO ()
+type CurriedEventProcessor = TestReport -> IO (TestResult)
+type EventProcessor = MTestResult -> CurriedEventProcessor
 data EventPredicate = EventPredicate String (Event -> Bool)
 
 predicateName :: EventPredicate -> String
 predicateName (EventPredicate name _) = name
 
 matchEvents :: [EventPredicate] -> EventProcessor
-matchEvents preds@((EventPredicate _ pred):restPreds) (TestReport path (event:events))
-  | pred event = matchEvents restPreds (TestReport path events)
-  | otherwise  = matchEvents preds    (TestReport path events)
-matchEvents preds@(pred:resPreds) report@(TestReport path []) =
-  return (TestResult False (concat $ map predicateName preds) report)
-matchEvents [] report = return (TestResult True "" report)
+matchEvents preds mVar report@(TestReport _ events) =
+  swapMVar mVar result >> return result
+  -- tryTakeMVar mVar >>= tryPutReport result >> return result
+  where
+    tryPutReport :: TestResult -> Maybe TestResult -> IO ()
+    tryPutReport _ Nothing = error $ "Failed to take MVar"
+    tryPutReport result (Just _) = tryPutMVar mVar result >>= handleTryPutMVar
+    handleTryPutMVar :: Bool -> IO ()
+    handleTryPutMVar False = error $ "Failed to put MVar"
+    handleTryPutMVar True = return ()
+    matchMatrix :: [[Bool]]
+    matchMatrix = map (\(EventPredicate _ pred) -> map (\event -> pred event) events) preds
+    matchList :: [Bool]
+    matchList = map (\lst -> any id lst) matchMatrix
+    errorList :: [(Bool, String)]
+    errorList = zip matchList (map (\(EventPredicate errStr _) -> errStr) preds)
+    errorString :: String
+    errorString = foldl foldError "" errorList
+    foldError :: String -> (Bool, String) -> String
+    foldError accStr (success, errStr) = if not success then accStr ++ " " ++ errStr else accStr
+    status :: Bool
+    status = all id matchList
+    result =   if status then
+                 TestResult status "" report
+               else
+                 TestResult status ("Failed to match events: " ++ errorString) report
 
 newId :: IO String
 newId = randomIO >>= initIdSupply >>= return . show . hashedId . idFromSupply
@@ -79,10 +108,10 @@ attemptDirectoryRemoval path = catch
 performAction :: TestAction -> FilePath -> IO ()
 performAction action path = action path
 
-reportOnAction :: FilePath -> EventChannel -> EventProcessor -> IO TestResult
+reportOnAction :: FilePath -> EventChannel -> CurriedEventProcessor -> IO TestResult
 reportOnAction = reportOnAction' []
 
-reportOnAction' :: [Event] -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
+reportOnAction' :: [Event] -> FilePath -> EventChannel -> CurriedEventProcessor -> IO TestResult
 reportOnAction' events path chan processor = do
   result@(TestResult status _ _) <- processor (TestReport path events)
   if not status then do
@@ -91,7 +120,7 @@ reportOnAction' events path chan processor = do
     else
     return result
 
-actAndReport :: TestAction -> FilePath -> EventChannel -> EventProcessor -> IO TestResult
+actAndReport :: TestAction -> FilePath -> EventChannel -> CurriedEventProcessor -> IO TestResult
 actAndReport action path chan processor = do
   performAction action path
   reportOnAction path chan processor
@@ -99,24 +128,33 @@ actAndReport action path chan processor = do
 testTimeout :: Int
 testTimeout = 3000000
 
-timeoutTest :: Maybe () -> IO ()
-timeoutTest Nothing = error "Test timed out"
-timeoutTest (Just _) = return ()
+timeoutTest :: MTestResult -> Maybe () -> IO ()
+timeoutTest mResult Nothing = do
+  result <- readMVar mResult
+  error $ "TIMEOUT: Last test result: " ++ show result
+timeoutTest mResult (Just _) = do
+  result <- readMVar mResult
+  case result of
+    (TestResult False _ _) -> error $ show result
+    (TestResult True  _ _) -> return ()
+
+runTest :: TestCase -> IO ()
+runTest test = do
+  mVar <- newMVar $ TestResult False "Timeout with no test result" (TestReport empty [])
+  timeout testTimeout (test mVar) >>= timeoutTest mVar
 
 inEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> IO ()
 inEnv caEnv dtEnv reportPred action eventProcessor =
   withTempDir $ inTempDirEnv caEnv dtEnv reportPred action eventProcessor
 
-runTest :: IO () -> IO ()
-runTest test = timeout testTimeout test >>= timeoutTest
-
 inTempDirEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> IO ()
 inTempDirEnv caEnv dtEnv reportPred action eventProcessor path =
-  runTest $ do
+  runTest $ \mVar -> do
     withManager $ \manager -> do
       chan <- newChan
       watchInEnv caEnv dtEnv manager path reportPred chan
-      actAndReport action path chan eventProcessor >>= outputOnFail
+      actAndReport action path chan $ eventProcessor mVar
+      return ()
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
@@ -133,8 +171,3 @@ watchInEnv ChanEnv   DirEnv  = watchDirChan
 watchInEnv ChanEnv   TreeEnv = watchTreeChan
 watchInEnv ActionEnv DirEnv  = actionAsChan watchDir
 watchInEnv ActionEnv TreeEnv = actionAsChan watchTree
-
-outputOnFail :: TestResult -> IO ()
-outputOnFail (TestResult False explanation report) = do
-  error $ show explanation ++ " " ++ show report
-outputOnFail (TestResult True _ _) = return ()
