@@ -58,9 +58,9 @@ absPathSlash = fp "C:" </> fp "Windows" </> empty
 relPathSlash = fp ".\\" </> empty
 #  else
 #    ifdef OS_Mac
-absPath      = empty </> fp "Users"
-absPathSlash = empty </> fp "Users" </> empty
-relPathSlash = fp "./" </> empty
+absPath      = fp "/Users"
+absPathSlash = fp "/Users/"
+relPathSlash = fp "./"
 #    else
 -- Assume UNIX-like for anything non-Linux/Windows/Mac
 absPath      = fp "/home"

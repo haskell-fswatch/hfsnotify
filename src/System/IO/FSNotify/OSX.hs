@@ -17,6 +17,7 @@ import Data.Bits
 import Data.Map (Map)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
+-- import Debug.Trace (trace)
 import Filesystem (isFile)
 import Filesystem.Path hiding (concat)
 import System.IO.FSNotify.Listener
@@ -66,11 +67,17 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
 -- hfsevents package doesn't support non-recursive event reporting.
 
 handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
+-- handleNonRecursiveFSEEvent dirPath _       _    fseEvent | trace ("OSX: handleNonRecursiveFSEEvent " ++ show dirPath ++ " " ++ show fseEvent) False = undefined
 handleNonRecursiveFSEEvent dirPath actPred chan fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleNonRecursiveEvents dirPath actPred chan events
 handleNonRecursiveEvents :: FilePath -> ActionPredicate -> EventChannel -> [Event] -> IO ()
+-- handleNonRecursiveEvents dirPath actPred _    (event:_     ) | trace (   "OSX: handleNonRecursiveEvents "
+--                                                                       ++ show dirPath ++ " " ++ show event
+--                                                                       ++ "\n  " ++ fp (directory dirPath)
+--                                                                       ++ "\n  " ++ fp (directory (eventPath event))
+--                                                                       ++ "\n  " ++ show (actPred event)) False = undefined
 handleNonRecursiveEvents dirPath actPred chan (event:events)
   | directory dirPath == directory (eventPath event) && actPred event = do
     writeChan chan event
@@ -79,12 +86,14 @@ handleNonRecursiveEvents dirPath actPred chan (event:events)
 handleNonRecursiveEvents _ _ _ []                                     = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
+-- handleFSEEvent _       _    fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
 handleFSEEvent actPred chan fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleEvents actPred chan events
 
 handleEvents :: ActionPredicate -> EventChannel -> [Event] -> IO ()
+-- handleEvents actPred _    (event:_     ) | trace ("OSX: handleEvents " ++ show event ++ " " ++ show (actPred event)) False = undefined
 handleEvents actPred chan (event:events) =
   when (actPred event) $ do
     writeChan chan event

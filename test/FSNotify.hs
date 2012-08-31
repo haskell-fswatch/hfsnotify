@@ -5,11 +5,12 @@
 
 module FSNotify (spec) where
 
-import Prelude hiding (FilePath, writeFile)
+import Prelude hiding (appendFile, FilePath, writeFile)
 
 import Control.Concurrent (threadDelay)
 import Data.ByteString (empty)
-import Filesystem (removeFile, rename, writeFile)
+import Data.Text (pack)
+import Filesystem (appendTextFile, removeFile, rename, writeFile, writeTextFile)
 import Filesystem.Path.CurrentOS ((</>), FilePath)
 import System.FilePath.Glob (compile, match, Pattern)
 import System.IO.FSNotify.Path (fp)
@@ -22,18 +23,24 @@ spec :: Spec
 spec = do
   describe "watchDir" $ do
     it "Create file" $ testFileName "txt" >>= createFileSpec ActionEnv
+    it "Modify file" $ testFileName "txt" >>= modifyFileSpec ActionEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
     it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
   describe "watchDirChan" $ do
     it "Create file" $ testFileName "txt" >>= createFileSpec ChanEnv
+    it "Modify file" $ testFileName "txt" >>= modifyFileSpec ChanEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpec ChanEnv
     it "Rename file" $ renameInput        >>= renameFileSpec ChanEnv
   describe "watchTree" $ do
-    it "Create file" $ testFileName "txt" >>= createFileSpecR ActionEnv
+    it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ActionEnv
+    it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ActionEnv
+    it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ActionEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpecR ActionEnv
     it "Rename file" $ renameInput        >>= renameFileSpecR ActionEnv
   describe "watchTreeChan" $ do
-    it "Create file" $ testFileName "txt" >>= createFileSpecR ChanEnv
+    it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ChanEnv
+    it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ChanEnv
+    it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ChanEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpecR ChanEnv
     it "Rename file" $ renameInput        >>= renameFileSpecR ChanEnv
 
@@ -45,6 +52,18 @@ createFileSpec envType fileName = do
     action envDir = writeFile (envDir </> fileName) empty
     matchers :: [EventPredicate]
     matchers = [EventPredicate "File creation" (matchCreate fileName)]
+
+modifyFileSpec :: ChanActionEnv -> FilePath -> Assertion
+modifyFileSpec envType fileName = do
+  withTempDir $ \envDir -> do
+    writeFile (envDir </> fileName) empty
+    inTempDirEnv envType DirEnv act action (matchEvents matchers) envDir
+  where
+    action :: FilePath -> IO ()
+    action envDir = do
+      writeTextFile  (envDir </> fileName) $ pack "Hello world"
+    matchers :: [EventPredicate]
+    matchers = [EventPredicate "File modification" (matchModify fileName)]
 
 removeFileSpec :: ChanActionEnv -> FilePath -> Assertion
 removeFileSpec envType fileName = do
@@ -69,8 +88,8 @@ renameFileSpec envType (oldFileName, newFileName) = do
     matchers = [ EventPredicate "Rename: File deletion" (matchRemove oldFileName)
                , EventPredicate "Rename: File creation" (matchCreate newFileName) ]
 
-createFileSpecR :: ChanActionEnv -> FilePath -> Assertion
-createFileSpecR envType fileName = do
+createFileSpecR1 :: ChanActionEnv -> FilePath -> Assertion
+createFileSpecR1 envType fileName = do
   withTempDir $ \envDir -> do
     withNestedTempDir envDir $ \envPath -> do
       inTempDirEnv envType TreeEnv act (action envPath) (matchEvents matchers) envDir
@@ -80,6 +99,30 @@ createFileSpecR envType fileName = do
       writeFile (envPath </> fileName) empty
     matchers :: [EventPredicate]
     matchers = [EventPredicate "File creation" (matchCreate fileName)]
+
+createFileSpecR2 :: ChanActionEnv -> FilePath -> Assertion
+createFileSpecR2 envType fileName = do
+  withTempDir $ \envDir -> do
+    inTempDirEnv envType TreeEnv act (action envDir) (matchEvents matchers) envDir
+  where
+    action :: FilePath -> FilePath -> IO ()
+    action envDir _ = do
+      withNestedTempDir envDir $ \envPath -> writeFile (envPath </> fileName) empty
+    matchers :: [EventPredicate]
+    matchers = [EventPredicate "File creation" (matchCreate fileName)]
+
+modifyFileSpecR :: ChanActionEnv -> FilePath -> Assertion
+modifyFileSpecR envType fileName = do
+  withTempDir $ \envDir -> do
+    withNestedTempDir envDir $ \envPath -> do
+      writeFile (envPath </> fileName) empty
+      inTempDirEnv envType TreeEnv act (action envPath) (matchEvents matchers) envDir
+  where
+    action :: FilePath -> FilePath -> IO ()
+    action envPath _ = do
+      writeTextFile  (envPath </> fileName) $ pack "Hello world"
+    matchers :: [EventPredicate]
+    matchers = [EventPredicate "File deletion" (matchModify fileName)]
 
 removeFileSpecR :: ChanActionEnv -> FilePath -> Assertion
 removeFileSpecR envType fileName = do
@@ -118,6 +161,12 @@ matchCreate fileName (Added path _) = matchFP pattern path
   where
     pattern = compile $  "**/*" ++ fp fileName
 matchCreate _ _ = False
+
+matchModify :: FilePath -> Event -> Bool
+matchModify fileName (Modified path _) = matchFP pattern path
+  where
+    pattern = compile $  "**/*" ++ fp fileName
+matchModify _ _ = False
 
 matchRemove :: FilePath -> Event -> Bool
 matchRemove fileName (Removed path _) = matchFP pattern path

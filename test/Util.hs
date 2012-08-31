@@ -7,8 +7,9 @@ module Util where
 
 import Prelude hiding (FilePath, catch)
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Chan
-import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar, tryPutMVar, tryTakeMVar)
+import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar)
 import Control.Exception
 import Control.Monad (when)
 import Data.Unique.Id
@@ -46,14 +47,7 @@ predicateName (EventPredicate name _) = name
 matchEvents :: [EventPredicate] -> EventProcessor
 matchEvents preds mVar report@(TestReport _ events) =
   swapMVar mVar result >> return result
-  -- tryTakeMVar mVar >>= tryPutReport result >> return result
   where
-    tryPutReport :: TestResult -> Maybe TestResult -> IO ()
-    tryPutReport _ Nothing = error $ "Failed to take MVar"
-    tryPutReport result (Just _) = tryPutMVar mVar result >>= handleTryPutMVar
-    handleTryPutMVar :: Bool -> IO ()
-    handleTryPutMVar False = error $ "Failed to put MVar"
-    handleTryPutMVar True = return ()
     matchMatrix :: [[Bool]]
     matchMatrix = map (\(EventPredicate _ pred) -> map (\event -> pred event) events) preds
     matchList :: [Bool]
@@ -84,6 +78,11 @@ testName = do
   uId <- newId
   return $ fp ("sandbox-" ++ uId) </> empty
 
+-- Delay to keep temporary directories around long enough for events to be
+-- picked up by OS (in microseconds)
+minDirLifetime :: Int
+minDirLifetime = 100000
+
 withTempDir :: (FilePath -> IO ()) -> IO ()
 withTempDir fn = withNestedTempDir empty fn
 
@@ -97,11 +96,13 @@ withNestedTempDir firstPath fn = do
   bracket (createDirectory path >> return path) (attemptDirectoryRemoval . fp) (fn . fp)
 
 attemptDirectoryRemoval :: FilePath -> IO ()
-attemptDirectoryRemoval path = catch
-                               (removeDirectoryRecursive pathString)
-                               (\e -> when
-                                      (not $ isPermissionError e)
-                                      (throw e))
+attemptDirectoryRemoval path = do
+  threadDelay minDirLifetime
+  catch
+    (removeDirectoryRecursive pathString)
+    (\e -> when
+           (not $ isPermissionError e)
+           (throw e))
   where
     pathString = fp path
 
