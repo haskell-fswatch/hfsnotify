@@ -78,10 +78,13 @@ testName = do
   uId <- newId
   return $ fp ("sandbox-" ++ uId) </> empty
 
+dirPreAction :: Int
+dirPreAction = 500000
+
 -- Delay to keep temporary directories around long enough for events to be
 -- picked up by OS (in microseconds)
-minDirLifetime :: Int
-minDirLifetime = 100000
+dirPostAction :: Int
+dirPostAction = 500000
 
 withTempDir :: (FilePath -> IO ()) -> IO ()
 withTempDir fn = withNestedTempDir empty fn
@@ -93,11 +96,11 @@ withNestedTempDir firstPath fn = do
                fp $ firstPath </> secondPath
              else
                fp secondPath
-  bracket (createDirectory path >> return path) (attemptDirectoryRemoval . fp) (fn . fp)
+  bracket (createDirectory path >> threadDelay dirPreAction >> return path) (attemptDirectoryRemoval . fp) (fn . fp)
 
 attemptDirectoryRemoval :: FilePath -> IO ()
 attemptDirectoryRemoval path = do
-  threadDelay minDirLifetime
+  threadDelay dirPostAction
   catch
     (removeDirectoryRecursive pathString)
     (\e -> when

@@ -83,5 +83,6 @@ instance FileListener INo.INotify where
         where
           handler :: FilePath -> INo.Event -> IO ()
           -- handler _ event | trace ("Linux: rlisten handler " ++ show event) False = undefined
-          handler _    (INo.Created True  dirPath) = rlisten iNotify (fp dirPath) actPred chan
-          handler path event                       = handleInoEvent actPred chan path event
+          handler baseDir (INo.Created True dirPath) =
+            rlisten iNotify (baseDir </> (fp dirPath)) actPred chan
+          handler baseDir event                      = handleInoEvent actPred chan baseDir event
