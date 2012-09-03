@@ -9,15 +9,15 @@ module System.IO.FSNotify.Win32
        ) where
 
 import Prelude hiding (FilePath)
+import System.IO hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar)
 import Control.Monad (when)
-import Data.Time (diffUTCTime, getCurrentTime, NominalDiffTime, UTCTime)
+import Data.Time (getCurrentTime, UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Filesystem.Path.CurrentOS
-import System.IO hiding (FilePath)
-import System.IO.FSNotify.Listener (debounce, epsilon, FileListener(..))
+import Filesystem.Path.CurrentOS (FilePath)
+import System.IO.FSNotify.Listener (debounce, FileListener(..))
 import System.IO.FSNotify.Path (fp, canonicalizeDirPath)
 import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
@@ -30,6 +30,7 @@ type MEvent = MVar Event
 -- event paths. In Linux this required passing the base dir to
 -- handle[native]Event.
 
+void :: IO ()
 void = return ()
 
 fsnEvents :: UTCTime -> WNo.Event -> [Event]
@@ -50,7 +51,7 @@ handleEvent mvar actPred chan event =
   when (actPred event) $ do
     lastEvent <- readMVar mvar
     when (not $ debounce lastEvent event) (writeChan chan event)
-    swapMVar mvar event
+    _ <- swapMVar mvar event
     void
 
 instance FileListener WNo.WatchManager where
