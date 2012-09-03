@@ -25,7 +25,7 @@ data Event =
     Added    FilePath UTCTime
   | Modified FilePath UTCTime
   | Removed  FilePath UTCTime
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | Helper for extracting the path associated with an event.
 eventPath :: Event -> FilePath

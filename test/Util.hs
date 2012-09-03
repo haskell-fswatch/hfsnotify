@@ -153,12 +153,23 @@ inEnv caEnv dtEnv reportPred action eventProcessor =
 
 inTempDirEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> IO ()
 inTempDirEnv caEnv dtEnv reportPred action eventProcessor path =
-  runTest $ \mVar -> do
+  withManager $ \manager -> do
+    chan <- newChan
+    inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan
+
+inChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> EventChannel -> IO ()
+inChanEnv caEnv dtEnv reportPred action eventProcessor chan =
+  withTempDir $ \path -> do
     withManager $ \manager -> do
-      chan <- newChan
-      watchInEnv caEnv dtEnv manager path reportPred chan
+      inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan
+
+inTempDirChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> WatchManager -> EventChannel -> IO ()
+inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan = do
+    watchInEnv caEnv dtEnv manager path reportPred chan
+    runTest $ \mVar -> do
       actAndReport action path chan $ eventProcessor mVar
       return ()
+    return ()
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()

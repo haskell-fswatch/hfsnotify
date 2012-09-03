@@ -8,8 +8,10 @@ module FSNotify (spec) where
 import Prelude hiding (appendFile, FilePath, writeFile)
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Chan (newChan, writeChan)
 import Data.ByteString (empty)
 import Data.Text (pack)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem (appendTextFile, removeFile, rename, writeFile, writeTextFile)
 import Filesystem.Path.CurrentOS ((</>), FilePath)
 import System.FilePath.Glob (compile, match, Pattern)
@@ -26,6 +28,7 @@ spec = do
     it "Modify file" $ testFileName "txt" >>= modifyFileSpec ActionEnv
     it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
     it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
+    it "Debounce"    $ testFileName "txt" >>= dbFileSpec     ActionEnv
   describe "watchDirChan" $ do
     it "Create file" $ testFileName "txt" >>= createFileSpec ChanEnv
     it "Modify file" $ testFileName "txt" >>= modifyFileSpec ChanEnv
@@ -87,6 +90,24 @@ renameFileSpec envType (oldFileName, newFileName) = do
     matchers :: [EventPredicate]
     matchers = [ EventPredicate "Rename: File deletion" (matchRemove oldFileName)
                , EventPredicate "Rename: File creation" (matchCreate newFileName) ]
+
+-- TODO: This is a weak test. What we actually need is an interface for
+-- "anti-matchers" to ensure that certain events do NOT get reported.
+dbFileSpec :: ChanActionEnv -> FilePath -> Assertion
+dbFileSpec envType fileName = do
+  chan <- newChan
+  inChanEnv envType DirEnv act (action chan) (matchEvents matchers) chan
+  where
+    action :: EventChannel -> FilePath -> IO ()
+    action chan _ = do
+      writeChan chan e1
+      writeChan chan e2
+    matchers :: [EventPredicate]
+    matchers = [EventPredicate "First debounced event" (\e -> e == e1)]
+    e1 :: Event
+    e1 = Added (fp "") (posixSecondsToUTCTime 0)
+    e2 :: Event
+    e2 = Modified (fp "") (posixSecondsToUTCTime 0)
 
 createFileSpecR1 :: ChanActionEnv -> FilePath -> Assertion
 createFileSpecR1 envType fileName = do
