@@ -5,7 +5,7 @@
 
 module Util where
 
-import Prelude hiding (FilePath, catch)
+import Prelude hiding (FilePath, catch, pred)
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Chan
@@ -15,8 +15,6 @@ import Control.Monad (when)
 import Data.Unique.Id
 import Filesystem.Path.CurrentOS hiding (concat)
 import System.Directory
-import System.Environment
-import System.Exit
 import System.IO.Error (isPermissionError)
 import System.IO.FSNotify
 import System.IO.FSNotify.Path
@@ -40,6 +38,9 @@ type TestCase = MTestResult -> IO ()
 type CurriedEventProcessor = TestReport -> IO (TestResult)
 type EventProcessor = MTestResult -> CurriedEventProcessor
 data EventPredicate = EventPredicate String (Event -> Bool)
+
+void :: IO ()
+void = return ()
 
 predicateName :: EventPredicate -> String
 predicateName (EventPredicate name _) = name
@@ -140,7 +141,7 @@ timeoutTest mResult (Just _) = do
   result <- readMVar mResult
   case result of
     (TestResult False _ _) -> error $ show result
-    (TestResult True  _ _) -> return ()
+    (TestResult True  _ _) -> void
 
 runTest :: TestCase -> IO ()
 runTest test = do
@@ -167,13 +168,13 @@ inTempDirChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction
 inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan = do
     watchInEnv caEnv dtEnv manager path reportPred chan
     runTest $ \mVar -> do
-      actAndReport action path chan $ eventProcessor mVar
-      return ()
-    return ()
+      _ <- actAndReport action path chan $ eventProcessor mVar
+      void
+    void
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-actionAsChan actionFunction wm fp ap ec = actionFunction wm fp ap (writeChan ec)
+actionAsChan actionFunction wm path ap ec = actionFunction wm path ap (writeChan ec)
 
 watchInEnv :: ChanActionEnv
            -> DirTreeEnv

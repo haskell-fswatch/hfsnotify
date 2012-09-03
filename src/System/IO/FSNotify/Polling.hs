@@ -18,7 +18,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Filesystem hiding (canonicalizePath)
 import Filesystem.Path
 import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (fp, findFiles, canonicalizeDirPath)
+import System.IO.FSNotify.Path (findFiles, canonicalizeDirPath)
 import System.IO.FSNotify.Types
 import qualified Data.Map as Map
 import Control.Monad (forM_)

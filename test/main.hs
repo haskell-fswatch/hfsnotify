@@ -8,4 +8,4 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = {- P.spec >> -} FSN.spec
+spec = P.spec >> FSN.spec

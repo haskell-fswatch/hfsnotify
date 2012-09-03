@@ -7,12 +7,11 @@ module FSNotify (spec) where
 
 import Prelude hiding (appendFile, FilePath, writeFile)
 
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.Chan (newChan, writeChan)
 import Data.ByteString (empty)
 import Data.Text (pack)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Filesystem (appendTextFile, removeFile, rename, writeFile, writeTextFile)
+import Filesystem (removeFile, rename, writeFile, writeTextFile)
 import Filesystem.Path.CurrentOS ((</>), FilePath)
 import System.FilePath.Glob (compile, match, Pattern)
 import System.IO.FSNotify.Path (fp)
@@ -94,7 +93,7 @@ renameFileSpec envType (oldFileName, newFileName) = do
 -- TODO: This is a weak test. What we actually need is an interface for
 -- "anti-matchers" to ensure that certain events do NOT get reported.
 dbFileSpec :: ChanActionEnv -> FilePath -> Assertion
-dbFileSpec envType fileName = do
+dbFileSpec envType _ = do
   chan <- newChan
   inChanEnv envType DirEnv act (action chan) (matchEvents matchers) chan
   where

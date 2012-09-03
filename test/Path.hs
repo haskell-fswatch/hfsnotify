@@ -11,21 +11,14 @@ import Prelude hiding (FilePath, writeFile)
 import Control.Applicative ((<*>))
 import Filesystem (writeFile)
 import Filesystem.Path.CurrentOS (FilePath)
-import Filesystem.Path ((</>), empty, filename)
-import System.FilePath.Glob (compile, match, Pattern)
-import System.IO.FSNotify.Types (eventPath)
+import Filesystem.Path ((</>), empty)
+import System.FilePath.Glob (compile, match)
 import System.IO.FSNotify.Path (canonicalizeDirPath, canonicalizePath, findDirs, findFiles, fp)
 import Test.Hspec (describe, it, Spec)
 import Test.HUnit ((@?=))
 import Test.HUnit.Lang (Assertion)
 import Util
 import qualified Data.ByteString as BS
-
-always :: a -> Bool
-always _ = True
-
-never :: a -> Bool
-never _ = False
 
 -- Boolean XOR
 (.^.) :: Bool -> Bool -> Bool
@@ -119,7 +112,6 @@ spec = do
     it "Non-recursive" $
       withTempDir $ \tmpDir -> do
         withNestedTempDir tmpDir $ \dirName -> do
-          dirs <- findDirs False tmpDir
           dirs <- findDirs False tmpDir
           1 @?= length dirs
           let (resultFP:_) = dirs
