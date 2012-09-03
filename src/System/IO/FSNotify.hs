@@ -44,6 +44,8 @@ type NativeManager = PollManager
 
 data WatchManager = WatchManager (Either PollManager NativeManager)
 
+-- | Perform an IO action with a WatchManager in place.
+-- Tear down the WatchManager after the action is complete.
 withManager :: (WatchManager -> IO a) -> IO a
 withManager = bracket startManager stopManager
 

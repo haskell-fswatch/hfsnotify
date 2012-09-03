@@ -4,11 +4,14 @@
 --
 
 module System.IO.FSNotify.Listener
-       ( FileListener(..)
+       ( debounce
+       , epsilon
+       , FileListener(..)
        ) where
 
 import Prelude hiding (FilePath)
 
+import Data.Time (diffUTCTime, NominalDiffTime)
 import Filesystem.Path.CurrentOS
 import System.IO.FSNotify.Types
 
@@ -36,3 +39,18 @@ class FileListener sessionType where
   -- report events associated with files within the specified directory and its
   -- subdirectories.
   rlisten :: sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+
+-- | The maximum difference (exclusive, in seconds) for two events to be
+-- considered as occuring "at the same time".
+epsilon :: NominalDiffTime
+epsilon = 0.001
+
+-- | A predicate indicating whether two events may be considered "the same
+-- event". This predicate is applied to the most recent dispatched event and
+-- the current event after the client-specified ActionPredicate is applied,
+-- before the event is dispatched.
+debounce :: Event -> Event -> Bool
+debounce e1 e2 =
+  eventPath e1 == eventPath e2 && timeDiff > -epsilon && timeDiff < epsilon
+  where
+    timeDiff = diffUTCTime (eventTime e2) (eventTime e1)
