@@ -4,18 +4,20 @@
 --
 
 module System.IO.FSNotify.Types
-       ( Event(..)
-       , eventPath
-       , eventTime
-       , EventChannel
+       ( act
        , ActionPredicate
        , Action
-       , act
+       , Event(..)
+       , EventChannel
+       , eventPath
+       , eventTime
+       , IOEvent
        ) where
 
 import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
+import Data.IORef (IORef)
 import Data.Time ()
 import Data.Time.Clock (UTCTime)
 import Filesystem.Path.CurrentOS
@@ -40,6 +42,8 @@ eventTime (Modified _ timestamp) = timestamp
 eventTime (Removed  _ timestamp) = timestamp
 
 type EventChannel = Chan Event
+
+type IOEvent = IORef Event
 
 -- | A predicate used to determine whether to act on an event.
 type ActionPredicate = Event -> Bool

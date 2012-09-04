@@ -23,6 +23,8 @@ import System.IO.FSNotify
 import System.IO.FSNotify.Path (fp)
 import System.IO.FSNotify.Types
 
+-- | Compile a collection of paths with an action that takes the modified
+-- file's path as input.
 compileTrees :: WatchManager
              -> [FilePath] -- ^ Directories to watch
              -> ActionPredicate -- ^ Predicate for event filtering
@@ -36,6 +38,7 @@ compileTrees man dirs actPred action =
     compile :: Action
     compile event = action $ eventPath event
 
+-- | Singular compileTrees.
 compileTree :: WatchManager
             -> FilePath -- ^ Directory to watch
             -> ActionPredicate -- ^ Predicate for event filtering
@@ -43,6 +46,8 @@ compileTree :: WatchManager
             -> IO ()
 compileTree man dir = compileTrees man [dir]
 
+-- | Compile a collection of paths with a predicate and action that both take
+-- the modified file's path as input.
 compilePaths :: WatchManager
              -> [FilePath] -- ^ Directories to watch
              -> (FilePath -> Bool) -- ^ Predicate for filtering by file name
@@ -54,6 +59,7 @@ compilePaths man dirs pathPred action =
     predicate :: ActionPredicate
     predicate = compilePredicate pathPred
 
+-- | Singular compilePaths.
 compilePath :: WatchManager
              -> FilePath -- ^ Directories to watch
              -> (FilePath -> Bool) -- ^ Predicate for filtering by file name
@@ -61,6 +67,9 @@ compilePath :: WatchManager
              -> IO ()
 compilePath man dir = compilePaths man [dir]
 
+-- | Compile a collection of paths with a predicate that takes a
+-- System.FilePath.Glob.Pattern as input, and an action that takes the
+-- modified file's path as input.
 compilePatternMulti :: WatchManager
                     -> [FilePath] -- ^ Directories to watch
                     -> Pattern -- ^ Pattern to match against event
@@ -72,6 +81,7 @@ compilePatternMulti man dirs pat action =
     patFilter :: FilePath -> Bool
     patFilter = \path -> match pat (fp path)
 
+-- | Singular compilePatternMulti.
 compilePattern :: WatchManager
                 -> FilePath -- ^ Directory to watch
                 -> Pattern -- ^ Pattern to match against event
@@ -80,6 +90,9 @@ compilePattern :: WatchManager
 compilePattern man dir =
   compilePatternMulti man [dir]
 
+-- | Compile a collection of paths according to an input file
+-- extension. Compile using an action that takes the modified file's path and
+-- the output file's path with a different extension as input.
 compileMulti :: WatchManager
               -> [FilePath] -- ^ Directories to watch
               -> Text -- ^ Extension to watch (old extension)
@@ -96,6 +109,7 @@ compileMulti man dirs oldExt newExt action =
     convert :: FilePath -> FilePath
     convert = flip replaceExtension newExt
 
+-- | Singular compileMulti.
 compileBasic :: WatchManager
               -> FilePath -- ^ Directory to watch
               -> Text -- ^ Extension to watch (old extension)

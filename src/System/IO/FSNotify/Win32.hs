@@ -12,8 +12,8 @@ import Prelude hiding (FilePath)
 import System.IO hiding (FilePath)
 
 import Control.Concurrent.Chan
-import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar)
 import Control.Monad (when)
+import Data.IORef (atomicModifyIORef, newIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS (FilePath)
@@ -23,8 +23,6 @@ import System.IO.FSNotify.Types
 import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
-
-type MEvent = MVar Event
 
 -- NEXT TODO: Need to ensure we use properly canonalized paths as
 -- event paths. In Linux this required passing the base dir to
@@ -41,18 +39,16 @@ fsnEvents timestamp (WNo.Modified False (Just name))            = [Modified (fp 
 fsnEvents timestamp (WNo.Deleted  False name)                   = [Removed (fp name) timestamp]
 fsnEvents _         _                                           = []
 
-handleWNoEvent :: MEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
-handleWNoEvent mvar actPred chan inoEvent = do
+handleWNoEvent :: IOEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
+handleWNoEvent ior actPred chan inoEvent = do
   currentTime <- getCurrentTime
-  mapM_ (handleEvent mvar actPred chan) (fsnEvents currentTime inoEvent)
-  void
-handleEvent :: MEvent -> ActionPredicate -> EventChannel -> Event -> IO ()
-handleEvent mvar actPred chan event =
+  mapM_ (handleEvent ior actPred chan) (fsnEvents currentTime inoEvent)
+handleEvent :: IOEvent -> ActionPredicate -> EventChannel -> Event -> IO ()
+handleEvent ior actPred chan event =
   when (actPred event) $ do
-    lastEvent <- readMVar mvar
+    lastEvent <- readIORef ior
     when (not $ debounce lastEvent event) (writeChan chan event)
-    _ <- swapMVar mvar event
-    void
+    atomicModifyIORef ior \_ -> (event, ())
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -64,17 +60,17 @@ instance FileListener WNo.WatchManager where
 
   listen watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    mvar  <- newMVar (Added (fp "") (posixSecondsToUTCTime 0))
-    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler mvar actPred chan)
+    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
+    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler ior actPred chan)
     void
 
   rlisten watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    mvar  <- newMVar (Added (fp "") (posixSecondsToUTCTime 0))
-    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler mvar actPred chan)
+    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
+    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler ior actPred chan)
     void
 
-handler :: MEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
+handler :: IOEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
 handler = handleWNoEvent
 
 varieties :: [WNo.EventVariety]

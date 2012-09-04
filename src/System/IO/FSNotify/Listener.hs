@@ -43,7 +43,7 @@ class FileListener sessionType where
 -- | The maximum difference (exclusive, in seconds) for two events to be
 -- considered as occuring "at the same time".
 epsilon :: NominalDiffTime
-epsilon = 0.001
+epsilon = 0.000001
 
 -- | A predicate indicating whether two events may be considered "the same
 -- event". This predicate is applied to the most recent dispatched event and

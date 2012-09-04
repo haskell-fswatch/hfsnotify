@@ -23,28 +23,28 @@ import Util
 spec :: Spec
 spec = do
   describe "watchDir" $ do
-    it "Create file" $ testFileName "txt" >>= createFileSpec ActionEnv
-    it "Modify file" $ testFileName "txt" >>= modifyFileSpec ActionEnv
-    it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
-    it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
+    -- it "Create file" $ testFileName "txt" >>= createFileSpec ActionEnv
+    -- it "Modify file" $ testFileName "txt" >>= modifyFileSpec ActionEnv
+    -- it "Remove file" $ testFileName "txt" >>= removeFileSpec ActionEnv
+    -- it "Rename file" $ renameInput        >>= renameFileSpec ActionEnv
     it "Debounce"    $ testFileName "txt" >>= dbFileSpec     ActionEnv
-  describe "watchDirChan" $ do
-    it "Create file" $ testFileName "txt" >>= createFileSpec ChanEnv
-    it "Modify file" $ testFileName "txt" >>= modifyFileSpec ChanEnv
-    it "Remove file" $ testFileName "txt" >>= removeFileSpec ChanEnv
-    it "Rename file" $ renameInput        >>= renameFileSpec ChanEnv
-  describe "watchTree" $ do
-    it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ActionEnv
-    it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ActionEnv
-    it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ActionEnv
-    it "Remove file" $ testFileName "txt" >>= removeFileSpecR ActionEnv
-    it "Rename file" $ renameInput        >>= renameFileSpecR ActionEnv
-  describe "watchTreeChan" $ do
-    it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ChanEnv
-    it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ChanEnv
-    it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ChanEnv
-    it "Remove file" $ testFileName "txt" >>= removeFileSpecR ChanEnv
-    it "Rename file" $ renameInput        >>= renameFileSpecR ChanEnv
+  -- describe "watchDirChan" $ do
+  --   it "Create file" $ testFileName "txt" >>= createFileSpec ChanEnv
+  --   it "Modify file" $ testFileName "txt" >>= modifyFileSpec ChanEnv
+  --   it "Remove file" $ testFileName "txt" >>= removeFileSpec ChanEnv
+  --   it "Rename file" $ renameInput        >>= renameFileSpec ChanEnv
+  -- describe "watchTree" $ do
+  --   it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ActionEnv
+  --   it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ActionEnv
+  --   it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ActionEnv
+  --   it "Remove file" $ testFileName "txt" >>= removeFileSpecR ActionEnv
+  --   it "Rename file" $ renameInput        >>= renameFileSpecR ActionEnv
+  -- describe "watchTreeChan" $ do
+  --   it "Create file (pre-existing directory)" $ testFileName "txt" >>= createFileSpecR1 ChanEnv
+  --   it "Create file (create directory)"       $ testFileName "txt" >>= createFileSpecR2 ChanEnv
+  --   it "Modify file" $ testFileName "txt" >>= modifyFileSpecR ChanEnv
+  --   it "Remove file" $ testFileName "txt" >>= removeFileSpecR ChanEnv
+  --   it "Rename file" $ renameInput        >>= renameFileSpecR ChanEnv
 
 createFileSpec :: ChanActionEnv -> FilePath -> Assertion
 createFileSpec envType fileName = do
