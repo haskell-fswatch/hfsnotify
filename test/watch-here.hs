@@ -8,7 +8,7 @@ main = do
   -- let wd = "."
   wd <- getWorkingDirectory
   print wd
-  withManager $ \man ->
+  withManager $ \man -> do
     watchTree man wd (const True) print
-  _ <- getLine
+    getLine
   return ()
