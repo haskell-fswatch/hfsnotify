@@ -60,7 +60,7 @@ startManager debounce = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
     createManager (Just nativeManager) = return (WatchManager debounce (Right nativeManager))
-    createManager Nothing = (WatchManager debounce) . Left =<< createPollManager
+    createManager Nothing = return . (WatchManager debounce) . Left =<< createPollManager
 
 -- | Stop a file watch manager.
 -- Stopping a watch manager will immediately stop processing events on all paths
@@ -82,7 +82,7 @@ watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchTreeChan (WatchManager db wm) = either (rlisten db (rlisten db) wm
+watchTreeChan (WatchManager db wm) = either (rlisten db) (rlisten db) wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events

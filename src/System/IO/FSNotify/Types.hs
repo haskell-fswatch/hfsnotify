@@ -49,7 +49,10 @@ type EventChannel = Chan Event
 data DebounceConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
 
 type IOEvent = IORef Event
+
+-- | DebouncePayload contents.
 data DebounceData = DebounceData NominalDiffTime IOEvent
+
 -- | Data "payload" passed to event handlers to enable debouncing.
 type DebouncePayload = Maybe DebounceData
 

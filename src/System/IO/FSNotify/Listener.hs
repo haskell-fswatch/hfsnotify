@@ -23,10 +23,9 @@ import System.IO.FSNotify.Types
 -- for events, or simulated listening for events.
 class FileListener sessionType where
   -- | Initialize a file listener instance.
-  initSession :: DebounceConfig
-               -> IO (Maybe sessionType) -- ^ Just an initialized file listener,
-                                         --   or Nothing if this file listener
-                                         --   cannot be supported.
+  initSession :: IO (Maybe sessionType) -- ^ Just an initialized file listener,
+                                        --   or Nothing if this file listener
+                                        --   cannot be supported.
 
   -- | Kill a file listener instance.
   -- This will immediately stop acting on events for all directories being

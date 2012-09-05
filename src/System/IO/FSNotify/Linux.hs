@@ -15,7 +15,7 @@ import Prelude hiding (FilePath)
 import Control.Concurrent.Chan
 import Control.Exception
 import Control.Monad (when)
-import Data.IORef (atomicModifyIORef, IORef, readIORef)
+import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 -- import Debug.Trace (trace)
@@ -68,7 +68,7 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
-  initSession db = fmap Just INo.initINotify
+  initSession = fmap Just INo.initINotify
 
   killSession = INo.killINotify
 

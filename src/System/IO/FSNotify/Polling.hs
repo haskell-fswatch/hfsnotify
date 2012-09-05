@@ -91,7 +91,7 @@ createPollManager :: IO PollManager
 createPollManager = fmap PollManager $ newMVar Map.empty
 
 instance FileListener PollManager where
-  initSession = fmap $ return . Just createPollManager
+  initSession = fmap Just createPollManager
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap
@@ -100,13 +100,13 @@ instance FileListener PollManager where
       killThread' :: WatchKey -> IO ()
       killThread' (WatchKey threadId) = killThread threadId
 
-  listen (PollManager mvarMap) path actPred chan  = do
+  listen _ (PollManager mvarMap) path actPred chan  = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap False path'
     threadId <- forkIO $ pollPath False chan path' actPred pmMap
     modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
 
-  rlisten (PollManager mvarMap) path actPred chan = do
+  rlisten _ (PollManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap True  path'
     threadId <- forkIO $ pollPath True chan path' actPred pmMap

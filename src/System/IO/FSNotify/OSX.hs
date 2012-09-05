@@ -12,10 +12,12 @@ import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Monad
+import Control.Monad hiding (void)
 import Data.Bits
+import Data.IORef (atomicModifyIORef, newIORef, readIORef)
 import Data.Map (Map)
 import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word
 -- import Debug.Trace (trace)
 import Filesystem (isFile)
@@ -34,6 +36,9 @@ data WatchData = WatchData FSE.EventStream ListenType EventChannel
 type WatchMap = Map FilePath WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 type NativeManager = OSXManager
+
+void :: IO ()
+void = return ()
 
 nil :: Word64
 nil = 0x00
@@ -66,39 +71,43 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 
-handleNonRecursiveFSEEvent :: FilePath -> ActionPredicate -> EventChannel -> FSE.Event -> IO ()
--- handleNonRecursiveFSEEvent dirPath _       _    fseEvent | trace ("OSX: handleNonRecursiveFSEEvent " ++ show dirPath ++ " " ++ show fseEvent) False = undefined
-handleNonRecursiveFSEEvent dirPath actPred chan fseEvent = do
+handleNonRecursiveFSEEvent :: ActionPredicate -> EventChannel -> IOEvent -> FilePath -> FSE.Event -> IO ()
+-- handleNonRecursiveFSEEvent _       _    _   dirPath fseEvent | trace ("OSX: handleNonRecursiveFSEEvent " ++ show dirPath ++ " " ++ show fseEvent) False = undefined
+handleNonRecursiveFSEEvent actPred chan ior dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  handleNonRecursiveEvents dirPath actPred chan events
-handleNonRecursiveEvents :: FilePath -> ActionPredicate -> EventChannel -> [Event] -> IO ()
--- handleNonRecursiveEvents dirPath actPred _    (event:_     ) | trace (   "OSX: handleNonRecursiveEvents "
+  handleNonRecursiveEvents actPred chan ior dirPath events
+handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> IOEvent -> FilePath -> [Event] -> IO ()
+-- handleNonRecursiveEvents actPred _    _   dirPath (event:_     ) | trace (   "OSX: handleNonRecursiveEvents "
 --                                                                       ++ show dirPath ++ " " ++ show event
 --                                                                       ++ "\n  " ++ fp (directory dirPath)
 --                                                                       ++ "\n  " ++ fp (directory (eventPath event))
 --                                                                       ++ "\n  " ++ show (actPred event)) False = undefined
-handleNonRecursiveEvents dirPath actPred chan (event:events)
+handleNonRecursiveEvents actPred chan ior dirPath (event:events)
   | directory dirPath == directory (eventPath event) && actPred event = do
-    writeChan chan event
-    handleNonRecursiveEvents dirPath actPred chan events
-  | otherwise                                                         = handleNonRecursiveEvents dirPath actPred chan events
-handleNonRecursiveEvents _ _ _ []                                     = return ()
+    lastEvent <- readIORef ior
+    when (not $ debounce lastEvent event) (writeChan chan event)
+    atomicModifyIORef ior (\_ -> (event, ()))
+    handleNonRecursiveEvents actPred chan ior dirPath events
+  | otherwise                                                         = handleNonRecursiveEvents actPred chan ior dirPath events
+handleNonRecursiveEvents _ _ _ _ []                                   = void
 
-handleFSEEvent :: ActionPredicate -> EventChannel -> FSE.Event -> IO ()
--- handleFSEEvent _       _    fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
-handleFSEEvent actPred chan fseEvent = do
+handleFSEEvent :: ActionPredicate -> EventChannel -> IOEvent -> FSE.Event -> IO ()
+-- handleFSEEvent _       _    _   fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
+handleFSEEvent actPred chan ior fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  handleEvents actPred chan events
+  handleEvents actPred chan ior events
 
-handleEvents :: ActionPredicate -> EventChannel -> [Event] -> IO ()
--- handleEvents actPred _    (event:_     ) | trace ("OSX: handleEvents " ++ show event ++ " " ++ show (actPred event)) False = undefined
-handleEvents actPred chan (event:events) =
+handleEvents :: ActionPredicate -> EventChannel -> IOEvent -> [Event] -> IO ()
+-- handleEvents actPred _    _   (event:_     ) | trace ("OSX: handleEvents " ++ show event ++ " " ++ show (actPred event)) False = undefined
+handleEvents actPred chan ior (event:events) =
   when (actPred event) $ do
-    writeChan chan event
-    handleEvents actPred chan events
-handleEvents _ _ [] = return ()
+    lastEvent <- readIORef ior
+    when (not $ debounce lastEvent event) (writeChan chan event)
+    atomicModifyIORef ior (\_ -> (event, ()))
+    handleEvents actPred chan ior events
+handleEvents _ _ _ [] = void
 
 instance FileListener OSXManager where
   initSession = do
@@ -115,16 +124,18 @@ instance FileListener OSXManager where
 
   listen (OSXManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path')
+    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
+    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler ior path')
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
     where
-      handler :: FilePath -> FSE.Event -> IO ()
-      handler listenPath = handleNonRecursiveFSEEvent listenPath actPred chan
+      handler :: IOEvent -> FilePath -> FSE.Event -> IO ()
+      handler = handleNonRecursiveFSEEvent actPred chan
 
   rlisten (OSXManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True handler
+    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
+    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler ior
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
     where
-      handler :: FSE.Event -> IO ()
+      handler :: IOEvent -> FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan
