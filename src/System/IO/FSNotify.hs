@@ -42,28 +42,31 @@ type NativeManager = PollManager
 #  endif
 #endif
 
-data WatchManager = WatchManager (Either PollManager NativeManager)
+data WatchManager = WatchManager
+                    DebounceConfig                     -- ^ Whether or not to debounce events
+                    (Either PollManager NativeManager) -- ^ Actual watch manager structure
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.
-withManager :: (WatchManager -> IO a) -> IO a
-withManager = bracket startManager stopManager
+withManager :: DebounceConfig -> (WatchManager -> IO a) -> IO a
+withManager debounce = bracket (startManager debounce) stopManager
 
 -- | Start a file watch manager.
 -- Directories can only be watched when they are managed by a started watch
 -- watch manager.
-startManager :: IO WatchManager -- ^ The watch manager. Hold on to this to clean up when done.
-startManager = initSession >>= createManager
+startManager :: DebounceConfig  -- ^ Config object for manager's default debouncing behaviour.
+             -> IO WatchManager -- ^ The watch manager. Hold on to this to clean up when done.
+startManager debounce = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
-    createManager (Just nativeManager) = return $ WatchManager $ Right nativeManager
-    createManager Nothing = fmap (WatchManager . Left) createPollManager
+    createManager (Just nativeManager) = return (WatchManager debounce (Right nativeManager))
+    createManager Nothing = (WatchManager debounce) . Left =<< createPollManager
 
 -- | Stop a file watch manager.
 -- Stopping a watch manager will immediately stop processing events on all paths
 -- being watched using the manager.
 stopManager :: WatchManager -> IO ()
-stopManager (WatchManager wm) =
+stopManager (WatchManager _ wm) =
   case wm of
     Right native -> killSession native
     Left poll    -> killSession poll
@@ -73,13 +76,13 @@ stopManager (WatchManager wm) =
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchDirChan (WatchManager wm) = either listen listen wm
+watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchTreeChan (WatchManager wm) = either rlisten rlisten wm
+watchTreeChan (WatchManager db wm) = either (rlisten db (rlisten db) wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
@@ -87,10 +90,10 @@ watchTreeChan (WatchManager wm) = either rlisten rlisten wm
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchDir (WatchManager wm) = either runFallback runNative wm
+watchDir (WatchManager db wm) = either runFallback runNative wm
   where
-    runFallback = threadChanFallback listen
-    runNative   = threadChanNative listen
+    runFallback = threadChanFallback $ listen db
+    runNative   = threadChanNative   $ listen db
 
 threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChanNative listener iface path actPred action =
@@ -112,10 +115,10 @@ threadChan action runListener = do
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
-watchTree (WatchManager wm) = either runFallback runNative wm
+watchTree (WatchManager db wm) = either runFallback runNative wm
   where
-    runFallback = threadChanFallback rlisten
-    runNative   = threadChanNative rlisten
+    runFallback = threadChanFallback $ rlisten db
+    runNative   = threadChanNative   $ rlisten db
 
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock

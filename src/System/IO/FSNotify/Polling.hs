@@ -91,7 +91,7 @@ createPollManager :: IO PollManager
 createPollManager = fmap PollManager $ newMVar Map.empty
 
 instance FileListener PollManager where
-  initSession = fmap Just createPollManager
+  initSession = fmap $ return . Just createPollManager
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap

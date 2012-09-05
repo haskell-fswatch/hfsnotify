@@ -4,19 +4,23 @@
 --
 
 module System.IO.FSNotify.Types
-       ( Event(..)
-       , eventPath
-       , eventTime
-       , EventChannel
+       ( act
        , ActionPredicate
        , Action
-       , act
+       , DebounceConfig(..)
+       , DebounceData(..)
+       , DebouncePayload
+       , Event(..)
+       , EventChannel
+       , eventPath
+       , eventTime
        ) where
 
 import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
-import Data.Time ()
+import Data.IORef (IORef)
+import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
 import Filesystem.Path.CurrentOS
 
@@ -40,6 +44,14 @@ eventTime (Modified _ timestamp) = timestamp
 eventTime (Removed  _ timestamp) = timestamp
 
 type EventChannel = Chan Event
+
+-- | Config object for debouncing events.
+data DebounceConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
+
+type IOEvent = IORef Event
+data DebounceData = DebounceData NominalDiffTime IOEvent
+-- | Data "payload" passed to event handlers to enable debouncing.
+type DebouncePayload = Maybe DebounceData
 
 -- | A predicate used to determine whether to act on an event.
 type ActionPredicate = Event -> Bool

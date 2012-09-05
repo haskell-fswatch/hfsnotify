@@ -5,23 +5,28 @@
 
 module System.IO.FSNotify.Listener
        ( debounce
-       , epsilon
+       , epsilonDefault
        , FileListener(..)
+       , newDebouncePayload
        ) where
 
 import Prelude hiding (FilePath)
 
+import Data.IORef (newIORef)
 import Data.Time (diffUTCTime, NominalDiffTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS
+import System.IO.FSNotify.Path (fp)
 import System.IO.FSNotify.Types
 
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
 class FileListener sessionType where
   -- | Initialize a file listener instance.
-  initSession :: IO (Maybe sessionType) -- ^ Just an initialized file listener,
-                                        --   or Nothing if this file listener
-                                        --   cannot be supported.
+  initSession :: DebounceConfig
+               -> IO (Maybe sessionType) -- ^ Just an initialized file listener,
+                                         --   or Nothing if this file listener
+                                         --   cannot be supported.
 
   -- | Kill a file listener instance.
   -- This will immediately stop acting on events for all directories being
@@ -32,25 +37,36 @@ class FileListener sessionType where
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen :: sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listen :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  rlisten :: sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  rlisten :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
--- | The maximum difference (exclusive, in seconds) for two events to be
--- considered as occuring "at the same time".
-epsilon :: NominalDiffTime
-epsilon = 0.001
+-- | The default maximum difference (exclusive, in seconds) for two
+-- events to be considered as occuring "at the same time".
+epsilonDefault :: NominalDiffTime
+epsilonDefault = 0.001
+
+-- | The default event that provides a basis for comparison.
+eventDefault :: Event
+eventDefault = Added (fp "") (posixSecondsToUTCTime 0)
 
 -- | A predicate indicating whether two events may be considered "the same
 -- event". This predicate is applied to the most recent dispatched event and
 -- the current event after the client-specified ActionPredicate is applied,
 -- before the event is dispatched.
-debounce :: Event -> Event -> Bool
-debounce e1 e2 =
+debounce :: NominalDiffTime -> Event -> Event -> Bool
+debounce epsilon e1 e2 =
   eventPath e1 == eventPath e2 && timeDiff > -epsilon && timeDiff < epsilon
   where
     timeDiff = diffUTCTime (eventTime e2) (eventTime e1)
+
+-- | Produces a fresh data payload used for debouncing events in a
+-- handler.
+newDebouncePayload :: DebounceConfig -> IO DebouncePayload
+newDebouncePayload DebounceDefault    = newIORef eventDefault >>= return . Just . DebounceData epsilonDefault
+newDebouncePayload (Debounce epsilon) = newIORef eventDefault >>= return . Just . DebounceData epsilon
+newDebouncePayload NoDebounce         = return Nothing
