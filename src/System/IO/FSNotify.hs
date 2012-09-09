@@ -42,9 +42,7 @@ type NativeManager = PollManager
 #  endif
 #endif
 
-data WatchManager = WatchManager
-                    DebounceConfig                     -- ^ Whether or not to debounce events
-                    (Either PollManager NativeManager) -- ^ Actual watch manager structure
+data WatchManager = WatchManager DebounceConfig (Either PollManager NativeManager)
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.

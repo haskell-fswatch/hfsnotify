@@ -58,11 +58,12 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
   where
     eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
     eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t]
-    addedFn t e = if hasFlag e FSE.eventFlagItemCreated      then return [Added    (path e) t] else return []
-    modifFn t e = if hasFlag e FSE.eventFlagItemModified     then return [Modified (path e) t] else return []
-    removFn t e = if hasFlag e FSE.eventFlagItemRemoved      then return [Removed  (path e) t] else return []
+    addedFn t e = if hasFlag e FSE.eventFlagItemCreated        then return [Added    (path e) t] else return []
+    modifFn t e = if (hasFlag e FSE.eventFlagItemModified
+                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (path e) t] else return []
+    removFn t e = if hasFlag e FSE.eventFlagItemRemoved        then return [Removed  (path e) t] else return []
     renamFn t e = if hasFlag e FSE.eventFlagItemRenamed then
-                    isFile (path e) >>= \exists -> if exists then return [Added    (path e) t] else return [Removed (path e) t]
+                    isFile (path e) >>= \exists -> if exists   then return [Added    (path e) t] else return [Removed (path e) t]
                   else
                     return []
     path = canonicalEventPath
