@@ -14,6 +14,7 @@ module System.IO.FSNotify.Types
        , EventChannel
        , eventPath
        , eventTime
+       , IOEvent
        ) where
 
 import Prelude hiding (FilePath)

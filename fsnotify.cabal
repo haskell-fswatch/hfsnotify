@@ -28,10 +28,10 @@ Library
                         , time >= 1.4
   Exposed-Modules:        System.IO.FSNotify
                         , System.IO.FSNotify.Devel
-                        , System.IO.FSNotify.Types
   Other-Modules:          System.IO.FSNotify.Listener
                         , System.IO.FSNotify.Path
                         , System.IO.FSNotify.Polling
+                        , System.IO.FSNotify.Types
   Hs-Source-Dirs:       src
   GHC-Options:          -Wall -threaded
   if os(linux)

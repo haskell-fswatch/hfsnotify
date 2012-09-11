@@ -8,7 +8,7 @@ main = do
   -- let wd = "."
   wd <- getWorkingDirectory
   print wd
-  withManager $ \man -> do
+  withManager DebounceDefault $ \man -> do
     watchTree man wd (const True) print
     getLine
   return ()

@@ -7,15 +7,16 @@
 -- | A cross-platform file watching mechanism.
 
 module System.IO.FSNotify
-       ( startManager
-       , stopManager
-       , withManager
-       , watchDirChan
-       , watchDir
-       , watchTreeChan
-       , watchTree
-       , WatchManager
+       ( DebounceConfig(..)
        , Event(..)
+       , WatchManager
+       , startManager
+       , stopManager
+       , watchDir
+       , watchDirChan
+       , watchTree
+       , watchTreeChan
+       , withManager
        ) where
 
 import Prelude hiding (FilePath, catch)
