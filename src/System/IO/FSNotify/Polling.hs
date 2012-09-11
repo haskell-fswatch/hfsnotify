@@ -15,6 +15,7 @@ import Control.Concurrent
 import Data.Map (Map)
 import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
+-- import Debug.Trace (trace)
 import Filesystem hiding (canonicalizePath)
 import Filesystem.Path
 import System.IO.FSNotify.Listener

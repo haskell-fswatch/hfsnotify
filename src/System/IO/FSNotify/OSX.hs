@@ -117,7 +117,7 @@ handleEvents _ _ _ [] = void
 instance FileListener OSXManager where
   initSession = do
     (v1, v2, _) <- FSE.osVersion
-    if not $ v1 >= 10 || (v1 == 10 && v2 > 6) then return Nothing else
+    if not $ v1 > 10 || (v1 == 10 && v2 > 6) then return Nothing else
       fmap (Just . OSXManager) $ newMVar Map.empty
 
   killSession (OSXManager mvarMap) = do

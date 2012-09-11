@@ -25,7 +25,10 @@ import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
 import Filesystem.Path.CurrentOS
 
--- | A file event reported by a file watcher.
+-- | A file event reported by a file watcher. Each event contains the
+-- canonical path for the file and a timestamp guaranteed to be after the
+-- event occurred (timestamps represent current time when FSEvents receives
+-- it from the OS and/or platform-specific Haskell modules).
 data Event =
     Added    FilePath UTCTime
   | Modified FilePath UTCTime
@@ -51,10 +54,15 @@ data DebounceConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
 
 type IOEvent = IORef Event
 
--- | DebouncePayload contents.
+-- | DebouncePayload contents. Contains epsilon value for debouncing
+-- near-simultaneous events and an IORef of the latest Event. Difference in
+-- arrival time is measured according to Event value timestamps.
 data DebounceData = DebounceData NominalDiffTime IOEvent
 
--- | Data "payload" passed to event handlers to enable debouncing.
+-- | Data "payload" passed to event handlers to enable debouncing. This value
+-- is automatically derived from a DebounceConfig value. A value of Just
+-- DebounceData results in debouncing according to the given epsilon and
+-- IOEvent. A value of Nothing results in no debouncing.
 type DebouncePayload = Maybe DebounceData
 
 -- | A predicate used to determine whether to act on an event.
