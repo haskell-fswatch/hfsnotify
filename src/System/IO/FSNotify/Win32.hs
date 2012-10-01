@@ -64,7 +64,7 @@ instance FileListener WNo.WatchManager where
     _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler ior actPred chan)
     void
 
-  rlisten watchManager path actPred chan = do
+  listenRecursive watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
     _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler ior actPred chan)

@@ -42,7 +42,7 @@ class FileListener sessionType where
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  rlisten :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listenRecursive :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
 -- | The default maximum difference (exclusive, in seconds) for two
 -- events to be considered as occuring "at the same time".

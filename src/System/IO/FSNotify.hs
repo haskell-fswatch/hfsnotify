@@ -81,7 +81,7 @@ watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
-watchTreeChan (WatchManager db wm) = either (rlisten db) (rlisten db) wm
+watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursive db) wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
@@ -116,8 +116,8 @@ threadChan action runListener = do
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
 watchTree (WatchManager db wm) = either runFallback runNative wm
   where
-    runFallback = threadChanFallback $ rlisten db
-    runNative   = threadChanNative   $ rlisten db
+    runFallback = threadChanFallback $ listenRecursive db
+    runNative   = threadChanNative   $ listenRecursive db
 
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock
