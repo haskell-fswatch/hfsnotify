@@ -17,8 +17,8 @@ import System.FilePath.Glob (compile, match, Pattern)
 import System.IO.FSNotify.Path (fp)
 import System.IO.FSNotify.Types
 import Test.Hspec (describe, it, Spec)
-import Test.HUnit.Lang (Assertion)
 import Util
+type Assertion = IO ()
 
 spec :: Spec
 spec = do
