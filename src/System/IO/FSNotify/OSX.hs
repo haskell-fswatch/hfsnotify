@@ -136,7 +136,7 @@ instance FileListener OSXManager where
       handler :: FilePath -> DebouncePayload -> FSE.Event -> IO ()
       handler = handleNonRecursiveFSEEvent actPred chan
 
-  rlisten db (OSXManager mvarMap) path actPred chan = do
+  listenRecursive db (OSXManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
