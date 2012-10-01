@@ -81,22 +81,19 @@ instance FileListener INo.INotify where
       handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
       handler = handleInoEvent actPred chan
 
-  -- rlisten iNotify path actPred chan | trace ("Linux: rlisten " ++ fp path) False = undefined
-  rlisten db iNotify path actPred chan = do
+  listenRecursive db iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
     paths <- findDirs True path'
     mapM_ pathHandler (path':paths)
     where
       pathHandler :: FilePath -> IO ()
-      -- pathHandler filePath _   | trace ("Linux: rlisten pathHandler " ++ show filePath) False = undefined
       pathHandler filePath = do
         dbp <- newDebouncePayload db
         _ <- INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
         void
         where
           handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          -- handler _ _ event | trace ("Linux: rlisten handler " ++ show event) False = undefined
           handler baseDir _   (INo.Created True dirPath) =
-            rlisten db iNotify (baseDir </> (fp dirPath)) actPred chan
+            listenRecursive db iNotify (baseDir </> (fp dirPath)) actPred chan
           handler baseDir dbp event                      =
             handleInoEvent actPred chan baseDir dbp event
