@@ -14,11 +14,10 @@ import Filesystem.Path.CurrentOS (FilePath)
 import Filesystem.Path ((</>), empty)
 import System.FilePath.Glob (compile, match)
 import System.IO.FSNotify.Path (canonicalizeDirPath, canonicalizePath, findDirs, findFiles, fp)
-import Test.Hspec (describe, it, Spec)
-import Test.HUnit ((@?=))
-import Test.HUnit.Lang (Assertion)
+import Test.Hspec (describe, it, Spec, shouldBe)
 import Util
 import qualified Data.ByteString as BS
+type Assertion = IO ()
 
 -- Boolean XOR
 (.^.) :: Bool -> Bool -> Bool
@@ -32,7 +31,7 @@ hasTrailingSlash path canonicalizeFn = do
   let expectedTail = last $ fp (fp "dir" </> empty) -- Get OS/filesystem's idea of a separator
   actualPath <- canonicalizeFn path
   let actualTail = last (fp actualPath) :: Char
-  actualTail @?= expectedTail
+  actualTail `shouldBe` expectedTail
 
 relPath      :: FilePath
 relPathSlash :: FilePath
@@ -86,47 +85,47 @@ spec = do
         fileName <- testFileName "txt"
         writeFile (tmpDir </> fileName) BS.empty
         files <- findFiles False tmpDir
-        1 @?= length files
+        1 `shouldBe` length files
         let (resultFP:_) = files
             pattern = "**/*" ++ fp fileName
             result = fp resultFP
         if match (compile pattern) result then
-          True @?= True
+          True `shouldBe` True
           else
-          result @?= pattern
+          result `shouldBe` pattern
     it "Recursive" $ do
       withTempDir $ \tmpDir -> do
         withNestedTempDir tmpDir $ \tmpPath -> do
           fileName <- testFileName "txt"
           writeFile (tmpPath </> fileName) BS.empty
           files <- findFiles True tmpDir
-          1 @?= length files
+          1 `shouldBe` length files
           let (resultFP:_) = files
               pattern = "**/*" ++ fp fileName
               result = fp resultFP
           if match (compile pattern) result then
-            True @?= True
+            True `shouldBe` True
             else
-            result @?= pattern
+            result `shouldBe` pattern
   describe "findDirs" $ do
     it "Non-recursive" $
       withTempDir $ \tmpDir -> do
         withNestedTempDir tmpDir $ \dirName -> do
           dirs <- findDirs False tmpDir
-          1 @?= length dirs
+          1 `shouldBe` length dirs
           let (resultFP:_) = dirs
               pattern = "**/*" ++ fp dirName
               result = fp resultFP
           if match (compile pattern) result then
-            True @?= True
+            True `shouldBe` True
             else
-            result @?= pattern
+            result `shouldBe` pattern
     it "Recursive" $
       withTempDir $ \tmpDir -> do
         withNestedTempDir tmpDir $ \dirName1 -> do
           withNestedTempDir tmpDir $ \dirName2 -> do
             dirs <- findDirs False tmpDir
-            2 @?= length dirs
+            2 `shouldBe` length dirs
             let pats = ["**/*" ++ fp dirName1, "**/*" ++ fp dirName2]
                 patFns = map (match . compile) pats
                 dirStrings = map fp dirs
@@ -134,7 +133,7 @@ spec = do
             -- The two patterns should succeed once and fail once on
             -- opposite tests.
             if (r1 .^. r2) && (r3 .^. r4) && (r1 .^. r3) && (r2 .^. r4) then
-              True @?= True
+              True `shouldBe` True
               else
-              dirStrings @?= pats
+              dirStrings `shouldBe` pats
             return ()
