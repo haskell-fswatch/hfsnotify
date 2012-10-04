@@ -7,7 +7,7 @@ module System.IO.FSNotify.Types
        ( act
        , ActionPredicate
        , Action
-       , DebounceConfig(..)
+       , WatchConfig(..)
        , DebounceData(..)
        , DebouncePayload
        , Event(..)
@@ -49,8 +49,8 @@ eventTime (Removed  _ timestamp) = timestamp
 
 type EventChannel = Chan Event
 
--- | Config object for debouncing events.
-data DebounceConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
+-- | Config object, currently used just for debouncing events.
+data WatchConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
 
 type IOEvent = IORef Event
 
@@ -60,7 +60,7 @@ type IOEvent = IORef Event
 data DebounceData = DebounceData NominalDiffTime IOEvent
 
 -- | Data "payload" passed to event handlers to enable debouncing. This value
--- is automatically derived from a DebounceConfig value. A value of Just
+-- is automatically derived from a 'WatchConfig' value. A value of Just
 -- DebounceData results in debouncing according to the given epsilon and
 -- IOEvent. A value of Nothing results in no debouncing.
 type DebouncePayload = Maybe DebounceData
