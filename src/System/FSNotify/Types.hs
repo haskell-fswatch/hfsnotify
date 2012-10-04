@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.Types
+module System.FSNotify.Types
        ( act
        , ActionPredicate
        , Action
