@@ -14,8 +14,8 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem (removeFile, rename, writeFile, writeTextFile)
 import Filesystem.Path.CurrentOS ((</>), FilePath)
 import System.FilePath.Glob (compile, match, Pattern)
-import System.IO.FSNotify.Path (fp)
-import System.IO.FSNotify.Types
+import System.FSNotify.Path (fp)
+import System.FSNotify.Types
 import Test.Hspec (describe, it, Spec)
 import Util
 type Assertion = IO ()

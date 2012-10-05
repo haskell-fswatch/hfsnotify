@@ -13,7 +13,7 @@ import Filesystem (writeFile)
 import Filesystem.Path.CurrentOS (FilePath)
 import Filesystem.Path ((</>), empty)
 import System.FilePath.Glob (compile, match)
-import System.IO.FSNotify.Path (canonicalizeDirPath, canonicalizePath, findDirs, findFiles, fp)
+import System.FSNotify.Path (canonicalizeDirPath, canonicalizePath, findDirs, findFiles, fp)
 import Test.Hspec (describe, it, Spec, shouldBe)
 import Util
 import qualified Data.ByteString as BS

@@ -15,10 +15,10 @@ import Control.Monad (when)
 import Data.Unique.Id
 import Filesystem.Path.CurrentOS hiding (concat)
 import System.Directory
-import System.IO.Error (isPermissionError)
-import System.IO.FSNotify
-import System.IO.FSNotify.Path
-import System.IO.FSNotify.Types
+import System.Error (isPermissionError)
+import System.FSNotify
+import System.FSNotify.Path
+import System.FSNotify.Types
 import System.Random
 import System.Timeout (timeout)
 
