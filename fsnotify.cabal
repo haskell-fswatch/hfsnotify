@@ -26,7 +26,7 @@ Library
                         , text >= 0.11.2.0
                         , time >= 1.4
   Exposed-Modules:        System.FSNotify
-                        , System.FSNotify.Devel
+                        , System.FSNotify.React
   Other-Modules:          System.FSNotify.Listener
                         , System.FSNotify.Path
                         , System.FSNotify.Polling
