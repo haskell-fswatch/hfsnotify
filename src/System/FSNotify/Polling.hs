@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.Polling
+module System.FSNotify.Polling
   ( createPollManager
   , PollManager(..)
   , FileListener(..)
@@ -18,9 +18,9 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 -- import Debug.Trace (trace)
 import Filesystem hiding (canonicalizePath)
 import Filesystem.Path
-import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (findFiles, canonicalizeDirPath)
-import System.IO.FSNotify.Types
+import System.FSNotify.Listener
+import System.FSNotify.Path (findFiles, canonicalizeDirPath)
+import System.FSNotify.Types
 import qualified Data.Map as Map
 import Control.Monad (forM_)
 

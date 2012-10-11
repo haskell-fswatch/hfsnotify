@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.Devel
+module System.FSNotify.Devel
        ( compileTrees
        , compileTree
        , compilePaths
@@ -19,9 +19,9 @@ import Prelude hiding (FilePath, catch)
 import Data.Text
 import Filesystem.Path.CurrentOS
 import System.FilePath.Glob (match, Pattern)
-import System.IO.FSNotify
-import System.IO.FSNotify.Path (fp)
-import System.IO.FSNotify.Types
+import System.FSNotify
+import System.FSNotify.Path (fp)
+import System.FSNotify.Types
 
 -- | Compile a collection of paths with an action that takes the modified
 -- file's path as input.

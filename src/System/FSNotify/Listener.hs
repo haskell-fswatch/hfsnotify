@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.Listener
+module System.FSNotify.Listener
        ( debounce
        , epsilonDefault
        , FileListener(..)
@@ -16,8 +16,8 @@ import Data.IORef (newIORef)
 import Data.Time (diffUTCTime, NominalDiffTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS
-import System.IO.FSNotify.Path (fp)
-import System.IO.FSNotify.Types
+import System.FSNotify.Path (fp)
+import System.FSNotify.Types
 
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
