@@ -154,14 +154,14 @@ inEnv caEnv dtEnv reportPred action eventProcessor =
 
 inTempDirEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> IO ()
 inTempDirEnv caEnv dtEnv reportPred action eventProcessor path =
-  withManager NoDebounce $ \manager -> do
+  withManagerConf NoDebounce $ \manager -> do
     chan <- newChan
     inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan
 
 inChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor -> EventChannel -> IO ()
 inChanEnv caEnv dtEnv reportPred action eventProcessor chan =
   withTempDir $ \path -> do
-    withManager NoDebounce $ \manager -> do
+    withManagerConf NoDebounce $ \manager -> do
       inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan
 
 inTempDirChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> WatchManager -> EventChannel -> IO ()

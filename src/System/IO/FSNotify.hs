@@ -4,19 +4,26 @@
 --
 {-# LANGUAGE CPP, ScopedTypeVariables #-}
 
--- | A cross-platform file watching mechanism.
+-- | cross-platform file watching.
 
 module System.IO.FSNotify
-       ( DebounceConfig(..)
-       , Event(..)
+       ( Event(..)
+ 
+       -- * Starting/Stopping
        , WatchManager
+       , withManager
        , startManager
        , stopManager
+       , defaultConfig
+       , WatchConfig(..)
+       , withManagerConf
+       , startManagerConf
+
+       -- * Watching
        , watchDir
        , watchDirChan
        , watchTree
        , watchTreeChan
-       , withManager
        ) where
 
 import Prelude hiding (FilePath, catch)
@@ -43,32 +50,41 @@ type NativeManager = PollManager
 #  endif
 #endif
 
-data WatchManager = WatchManager DebounceConfig (Either PollManager NativeManager)
+data WatchManager = WatchManager WatchConfig (Either PollManager NativeManager)
+defaultConfig = DebounceDefault
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.
-withManager :: DebounceConfig -> (WatchManager -> IO a) -> IO a
-withManager debounce = bracket (startManager debounce) stopManager
+withManager :: (WatchManager -> IO a) -> IO a
+withManager  = withManagerConf defaultConfig
 
 -- | Start a file watch manager.
 -- Directories can only be watched when they are managed by a started watch
 -- watch manager.
-startManager :: DebounceConfig  -- ^ Config object for manager's default debouncing behaviour.
-             -> IO WatchManager -- ^ The watch manager. Hold on to this to clean up when done.
-startManager debounce = initSession >>= createManager
-  where
-    createManager :: Maybe NativeManager -> IO WatchManager
-    createManager (Just nativeManager) = return (WatchManager debounce (Right nativeManager))
-    createManager Nothing = return . (WatchManager debounce) . Left =<< createPollManager
+-- When finished watching. you must release resources via 'stopManager'.
+-- It is preferrable if possible to use 'withManager' to handle this
+-- automatically.
+startManager :: IO WatchManager
+startManager = startManagerConf defaultConfig
 
 -- | Stop a file watch manager.
--- Stopping a watch manager will immediately stop processing events on all paths
--- being watched using the manager.
+-- Stopping a watch manager will immediately stop
+-- watching for files and free resources.
 stopManager :: WatchManager -> IO ()
 stopManager (WatchManager _ wm) =
   case wm of
     Right native -> killSession native
     Left poll    -> killSession poll
+
+withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
+withManagerConf debounce = bracket (startManagerConf debounce) stopManager
+
+startManagerConf :: WatchConfig -> IO WatchManager
+startManagerConf debounce = initSession >>= createManager
+  where
+    createManager :: Maybe NativeManager -> IO WatchManager
+    createManager (Just nativeManager) = return (WatchManager debounce (Right nativeManager))
+    createManager Nothing = return . (WatchManager debounce) . Left =<< createPollManager
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events

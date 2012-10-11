@@ -36,13 +36,13 @@ class FileListener sessionType where
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  listenRecursive :: DebounceConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
 
 -- | The default maximum difference (exclusive, in seconds) for two
 -- events to be considered as occuring "at the same time".
@@ -65,7 +65,7 @@ debounce epsilon e1 e2 =
 
 -- | Produces a fresh data payload used for debouncing events in a
 -- handler.
-newDebouncePayload :: DebounceConfig -> IO DebouncePayload
+newDebouncePayload :: WatchConfig -> IO DebouncePayload
 newDebouncePayload DebounceDefault    = newIORef eventDefault >>= return . Just . DebounceData epsilonDefault
 newDebouncePayload (Debounce epsilon) = newIORef eventDefault >>= return . Just . DebounceData epsilon
 newDebouncePayload NoDebounce         = return Nothing
