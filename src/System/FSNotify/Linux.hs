@@ -5,7 +5,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module System.IO.FSNotify.Linux
+module System.FSNotify.Linux
        ( FileListener(..)
        , NativeManager
        ) where
@@ -20,9 +20,9 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 -- import Debug.Trace (trace)
 import Filesystem.Path.CurrentOS
-import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (findDirs, fp, canonicalizeDirPath)
-import System.IO.FSNotify.Types
+import System.FSNotify.Listener
+import System.FSNotify.Path (findDirs, fp, canonicalizeDirPath)
+import System.FSNotify.Types
 import qualified System.INotify as INo
 
 type NativeManager = INo.INotify

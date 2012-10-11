@@ -6,7 +6,7 @@
 
 -- | cross-platform file watching.
 
-module System.IO.FSNotify
+module System.FSNotify
        ( Event(..)
  
        -- * Starting/Stopping
@@ -32,18 +32,18 @@ import Control.Concurrent
 import Control.Exception
 import Data.Map (Map)
 import Filesystem.Path.CurrentOS
-import System.IO.FSNotify.Polling
-import System.IO.FSNotify.Types
+import System.FSNotify.Polling
+import System.FSNotify.Types
 import qualified Data.Map as Map
 
 #ifdef OS_Linux
-import System.IO.FSNotify.Linux
+import System.FSNotify.Linux
 #else
 #  ifdef OS_Win32
-import System.IO.FSNotify.Win32
+import System.FSNotify.Win32
 #  else
 #    ifdef OS_Mac
-import System.IO.FSNotify.OSX
+import System.FSNotify.OSX
 #    else
 type NativeManager = PollManager
 #    endif

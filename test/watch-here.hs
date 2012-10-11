@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 import Filesystem.Path.CurrentOS
 -}
-import System.IO.FSNotify
+import System.FSNotify
 import Filesystem
 
 main :: IO ()

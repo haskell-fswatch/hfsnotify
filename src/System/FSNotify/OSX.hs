@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.OSX
+module System.FSNotify.OSX
        ( FileListener(..)
        , NativeManager
        ) where
@@ -21,9 +21,9 @@ import Data.Word
 -- import Debug.Trace (trace)
 import Filesystem (isFile)
 import Filesystem.Path hiding (concat)
-import System.IO.FSNotify.Listener
-import System.IO.FSNotify.Path (fp, canonicalizeDirPath)
-import System.IO.FSNotify.Types
+import System.FSNotify.Listener
+import System.FSNotify.Path (fp, canonicalizeDirPath)
+import System.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
 

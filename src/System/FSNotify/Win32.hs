@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.IO.FSNotify.Win32
+module System.FSNotify.Win32
        ( FileListener(..)
        , NativeManager
        ) where
@@ -17,9 +17,9 @@ import Data.IORef (atomicModifyIORef, newIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS (FilePath)
-import System.IO.FSNotify.Listener (debounce, FileListener(..))
-import System.IO.FSNotify.Path (fp, canonicalizeDirPath)
-import System.IO.FSNotify.Types
+import System.FSNotify.Listener (debounce, FileListener(..))
+import System.FSNotify.Path (fp, canonicalizeDirPath)
+import System.FSNotify.Types
 import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager

@@ -4,7 +4,7 @@
 --
 {-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances #-}
 
-module System.IO.FSNotify.Path
+module System.FSNotify.Path
        ( fp
        , findFiles
        , findDirs
