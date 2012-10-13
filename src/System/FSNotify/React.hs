@@ -1,6 +1,6 @@
 module System.FSNotify.React 
   ( treeExtAny, treeExtExists,
-    eventTuple, doAllEvents,
+    doAllEvents,
     allEvents, existsEvents
   ) where
 
@@ -45,14 +45,6 @@ treeExtAny :: WatchManager
          -> IO ()
 treeExtAny man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
-
--- | ignores the timestamp
-eventTuple :: Monad m => ((Event, FilePath) -> m ()) -> Event -> m ()
-eventTuple action event =
-  case event of
-    Added    f _ -> action (event, f)
-    Modified f _ -> action (event, f)
-    Removed  f _ -> action (event, f)
 
 doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
 doAllEvents action event =
