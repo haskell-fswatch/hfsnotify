@@ -16,7 +16,7 @@ Build-Type:             Simple
 
 
 Library
-  Build-Depends:          base >= 4.3.1.0
+  Build-Depends:          base >= 4.3.1.0 && < 5
                         , containers >= 0.4.2.1
                         , directory >= 1.1.0.2
                         , system-fileio >= 0.3.8 && < 0.4
@@ -30,7 +30,7 @@ Library
                         , System.FSNotify.Polling
                         , System.FSNotify.Types
   Hs-Source-Dirs:       src
-  GHC-Options:          -Wall -threaded
+  GHC-Options:          -Wall
   if os(linux)
     CPP-Options:        -DOS_Linux
     Other-Modules:      System.FSNotify.Linux
