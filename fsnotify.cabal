@@ -1,7 +1,7 @@
 Name:                   fsnotify
 Version:                0.0.1
 Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>
-Maintainer:             Mark Dittmer <mark.s.dittmer@gmail.com>
+Maintainer:             Mark Dittmer <mark.s.dittmer@gmail.com>, Greg Weber <greg@gregweber.info>
 License:                BSD3
 License-File:           LICENSE
 Synopsis:               Cross platform library for file creation, modification,
