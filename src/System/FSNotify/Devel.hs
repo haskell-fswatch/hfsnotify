@@ -1,126 +1,68 @@
---
--- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
--- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
---
-
 module System.FSNotify.Devel
-       ( compileTrees
-       , compileTree
-       , compilePaths
-       , compilePath
-       , compilePatternMulti
-       , compilePattern
-       , compileMulti
-       , compileBasic
-       ) where
+  ( treeExtAny, treeExtExists,
+    doAllEvents,
+    allEvents, existsEvents
+  ) where
 
 import Prelude hiding (FilePath, catch)
 
 import Data.Text
 import Filesystem.Path.CurrentOS
-import System.FilePath.Glob (match, Pattern)
 import System.FSNotify
-import System.FSNotify.Path (fp)
-import System.FSNotify.Types
+-- import System.FSNotify.Path (fp)
 
--- | Compile a collection of paths with an action that takes the modified
--- file's path as input.
-compileTrees :: WatchManager
-             -> [FilePath] -- ^ Directories to watch
-             -> ActionPredicate -- ^ Predicate for event filtering
-             -> (FilePath -> IO ()) -- ^ Compile action
-             -> IO ()
-compileTrees man dirs actPred action =
-  mapM_ createWatch dirs
-  where
-    createWatch :: FilePath -> IO ()
-    createWatch dir = watchTree man dir actPred compile
-    compile :: Action
-    compile event = action $ eventPath event
+-- | Example of compiling scss files with compass
+-- @
+-- compass :: WatchManager -> FilePath -> IO ()
+-- compass man dir = do
+--  putStrLn $ "compass " ++ encodeString dir
+--  treeExtExists man dir "scss" $ \fp ->
+--    when ("deploy" `notElem` splitDirectories fp) $ do
+--     let d = encodeString $ head (splitDirectories rel)
+--     system "cd " ++ d ++ "&& bundle exec compass compile"
+--  return ()
+-- @
 
--- | Singular compileTrees.
-compileTree :: WatchManager
-            -> FilePath -- ^ Directory to watch
-            -> ActionPredicate -- ^ Predicate for event filtering
-            -> (FilePath -> IO ()) -- ^ Compile action
-            -> IO ()
-compileTree man dir = compileTrees man [dir]
+-- | In the given directory tree,
+-- watch for any Added and Modified events (but ignore Removed events)
+-- for files with the given file extension
+-- perform the given action
+treeExtExists :: WatchManager
+         -> FilePath -- ^ Directory to watch
+         -> Text -- ^ extension
+         -> (FilePath -> IO ()) -- ^ action to run on file
+         -> IO ()
+treeExtExists man dir ext action =
+  watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
--- | Compile a collection of paths with a predicate and action that both take
--- the modified file's path as input.
-compilePaths :: WatchManager
-             -> [FilePath] -- ^ Directories to watch
-             -> (FilePath -> Bool) -- ^ Predicate for filtering by file name
-             -> (FilePath -> IO ()) -- ^ Compile action
-             -> IO ()
-compilePaths man dirs pathPred action =
-  compileTrees man dirs predicate action
-  where
-    predicate :: ActionPredicate
-    predicate = compilePredicate pathPred
+-- | In the given directory tree,
+-- for files with the given file extension
+-- perform the given action
+treeExtAny :: WatchManager
+         -> FilePath -- ^ Directory to watch
+         -> Text -- ^ extension
+         -> (FilePath -> IO ()) -- ^ action to run on file
+         -> IO ()
+treeExtAny man dir ext action =
+  watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
--- | Singular compilePaths.
-compilePath :: WatchManager
-             -> FilePath -- ^ Directories to watch
-             -> (FilePath -> Bool) -- ^ Predicate for filtering by file name
-             -> (FilePath -> IO ()) -- ^ Compile action
-             -> IO ()
-compilePath man dir = compilePaths man [dir]
-
--- | Compile a collection of paths with a predicate that takes a
--- System.FilePath.Glob.Pattern as input, and an action that takes the
--- modified file's path as input.
-compilePatternMulti :: WatchManager
-                    -> [FilePath] -- ^ Directories to watch
-                    -> Pattern -- ^ Pattern to match against event
-                    -> (FilePath -> IO ()) -- ^ Compile action
-                    -> IO ()
-compilePatternMulti man dirs pat action =
-  compilePaths man dirs patFilter action
-  where
-    patFilter :: FilePath -> Bool
-    patFilter = \path -> match pat (fp path)
-
--- | Singular compilePatternMulti.
-compilePattern :: WatchManager
-                -> FilePath -- ^ Directory to watch
-                -> Pattern -- ^ Pattern to match against event
-                -> (FilePath -> IO ()) -- ^ Compile action
-                -> IO ()
-compilePattern man dir =
-  compilePatternMulti man [dir]
-
--- | Compile a collection of paths according to an input file
--- extension. Compile using an action that takes the modified file's path and
--- the output file's path with a different extension as input.
-compileMulti :: WatchManager
-              -> [FilePath] -- ^ Directories to watch
-              -> Text -- ^ Extension to watch (old extension)
-              -> Text -- ^ Output file extension (new extension)
-              -> (FilePath -> FilePath -> IO ()) -- ^ Compile action
-              -> IO ()
-compileMulti man dirs oldExt newExt action =
-  compilePaths man dirs extFilter compile
-  where
-    extFilter :: FilePath -> Bool
-    extFilter = flip hasExtension oldExt
-    compile :: FilePath -> IO ()
-    compile path = action path $ convert path
-    convert :: FilePath -> FilePath
-    convert = flip replaceExtension newExt
-
--- | Singular compileMulti.
-compileBasic :: WatchManager
-              -> FilePath -- ^ Directory to watch
-              -> Text -- ^ Extension to watch (old extension)
-              -> Text -- ^ Output file extension
-              -> (FilePath -> FilePath -> IO ()) -- ^ Compile action
-              -> IO ()
-compileBasic man dir = compileMulti man [dir]
-
-compilePredicate :: (FilePath -> Bool) -> ActionPredicate
-compilePredicate pathPred = \event ->
+doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
+doAllEvents action event =
   case event of
-    Added    path _ -> pathPred path
-    Modified path _ -> pathPred path
-    _               -> False
+    Added    f _ -> action f
+    Modified f _ -> action f
+    Removed  f _ -> action f
+
+existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
+existsEvents filt event =
+  case event of
+    Added    f _ -> filt f
+    Modified f _ -> filt f
+    Removed  _ _ -> False
+
+allEvents :: (FilePath -> Bool) -> (Event -> Bool)
+allEvents filt event =
+  case event of
+    Added    f _ -> filt f
+    Modified f _ -> filt f
+    Removed  f _ -> filt f
