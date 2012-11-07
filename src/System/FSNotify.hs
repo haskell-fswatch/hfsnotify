@@ -51,6 +51,7 @@ type NativeManager = PollManager
 #endif
 
 data WatchManager = WatchManager WatchConfig (Either PollManager NativeManager)
+defaultConfig :: WatchConfig
 defaultConfig = DebounceDefault
 
 -- | Perform an IO action with a WatchManager in place.
