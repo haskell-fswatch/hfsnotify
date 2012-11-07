@@ -15,7 +15,7 @@ import Control.Monad (when)
 import Data.Unique.Id
 import Filesystem.Path.CurrentOS hiding (concat)
 import System.Directory
-import System.Error (isPermissionError)
+import System.IO.Error (isPermissionError)
 import System.FSNotify
 import System.FSNotify.Path
 import System.FSNotify.Types
