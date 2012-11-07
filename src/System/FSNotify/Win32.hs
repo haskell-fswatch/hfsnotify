@@ -13,11 +13,10 @@ import System.IO hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Monad (when)
-import Data.IORef (atomicModifyIORef, newIORef, readIORef)
+import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS (FilePath)
-import System.FSNotify.Listener (debounce, FileListener(..))
+import System.FSNotify.Listener
 import System.FSNotify.Path (fp, canonicalizeDirPath)
 import System.FSNotify.Types
 import qualified System.Win32.Notify as WNo
@@ -39,16 +38,20 @@ fsnEvents timestamp (WNo.Modified False (Just name))            = [Modified (fp 
 fsnEvents timestamp (WNo.Deleted  False name)                   = [Removed (fp name) timestamp]
 fsnEvents _         _                                           = []
 
-handleWNoEvent :: IOEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
-handleWNoEvent ior actPred chan inoEvent = do
+handleWNoEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
+handleWNoEvent actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
-  mapM_ (handleEvent ior actPred chan) (fsnEvents currentTime inoEvent)
-handleEvent :: IOEvent -> ActionPredicate -> EventChannel -> Event -> IO ()
-handleEvent ior actPred chan event =
-  when (actPred event) $ do
-    lastEvent <- readIORef ior
-    when (not $ debounce lastEvent event) (writeChan chan event)
-    atomicModifyIORef ior \_ -> (event, ())
+  mapM_ (handleEvent actPred chan dbp) (fsnEvents currentTime inoEvent)
+handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
+handleEvent actPred chan dbp event =
+  when (actPred event) $ case dbp of
+    (Just (DebounceData epsilon ior)) -> do
+      lastEvent <- readIORef ior
+      when (not $ debounce epsilon lastEvent event) writeToChan
+      atomicModifyIORef ior (\_ -> (event, ()))
+    Nothing                           -> writeToChan
+  where
+    writeToChan = writeChan chan event
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -58,19 +61,19 @@ instance FileListener WNo.WatchManager where
 
   killSession = WNo.killWatchManager
 
-  listen watchManager path actPred chan = do
+  listen db watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
-    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler ior actPred chan)
+    dbp <- newDebouncePayload db
+    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan dbp)
     void
 
-  listenRecursive watchManager path actPred chan = do
+  listenRecursive db watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    ior   <- newIORef (Added (fp "") (posixSecondsToUTCTime 0))
-    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler ior actPred chan)
+    dbp <- newDebouncePayload db
+    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan dbp)
     void
 
-handler :: IOEvent -> ActionPredicate -> EventChannel -> WNo.Event -> IO ()
+handler :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
 handler = handleWNoEvent
 
 varieties :: [WNo.EventVariety]
