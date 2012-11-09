@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Win32
        ( FileListener(..)
@@ -9,13 +10,11 @@ module System.FSNotify.Win32
        ) where
 
 import Prelude hiding (FilePath)
-import System.IO hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
-import Filesystem.Path.CurrentOS (FilePath)
 import System.FSNotify.Listener
 import System.FSNotify.Path (fp, canonicalizeDirPath)
 import System.FSNotify.Types
