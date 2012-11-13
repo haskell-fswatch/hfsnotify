@@ -13,6 +13,10 @@ Description:            Cross platform library for file creation, modification,
 Category:               Filesystem
 Cabal-Version:          >= 1.8
 Build-Type:             Simple
+Extra-Source-Files:     test/FSNotify.hs
+                        test/Path.hs
+                        test/Util.hs
+                        test/watch-here.hs
 
 
 Library
