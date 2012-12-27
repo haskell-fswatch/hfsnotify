@@ -29,18 +29,24 @@ type NativeManager = WNo.WatchManager
 void :: IO ()
 void = return ()
 
-fsnEvents :: UTCTime -> WNo.Event -> [Event]
-fsnEvents timestamp (WNo.Created  False name)                   = [Added (fp name) timestamp]
+-- Win32-notify has (temporarily?) dropped support for Renamed events.
+fsnEvent :: UTCTime -> WNo.Event -> Maybe Event
+fsnEvent timestamp (WNo.Created  False name) = Just $ Added    (fp name) timestamp
+fsnEvent timestamp (WNo.Modified False name) = Just $ Modified (fp name) timestamp
+fsnEvent timestamp (WNo.Deleted  False name) = Just $ Removed  (fp name) timestamp
+fsnEvent _         _                         = Nothing
+{-
 fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
 fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
-fsnEvents timestamp (WNo.Modified False (Just name))            = [Modified (fp name) timestamp]
-fsnEvents timestamp (WNo.Deleted  False name)                   = [Removed (fp name) timestamp]
-fsnEvents _         _                                           = []
+-}
 
 handleWNoEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
 handleWNoEvent actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
-  mapM_ (handleEvent actPred chan dbp) (fsnEvents currentTime inoEvent)
+  let maybeEvent = fsnEvent currentTime inoEvent
+  case maybeEvent of
+    Just evt -> handleEvent actPred chan dbp evt
+    Nothing  -> void
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
 handleEvent actPred chan dbp event =
   when (actPred event) $ case dbp of
