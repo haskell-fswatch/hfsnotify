@@ -43,7 +43,7 @@ Library
     if os(windows)
       CPP-Options:      -DOS_Win32
       Other-Modules:    System.FSNotify.Win32
-      Build-Depends:    Win32-notify == 0.2
+      Build-Depends:    Win32-notify >= 0.2
     else
       if os(darwin)
         CPP-Options:    -DOS_Mac
@@ -90,7 +90,7 @@ Test-Suite test
   else
     if os(windows)
       CPP-Options:      -DOS_Win32
-      Build-Depends:    Win32-notify == 0.2, ghc >= 7.4.2
+      Build-Depends:    Win32-notify >= 0.2, ghc >= 7.4.2
     else
       if os(darwin)
         CPP-Options:    -DOS_Mac
