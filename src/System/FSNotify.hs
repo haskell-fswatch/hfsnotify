@@ -94,8 +94,14 @@ startManagerConf debounce = initSession >>= createManager
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO WatchDescriptor
-watchDirChan (WatchManager db (Left  pwm)) = return . PollWD   =<< listen db pwm
-watchDirChan (WatchManager db (Right nwm)) = return . NativeWD =<< listen db nwm
+watchDirChan (WatchManager db (Left  pwm)) fp ap ec = wrap =<< listen db pwm fp ap ec
+  where
+    wrap :: WatchID PollManager -> IO WatchDescriptor
+    wrap wid = return $ PollWD wid
+watchDirChan (WatchManager db (Right nwm)) fp ap ec = wrap =<< listen db nwm fp ap ec
+  where
+    wrap :: WatchID NativeManager -> IO WatchDescriptor
+    wrap wid = return $ NativeWD wid
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
