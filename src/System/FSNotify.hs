@@ -91,8 +91,9 @@ startManagerConf debounce = initSession >>= createManager
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watchDirChan :: (FileListener sessionType) => WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
-watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
+watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
+watchDirChan (WatchManager db (Left  pwm)) = listen db pwm :: FilePath -> ActionPredicate -> EventChannel -> IO (WatchID PollManager)
+watchDirChan (WatchManager db (Right nwm)) = listen db nwm :: FilePath -> ActionPredicate -> EventChannel -> IO (WatchID NativeManager)
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
