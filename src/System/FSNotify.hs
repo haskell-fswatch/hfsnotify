@@ -8,7 +8,7 @@
 
 module System.FSNotify
        ( Event(..)
- 
+
        -- * Starting/Stopping
        , WatchManager
        , withManager
@@ -91,13 +91,13 @@ startManagerConf debounce = initSession >>= createManager
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchDirChan :: (FileListener sessionType) => WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
 watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
-watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
 watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursive db) wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
@@ -110,6 +110,14 @@ watchDir (WatchManager db wm) = either runFallback runNative wm
   where
     runFallback = threadChanFallback $ listen db
     runNative   = threadChanNative   $ listen db
+
+removeWatch :: WatchManager -> WatchID sessionType -> IO ()
+removeWatch (WatchManager db wm) watchID = either runFallback runNative wm
+  where
+    runFallback :: PollManager -> WatchID PollManager -> IO ()
+    runFallback = killSession
+    runNative :: NativeManager -> WatchID NativeManager -> IO ()
+    runNative = killSession
 
 threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChanNative listener iface path actPred action =

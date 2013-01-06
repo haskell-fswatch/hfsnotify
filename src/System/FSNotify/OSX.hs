@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE TypeFamilies #-}
 
 module System.FSNotify.OSX
        ( FileListener(..)
@@ -38,7 +39,6 @@ type NativeManager = OSXManager
 
 void :: IO ()
 void = return ()
-
 nil :: Word64
 nil = 0x00
 
@@ -115,6 +115,8 @@ handleEvents actPred chan dbp (event:events) = do
 handleEvents _ _ _ [] = void
 
 instance FileListener OSXManager where
+  type WatchID OSXManager = FSE.EventStream
+
   initSession = do
     (v1, v2, _) <- FSE.osVersion
     if not $ v1 > 10 || (v1 == 10 && v2 > 6) then return Nothing else
@@ -127,11 +129,14 @@ instance FileListener OSXManager where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
+  killListener _ = FSE.eventStreamDestroy
+
   listen db (OSXManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
+    return eventStream
     where
       handler :: FilePath -> DebouncePayload -> FSE.Event -> IO ()
       handler = handleNonRecursiveFSEEvent actPred chan
@@ -141,6 +146,7 @@ instance FileListener OSXManager where
     dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
+    return eventStream
     where
       handler :: DebouncePayload -> FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan
