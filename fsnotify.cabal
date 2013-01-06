@@ -86,7 +86,7 @@ Test-Suite test
                         , uniqueid >= 0.1.1
   if os(linux)
     CPP-Options:        -DOS_Linux
-    Build-Depends:      hinotify == 0.3.2
+    Build-Depends:      hinotify >= 0.3.5 && < 0.4
   else
     if os(windows)
       CPP-Options:      -DOS_Win32
