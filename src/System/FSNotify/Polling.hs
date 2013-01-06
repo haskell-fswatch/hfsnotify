@@ -35,6 +35,7 @@ data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
+
 generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp)
 generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp)
