@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE TypeFamilies #-}
 
 module System.FSNotify.Listener
        ( debounce
@@ -22,6 +23,7 @@ import System.FSNotify.Types
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
 class FileListener sessionType where
+  type WatchID sessionType
   -- | Initialize a file listener instance.
   initSession :: IO (Maybe sessionType) -- ^ Just an initialized file listener,
                                         --   or Nothing if this file listener
@@ -32,17 +34,20 @@ class FileListener sessionType where
   -- watched.
   killSession :: sessionType -> IO ()
 
+  -- | Kill a listener for a specific directory or directory tree.
+  killListener :: sessionType -> WatchID sessionType -> IO ()
+
   -- | Listen for file events associated with the immediate contents of a directory.
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
 
 -- | The default maximum difference (exclusive, in seconds) for two
 -- events to be considered as occuring "at the same time".

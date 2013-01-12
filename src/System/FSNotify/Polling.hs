@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE TypeFamilies #-}
 
 module System.FSNotify.Polling
   ( createPollManager
@@ -33,6 +34,7 @@ data WatchKey = WatchKey ThreadId deriving (Eq, Ord)
 data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
+
 
 generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp)
@@ -92,6 +94,8 @@ createPollManager :: IO PollManager
 createPollManager = fmap PollManager $ newMVar Map.empty
 
 instance FileListener PollManager where
+  type WatchID PollManager = WatchKey
+
   initSession = fmap Just createPollManager
 
   killSession (PollManager mvarMap) = do
@@ -101,14 +105,20 @@ instance FileListener PollManager where
       killThread' :: WatchKey -> IO ()
       killThread' (WatchKey threadId) = killThread threadId
 
+  killListener (PollManager mvarMap) key = modifyMVar_ mvarMap $ return . Map.delete key
+
   listen _ (PollManager mvarMap) path actPred chan  = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap False path'
     threadId <- forkIO $ pollPath False chan path' actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    let key = WatchKey threadId
+    modifyMVar_ mvarMap $ return . Map.insert key (WatchData path' chan)
+    return key
 
   listenRecursive _ (PollManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap True  path'
     threadId <- forkIO $ pollPath True chan path' actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    let key = WatchKey threadId
+    modifyMVar_ mvarMap $ return . Map.insert key (WatchData path' chan)
+    return key

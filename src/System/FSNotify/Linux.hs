@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -25,7 +25,9 @@ import System.FSNotify.Path (findDirs, fp, canonicalizeDirPath)
 import System.FSNotify.Types
 import qualified System.INotify as INo
 
-type NativeManager = INo.INotify
+
+type WatchMap = Map FilePath [INo.WatchDescriptor]
+data NativeManager = NativeManager INo.INotify (MVar WatchMap)
 
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
@@ -68,32 +70,47 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
-  initSession = fmap Just INo.initINotify
+  type WatchID INo.INotify = FilePath
+  initSession = INo.initINotify >>= \iNotify -> return $ Just $ NativeManager iNotify $ newMVar Map.empty
 
   killSession = INo.killINotify
+
+  killListener (NativeManager iNotify watchMap) watchDescriptor =
+    wm <- readMVar mvarMap
+    case lookup watchDescriptor wm of
+      Just watchDescriptors -> fmap INo.removeWatch watchDescriptors
+      Nothing               -> INo.removeWatch watchDescriptor
 
   listen db iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     _ <- INo.addWatch iNotify varieties (encodeString path') (handler path' dbp)
-    void
+    return path'
     where
       handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
       handler = handleInoEvent actPred chan
 
-  listenRecursive db iNotify path actPred chan = do
+  listenRecursive db nm@(NativeManager iNotify watchMap) path actPred chan = do
     path' <- canonicalizeDirPath path
-    paths <- findDirs True path'
-    mapM_ pathHandler (path':paths)
+    _ <- listenRecursive' path' db nm path' actPred chan
+    return path'
+
+listenRecursive' :: FilePath -> WatchConfig -> NativeManager -> FilePath -> ActionPredicate -> EventChannel -> IO INo.WatchDescriptor
+listenRecursive' key db (NativeManager iNotify watchMap) path actPred chan = do
+  paths <- findDirs True path
+  watchDescriptors <- mapM $ pathHandler db iNotify (path:paths)
+  wm <- takeMVar watchMap
+  let prevWatchDescriptors = mabeToList $ lookup key
+  putMVar watchMap $ insert key (watchDescriptors ++ prevWatchDescriptors)
+  return key
     where
-      pathHandler :: FilePath -> IO ()
-      pathHandler filePath = do
+      pathHandler :: WatchConfig -> INo.INotify -> FilePath -> IO INo.WatchDesciptor
+      pathHandler db iNotify filePath = do
         dbp <- newDebouncePayload db
-        _ <- INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
-        void
-        where
-          handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir _   (INo.Created True dirPath) =
-            listenRecursive db iNotify (baseDir </> (fp dirPath)) actPred chan
-          handler baseDir dbp event                      =
-            handleInoEvent actPred chan baseDir dbp event
+        INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
+          where
+            handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
+            handler baseDir _   (INo.Created True dirPath) =
+              listenRecursive' key db iNotify (baseDir </> (fp dirPath)) actPred chan
+            handler baseDir dbp event                      =
+              handleInoEvent actPred chan baseDir dbp event

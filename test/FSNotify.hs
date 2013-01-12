@@ -170,6 +170,8 @@ renameFileSpecR envType (oldFileName, newFileName) = do
     matchers = [ EventPredicate "Rename: File deletion" (matchRemove oldFileName)
                , EventPredicate "Rename: File creation" (matchCreate newFileName) ]
 
+-- TODO: Write specs (tests) for removeWatch.
+
 renameInput :: IO (FilePath, FilePath)
 renameInput = do
   oldName <- testFileName "txt"

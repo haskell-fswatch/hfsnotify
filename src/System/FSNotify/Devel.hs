@@ -31,7 +31,7 @@ treeExtExists :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
          -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO ()
+         -> IO WatchDescriptor
 treeExtExists man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
@@ -42,7 +42,7 @@ treeExtAny :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
          -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO ()
+         -> IO WatchDescriptor
 treeExtAny man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 

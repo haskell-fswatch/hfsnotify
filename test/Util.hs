@@ -18,7 +18,6 @@ import System.Directory
 import System.IO.Error (isPermissionError)
 import System.FSNotify
 import System.FSNotify.Path
-import System.FSNotify.Types
 import System.Random
 import System.Timeout (timeout)
 
@@ -166,14 +165,14 @@ inChanEnv caEnv dtEnv reportPred action eventProcessor chan =
 
 inTempDirChanEnv :: ChanActionEnv -> DirTreeEnv -> ActionPredicate -> TestAction -> EventProcessor-> FilePath -> WatchManager -> EventChannel -> IO ()
 inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan = do
-    watchInEnv caEnv dtEnv manager path reportPred chan
+    _ <- watchInEnv caEnv dtEnv manager path reportPred chan
     runTest $ \mVar -> do
       _ <- actAndReport action path chan $ eventProcessor mVar
       void
     void
 
-actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
-                 WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO WatchDescriptor) ->
+                 WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO WatchDescriptor
 actionAsChan actionFunction wm path ap ec = actionFunction wm path ap (writeChan ec)
 
 watchInEnv :: ChanActionEnv
@@ -182,7 +181,7 @@ watchInEnv :: ChanActionEnv
            -> FilePath
            -> ActionPredicate
            -> EventChannel
-           -> IO ()
+           -> IO WatchDescriptor
 watchInEnv ChanEnv   DirEnv  = watchDirChan
 watchInEnv ChanEnv   TreeEnv = watchTreeChan
 watchInEnv ActionEnv DirEnv  = actionAsChan watchDir

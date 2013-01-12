@@ -22,7 +22,7 @@ import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
 
--- NEXT TODO: Need to ensure we use properly canonalized paths as
+-- TODO: Need to ensure we use properly canonalized paths as
 -- event paths. In Linux this required passing the base dir to
 -- handle[native]Event.
 
