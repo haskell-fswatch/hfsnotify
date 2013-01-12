@@ -8,7 +8,10 @@
 
 module System.FSNotify
        ( Event(..)
- 
+       , EventChannel
+       , Action
+       , ActionPredicate
+
        -- * Starting/Stopping
        , WatchManager
        , withManager
