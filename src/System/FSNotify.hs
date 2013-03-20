@@ -158,11 +158,13 @@ removeWatch (WatchManager _ wm) = either rwFallback rwNative wm
     rwNative wm' (NativeWD wd) = killListener wm' wd
     rwNative _   _             = return ()
 
-threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
+threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) 
+                 -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChanNative listener iface path actPred action =
       threadChan action $ listener iface path actPred
 
-threadChanFallback :: (PollManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> PollManager -> FilePath -> ActionPredicate -> Action -> IO b
+threadChanFallback :: (PollManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) 
+                   -> PollManager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChanFallback listener iface path actPred action =
       threadChan action $ listener iface path actPred
 
