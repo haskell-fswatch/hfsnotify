@@ -8,6 +8,7 @@ module System.FSNotify.Path
        ( fp
        , findFiles
        , findDirs
+       , fileDirContents
        , canonicalizeDirPath
        , canonicalizePath
        ) where
@@ -15,25 +16,31 @@ module System.FSNotify.Path
 import Prelude hiding (FilePath)
 
 import Control.Monad
--- import Filesystem
--- import Filesystem.Path hiding (concat)
 import Filesystem.Path.CurrentOS hiding (concat)
-
 import qualified Filesystem as FS
 import qualified Filesystem.Path as FP
+import qualified Control.Exception as E
+import System.IO.Error
+import Debug.Trace (traceIO)
 
 -- This will ensure than any calls to fp for type coercion in FSNotify will not
 -- break when/if the dependent package moves from using String to the more
 -- efficient Filesystem.Path.FilePath
-class ConvertFilePath a b where
-  fp :: a -> b
+class ConvertFilePath a b where fp :: a -> b
 instance ConvertFilePath FilePath String where fp   = encodeString
 instance ConvertFilePath String FilePath where fp   = decodeString
 instance ConvertFilePath String String where fp     = id
 instance ConvertFilePath FilePath FilePath where fp = id
 
 getDirectoryContentsPath :: FilePath -> IO [FilePath]
-getDirectoryContentsPath path = fmap (map (path </>)) $ FS.listDirectory path
+getDirectoryContentsPath path = dirlist `E.catch` onError where
+    dirlist = fmap (map (path </>)) $ FS.listDirectory path
+    onError :: IOError -> IO [a]
+    onError ioe = reportError ioe >> return []
+    reportError ioe =
+        unless (expectedError ioe) $
+            traceIO ("ERROR loading contents of " ++ show path ++ ": " ++ show ioe)
+    expectedError ioe = isDoesNotExistError ioe || isPermissionError ioe
 
 fileDirContents :: FilePath -> IO ([FilePath],[FilePath])
 fileDirContents path = do

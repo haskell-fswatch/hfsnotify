@@ -1,2 +1,4 @@
 cabal-dev/
 dist/
+*~
+

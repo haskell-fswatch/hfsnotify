@@ -31,7 +31,7 @@ treeExtExists :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
          -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO WatchDescriptor
+         -> IO ()
 treeExtExists man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
@@ -42,27 +42,16 @@ treeExtAny :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
          -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO WatchDescriptor
+         -> IO ()
 treeExtAny man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
 doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
-doAllEvents action event =
-  case event of
-    Added    f _ -> action f
-    Modified f _ -> action f
-    Removed  f _ -> action f
+doAllEvents action = action . eventPath
 
 existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
-existsEvents filt event =
-  case event of
-    Added    f _ -> filt f
-    Modified f _ -> filt f
-    Removed  _ _ -> False
+existsEvents filt event = (isExistsEvent event) && (filt (eventPath event))
 
 allEvents :: (FilePath -> Bool) -> (Event -> Bool)
-allEvents filt event =
-  case event of
-    Added    f _ -> filt f
-    Modified f _ -> filt f
-    Removed  f _ -> filt f
+allEvents filt = filt . eventPath
+

@@ -5,8 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Win32
-       ( FileListener(..)
-       , NativeManager
+       ( newSession
        ) where
 
 import Prelude hiding (FilePath)
@@ -47,16 +46,6 @@ handleWNoEvent actPred chan dbp inoEvent = do
   case maybeEvent of
     Just evt -> handleEvent actPred chan dbp evt
     Nothing  -> void
-handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
-handleEvent actPred chan dbp event =
-  when (actPred event) $ case dbp of
-    (Just (DebounceData epsilon ior)) -> do
-      lastEvent <- readIORef ior
-      when (not $ debounce epsilon lastEvent event) writeToChan
-      atomicModifyIORef ior (\_ -> (event, ()))
-    Nothing                           -> writeToChan
-  where
-    writeToChan = writeChan chan event
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -67,14 +56,10 @@ instance FileListener WNo.WatchManager where
   killSession = WNo.killWatchManager
 
   listen db watchManager path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
     _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan dbp)
     void
 
   listenRecursive db watchManager path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
     _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan dbp)
     void
 

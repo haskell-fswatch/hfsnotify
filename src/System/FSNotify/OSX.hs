@@ -2,15 +2,17 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE TypeFamilies #-}
-
 module System.FSNotify.OSX
-       ( FileListener(..)
-       , NativeManager
+       ( newSession
        ) where
 
-import Prelude hiding (FilePath, catch)
+-- NOTE: this version of FSNotify has recently had a major overhaul.
+-- If someone with access to OSX > 10.6 could cajole the following
+-- code into working order, it'd be appreciated. Following is a best 
+-- effort without compiling it.
 
+import Prelude hiding (FilePath, catch)
+import System.FSNotify.Polling (newPollingSession) -- fallback
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad hiding (void)
@@ -28,17 +30,49 @@ import System.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
 
-data ListenType = NonRecursive | Recursive
-data WatchData = WatchData FSE.EventStream ListenType EventChannel
 
 -- TODO: We really should use something other than FilePath as a key to allow
 -- for more than one listener per FilePath.
-type WatchMap = Map FilePath WatchData
+type WatchMap = Map FilePath FSE.EventStream
 data OSXManager = OSXManager (MVar WatchMap)
-type NativeManager = OSXManager
 
-void :: IO ()
-void = return ()
+newSession :: IO Session 
+newSession = FSE.fileLevelEventsSupported >>= mkSession where
+    mkSession True = fmap osxSession newManager
+    mkSession False = newPollingSession
+
+newManager :: IO OSXManager
+newManager = fmap OSXManager (newMVar Map.empty)
+
+osxSession :: OSXManager -> Session
+osxSession mgr = Session (kill mgr) (clear mgr) (start mgr)
+
+kill :: OSXManager -> IO ()
+kill (OSXManager wm) = modifyMVar killAll >>= mapM_ FSE.eventStreamDestroy where
+    killAll m0 = return (Map.empty, Map.elems m0)
+
+clear :: OSXManager -> FilePath -> IO ()
+clear (OSXManager wm) dir = join $ modifyMVar killDir where
+    killDir m0 = return $ killDir' m0 (Map.lookup dir m0)
+    killDir' m0 Nothing = (m0,return())
+    killDir' m0 (Just es) = (Map.delete dir m0, FSE.eventStreamDestroy es)
+
+
+
+start :: OSXManager -> FilePath -> Action -> IO () 
+start m@(OSXManager wm) dir action = do
+    es <- FSE.eventStreamCreate
+    join $ modifyMVar startDir where
+    startDir m0 = startDir' m0 (Map.lookup dir m0)
+    startDir' m0 Nothing = create >>= \ es -> return (Map.insert dir es m0, return ())
+    startDir' m0 (Just es0) = create >>= \ es -> return (
+         
+    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' eventStream  watchMap)
+
+
+
+
 nil :: Word64
 nil = 0x00
 
@@ -95,58 +129,11 @@ handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
   | otherwise                                                         = handleNonRecursiveEvents actPred chan dirPath dbp events
 handleNonRecursiveEvents _ _ _ _ []                                   = void
 
-handleFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
+handleFSEEvent :: EventChannel -> FSE.Event -> IO ()
 -- handleFSEEvent _       _    _   fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
-handleFSEEvent actPred chan dbp fseEvent = do
+handleFSEEvent chan fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  handleEvents actPred chan dbp events
+  handleEvents chan events
 
-handleEvents :: ActionPredicate -> EventChannel -> DebouncePayload -> [Event] -> IO ()
--- handleEvents actPred _    _   (event:_     ) | trace ("OSX: handleEvents " ++ show event ++ " " ++ show (actPred event)) False = undefined
-handleEvents actPred chan dbp (event:events) = do
-  when (actPred event) $ case dbp of
-      (Just (DebounceData epsilon ior)) -> do
-        lastEvent <- readIORef ior
-        when (not $ debounce epsilon lastEvent event) (writeChan chan event)
-        atomicModifyIORef ior (\_ -> (event, ()))
-      Nothing                           -> writeChan chan event
-  handleEvents actPred chan dbp events
-handleEvents _ _ _ [] = void
 
-instance FileListener OSXManager where
-  type WatchID OSXManager = FSE.EventStream
-
-  initSession = do
-    (v1, v2, _) <- FSE.osVersion
-    if not $ v1 > 10 || (v1 == 10 && v2 > 6) then return Nothing else
-      fmap (Just . OSXManager) $ newMVar Map.empty
-
-  killSession (OSXManager mvarMap) = do
-    watchMap <- readMVar mvarMap
-    forM_ (Map.elems watchMap) eventStreamDestroy'
-    where
-      eventStreamDestroy' :: WatchData -> IO ()
-      eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
-
-  killListener _ = FSE.eventStreamDestroy
-
-  listen db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
-    return eventStream
-    where
-      handler :: FilePath -> DebouncePayload -> FSE.Event -> IO ()
-      handler = handleNonRecursiveFSEEvent actPred chan
-
-  listenRecursive db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
-    return eventStream
-    where
-      handler :: DebouncePayload -> FSE.Event -> IO ()
-      handler = handleFSEEvent actPred chan
