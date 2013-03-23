@@ -63,12 +63,15 @@ clear (Manager wm) dir = join $ modifyMVar wm remDir where
 -- reasoning about concurrency, and will only add a new one if 
 -- still cleared by the time we try.
 start :: Manager -> FilePath -> Action -> IO ()
-start m@(Manager wm) dir action = clear m dir >> modifyMVar wm addDir where
-    addDir m0 = addDir' m0 (Map.lookup dir m0)
-    addDir' m0 Nothing = do
-        tid <- forkIO (pollPathInit dir action)
-        return (Map.insert dir tid m0, ())
-    addDir' m0 _ = return (m0,()) -- concurrent startWatch; the other thread won
+start (Manager wm) dir action = body where
+    body = do
+        w <- newEmptyMVar
+        tid <- forkIO (takeMVar w >> pollPathInit dir action)
+        join $ modifyMVar wm (addDir tid)
+        putMVar w ()
+    addDir tid m0 = addDir' tid m0 (Map.lookup dir m0)
+    addDir' tid m0 Nothing = return (Map.insert dir tid m0, return ())
+    addDir' tid m0 (Just oldTid) = return (Map.insert dir tid m0, killThread oldTid)
    
 pollPathInit :: FilePath -> Action -> IO ()
 pollPathInit dir action = pollPath dir action =<< pathModMap dir
@@ -87,7 +90,7 @@ withTime fr = (,) fr `fmap` getModified (fst fr)
 pollPath :: FilePath -> Action -> PathModMap -> IO ()
 pollPath dir action oldPathMap = do
     threadDelay 1000000
-    newPathMap  <- pathModMap dir
+    newPathMap <- pathModMap dir
     tNow <- getCurrentTime 
     let lOld = Map.toAscList oldPathMap
         lNew = Map.toAscList newPathMap

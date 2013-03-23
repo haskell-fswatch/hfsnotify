@@ -53,8 +53,7 @@ import System.FSNotify.Debounce
 import System.FSNotify.Path
 import qualified Data.Map as Map
 
-import Debug.Trace
-
+-- import Debug.Trace
 #if defined(OS_Linux)
 import System.FSNotify.Linux
 #elif defined(OS_Win32)
@@ -64,6 +63,9 @@ import System.FSNotify.OSX
 #elif defined(USE_POLLING)
 import System.FSNotify.Polling
 #endif
+
+
+
 
 data WatchManager = WatchManager 
     { _wmConfig  :: WatchConfig   -- config data
@@ -221,7 +223,7 @@ watchDir' (WatchManager wc wm _) dir pr action = do
     startWatch wm dir' predDebounceAction
 
 -- | Watch contents of a directory and recursively its subdirectories
--- with the given action-constructor. The action constructor is run 
+-- with the given action constructor. The action constructor is run 
 -- for each new directory. The resulting action is run for events in
 -- said directory by the native implementation, and is not protected.
 -- The action should be short-running, mt-safe, and not sensitive to
@@ -241,13 +243,6 @@ watchTreeCtor' (WatchManager wc wm _) dir pr mkAction = start where
     maybeNewSubdir ev = 
         when (isDirEvent ev && isAddEvent ev) $ do
             childDir <- canonicalizeDirPath (eventPath ev)
-            traceIO ("adding " ++ show childDir)
-            watch childDir `onException` traceIO ("failed to add " ++ show childDir)
-            traceIO ("added " ++ show childDir)
-
-
-
-
-
+            watch childDir 
 
 

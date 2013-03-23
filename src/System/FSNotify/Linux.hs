@@ -15,7 +15,6 @@ module System.FSNotify.Linux
 --  some essential varieties of inotify events?
 --  
 
-
 import Prelude hiding (FilePath)
 
 import Control.Monad (join)
