@@ -23,15 +23,15 @@ import System.FSNotify.Types
 -- channels is very appropriate, but not required.
 --
 -- The possibility of optimizing for recursive listeners exists, but
--- only seems to help for Win32 and seems to hinder compatibility for
--- cross-platform 'removeWatch' behavior. It's excluded for now.
+-- only seems to help for Win32 and seems to hinder compatibility of
+-- behavior between systems for removeWatch or overlapping watches.
 --
 -- NOTE: The Session may assume that all FilePath arguments have
 -- been processed by canonicalizeDirPath.
 data Session = Session
     { killSession :: IO ()
     , clearWatch :: FilePath -> IO ()
-    , startWatch :: FilePath -> (Event -> IO ()) -> IO ()
+    , startWatch :: FilePath -> Action -> IO ()
     }
 
 

@@ -8,15 +8,21 @@ module System.FSNotify.Linux
        ( newSession
        ) where
 
+-- KNOWN ISSUES:
+--
+--  Some files are reporting 'Add' events without intermediate removal.
+--  (e.g. some of the config state from Chrome browser). Might be missing
+--  some essential varieties of inotify events?
+--  
+
+
 import Prelude hiding (FilePath)
 
-import Control.Exception
 import Control.Monad (join)
-import Data.IORef 
+import Control.Concurrent.MVar
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
--- import Debug.Trace (trace)
 import Filesystem.Path.CurrentOS
 import System.FSNotify.Listener
 import System.FSNotify.Path (fp)
@@ -24,7 +30,7 @@ import System.FSNotify.Types
 import qualified System.INotify as INo
 
 type WatchMap  = Map FilePath INo.WatchDescriptor
-data Manager   = Manager INo.INotify (IORef WatchMap)
+data Manager   = Manager INo.INotify (MVar WatchMap)
 
 newSession :: IO Session
 newSession = fmap inoSession newManager
@@ -35,37 +41,26 @@ inoSession m = Session (kill m) (clear m) (start m)
 newManager :: IO Manager
 newManager = do
     ino <- INo.initINotify
-    wm <- newIORef Map.empty
+    wm <- newMVar Map.empty
     return (Manager ino wm)
 
 kill :: Manager -> IO ()
 kill (Manager ino _) = INo.killINotify ino
 
 clear :: Manager -> FilePath -> IO ()
-clear (Manager _ wm) dir = join $ atomicModifyIORef wm clearDir where
-    clearDir m0 = clearDir' m0 (Map.lookup dir m0)
+clear (Manager _ wm) dir = join $ modifyMVar wm clearDir where
+    clearDir m0 = return $ clearDir' m0 (Map.lookup dir m0)
     clearDir' m0 Nothing = (m0,return())
     clearDir' m0 (Just wd) = (Map.delete dir m0, INo.removeWatch wd)
 
--- this one's a little tricky. I want to record the INo.WatchDescriptor
--- atomically with generating it. Fortunately, I don't use the wd, except
--- to record it, so I can leverage Control.Monad.Fix.mfix and Haskell's
--- laziness to tie the knot. (I suppose I could have used an MVar to make
--- this easy. But I prefer wait-free solutions where feasible.)
 start :: Manager -> FilePath -> Action -> IO ()
-start (Manager ino wm) dir action = do
-    let inoHandler = handleInoEvent dir action
-    let inoPath = encodeString dir
-    wd <- INo.addWatch ino varieties inoPath inoHandler
-    join (atomicModifyIORef wm (addWatch dir wd))
+start (Manager ino wm) dir action = body where
+    inoHandler = handleInoEvent dir action
+    inoPath = encodeString dir
+    body = do 
+        wd <- INo.addWatch ino varieties inoPath inoHandler
+        modifyMVar_ wm (return . Map.insert dir wd)
 
-addWatch :: FilePath -> INo.WatchDescriptor -> WatchMap -> (WatchMap,IO())
-addWatch dir wd m0 = addWatch' (Map.lookup dir m0) where
-    addWatch' Nothing = (Map.insert dir wd m0, return ())
-    addWatch' (Just wd0) | (wd0 == wd) = (m0, return ())
-    addWatch' (Just wd0) = assert False $ (m0, INo.removeWatch wd0)
-        -- the 'assert False' is because according to the inotify manual,
-        -- a watch descriptor is supposed to be unique per pathname.
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 

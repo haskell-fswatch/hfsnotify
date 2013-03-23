@@ -53,6 +53,8 @@ import System.FSNotify.Debounce
 import System.FSNotify.Path
 import qualified Data.Map as Map
 
+import Debug.Trace
+
 #if defined(OS_Linux)
 import System.FSNotify.Linux
 #elif defined(OS_Win32)
@@ -234,11 +236,18 @@ watchTreeCtor' (WatchManager wc wm _) dir pr mkAction = start where
         children <- findDirs False subDir
         mapM_ watch children
     wrapRecurse action ev = do
-        maybeNewSubdir ev
         when (pr ev) (action ev)
+        maybeNewSubdir ev
     maybeNewSubdir ev = 
         when (isDirEvent ev && isAddEvent ev) $ do
             childDir <- canonicalizeDirPath (eventPath ev)
-            watch childDir
+            traceIO ("adding " ++ show childDir)
+            watch childDir `onException` traceIO ("failed to add " ++ show childDir)
+            traceIO ("added " ++ show childDir)
+
+
+
+
+
 
 
