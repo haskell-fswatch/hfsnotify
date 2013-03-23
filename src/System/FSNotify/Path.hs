@@ -8,6 +8,7 @@ module System.FSNotify.Path
        ( fp
        , findFiles
        , findDirs
+       , fileDirContents
        , canonicalizeDirPath
        , canonicalizePath
        ) where
@@ -25,8 +26,7 @@ import qualified Filesystem.Path as FP
 -- This will ensure than any calls to fp for type coercion in FSNotify will not
 -- break when/if the dependent package moves from using String to the more
 -- efficient Filesystem.Path.FilePath
-class ConvertFilePath a b where
-  fp :: a -> b
+class ConvertFilePath a b where fp :: a -> b
 instance ConvertFilePath FilePath String where fp   = encodeString
 instance ConvertFilePath String FilePath where fp   = decodeString
 instance ConvertFilePath String String where fp     = id

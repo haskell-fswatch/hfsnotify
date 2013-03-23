@@ -7,11 +7,14 @@ module System.FSNotify.Types
        ( act
        , ActionPredicate
        , Action
+       , MkAction
        , WatchConfig(..)
-       , DebounceData(..)
-       , DebouncePayload
        , Event(..)
+       , AddModRem(..)
+       , IsDir
        , EventChannel
+       , isAddEvent, isModEvent, isExistsEvent, isRemEvent
+       , isDirEvent, isFileEvent 
        , eventPath
        , eventTime
        , IOEvent
@@ -29,47 +32,73 @@ import Filesystem.Path.CurrentOS
 -- canonical path for the file and a timestamp guaranteed to be after the
 -- event occurred (timestamps represent current time when FSEvents receives
 -- it from the OS and/or platform-specific Haskell modules).
-data Event =
-    Added    FilePath UTCTime
-  | Modified FilePath UTCTime
-  | Removed  FilePath UTCTime
-  deriving (Eq, Show)
+data Event = Event AddModRem FilePath UTCTime IsDir deriving (Eq, Show)
+data AddModRem = Add | Mod | Rem deriving (Eq, Ord, Show)
+type IsDir = Bool
+
+-- instance of Ord will order things somewhat intelligently:
+--   order by time, isDir, path, action
+instance Ord Event where
+    compare (Event act1 p1 tm1 dir1) (Event act2 p2 tm2 dir2) =
+        case compare tm1 tm2 of
+            EQ -> case compare dir2 dir1 of
+                EQ -> case compare p1 p2 of
+                    EQ -> compare act1 act2
+                    p -> p
+                d -> d
+            t -> t
+
+-- | Extract information about event type. 
+isAddEvent, isModEvent, isExistsEvent, isRemEvent, isDirEvent, isFileEvent :: Event -> Bool
+isAddEvent (Event Add _ _ _) = True
+isAddEvent _ = False
+isModEvent (Event Mod _ _ _) = True
+isModEvent _ = False
+isRemEvent (Event Rem _ _ _) = True
+isRemEvent _ = False
+isExistsEvent = not . isRemEvent
+isDirEvent (Event _ _ _ b) = b
+isFileEvent = not . isDirEvent
 
 -- | Helper for extracting the path associated with an event.
 eventPath :: Event -> FilePath
-eventPath (Added    path _) = path
-eventPath (Modified path _) = path
-eventPath (Removed  path _) = path
+eventPath (Event _ path _ _) = path
 
 -- | Helper for extracting the time associated with an event.
 eventTime :: Event -> UTCTime
-eventTime (Added    _ timestamp) = timestamp
-eventTime (Modified _ timestamp) = timestamp
-eventTime (Removed  _ timestamp) = timestamp
+eventTime (Event _ _ timestamp _) = timestamp
 
 type EventChannel = Chan Event
 
 -- | Config object, currently used just for debouncing events.
-data WatchConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
+--
+-- To configure in a future-compatible way, use defaultConfig and
+-- add only known properties.
+--
+--    defaultConfig { debounce = 0.002 }
+--
+-- The properties are currently:
+--
+--   debounce - ignore subsequent events on a path if they occur in
+--     less than the debounce time. If debounce is 0 or less, it is
+--     disabled.
+--
+data WatchConfig = WatchConfig 
+    { debounce :: NominalDiffTime
+    }
 
 type IOEvent = IORef Event
-
--- | DebouncePayload contents. Contains epsilon value for debouncing
--- near-simultaneous events and an IORef of the latest Event. Difference in
--- arrival time is measured according to Event value timestamps.
-data DebounceData = DebounceData NominalDiffTime IOEvent
-
--- | Data "payload" passed to event handlers to enable debouncing. This value
--- is automatically derived from a 'WatchConfig' value. A value of Just
--- DebounceData results in debouncing according to the given epsilon and
--- IOEvent. A value of Nothing results in no debouncing.
-type DebouncePayload = Maybe DebounceData
 
 -- | A predicate used to determine whether to act on an event.
 type ActionPredicate = Event -> Bool
 
 -- | An action to be performed in response to an event.
 type Action = Event -> IO ()
+
+-- | For recursive observation, we may need an action per directory.
+-- Here the FilePath is the parent directory, while the events on the
+-- constructed action are for files or immediate child directories.
+type MkAction = FilePath -> IO Action
 
 -- | Predicate to always act.
 act :: ActionPredicate

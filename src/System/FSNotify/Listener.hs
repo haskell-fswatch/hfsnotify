@@ -2,75 +2,36 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE TypeFamilies #-}
-
 module System.FSNotify.Listener
-       ( debounce
-       , epsilonDefault
-       , FileListener(..)
-       , newDebouncePayload
+       ( Session(..)
        ) where
 
 import Prelude hiding (FilePath)
-
-import Data.IORef (newIORef)
-import Data.Time (diffUTCTime, NominalDiffTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS
-import System.FSNotify.Path (fp)
 import System.FSNotify.Types
 
--- | A typeclass that imposes structure on watch managers capable of listening
--- for events, or simulated listening for events.
-class FileListener sessionType where
-  type WatchID sessionType
-  -- | Initialize a file listener instance.
-  initSession :: IO (Maybe sessionType) -- ^ Just an initialized file listener,
-                                        --   or Nothing if this file listener
-                                        --   cannot be supported.
+-- | A Session corresponds to a collection of watch behaviors, up to
+-- one per directory. The given FilePaths must be directories. For
+-- compatibility across filesystems, an 'initWatch' must replace or
+-- stop any existing watch on same directory.
+--
+--    killSession: halt all watches and relase OS resources.
+--    clearWatch: stop watching events on a directory      
+--    startWatch: specify watch action for directory events
+--
+-- All watch actions should be non-blocking and thread-safe. Use of 
+-- channels is very appropriate, but not required.
+--
+-- The possibility of optimizing for recursive listeners exists, but
+-- only seems to help for Win32 and seems to hinder compatibility for
+-- cross-platform 'removeWatch' behavior. It's excluded for now.
+--
+-- NOTE: The Session may assume that all FilePath arguments have
+-- been processed by canonicalizeDirPath.
+data Session = Session
+    { killSession :: IO ()
+    , clearWatch :: FilePath -> IO ()
+    , startWatch :: FilePath -> (Event -> IO ()) -> IO ()
+    }
 
-  -- | Kill a file listener instance.
-  -- This will immediately stop acting on events for all directories being
-  -- watched.
-  killSession :: sessionType -> IO ()
 
-  -- | Kill a listener for a specific directory or directory tree.
-  killListener :: sessionType -> WatchID sessionType -> IO ()
-
-  -- | Listen for file events associated with the immediate contents of a directory.
-  -- Listening for events associated with immediate contents of a directory will
-  -- only report events associated with files within the specified directory, and
-  -- not files within its subdirectories.
-  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
-
-  -- | Listen for file events associated with all the contents of a directory.
-  -- Listening for events associated with all the contents of a directory will
-  -- report events associated with files within the specified directory and its
-  -- subdirectories.
-  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO (WatchID sessionType)
-
--- | The default maximum difference (exclusive, in seconds) for two
--- events to be considered as occuring "at the same time".
-epsilonDefault :: NominalDiffTime
-epsilonDefault = 0.001
-
--- | The default event that provides a basis for comparison.
-eventDefault :: Event
-eventDefault = Added (fp "") (posixSecondsToUTCTime 0)
-
--- | A predicate indicating whether two events may be considered "the same
--- event". This predicate is applied to the most recent dispatched event and
--- the current event after the client-specified ActionPredicate is applied,
--- before the event is dispatched.
-debounce :: NominalDiffTime -> Event -> Event -> Bool
-debounce epsilon e1 e2 =
-  eventPath e1 == eventPath e2 && timeDiff > -epsilon && timeDiff < epsilon
-  where
-    timeDiff = diffUTCTime (eventTime e2) (eventTime e1)
-
--- | Produces a fresh data payload used for debouncing events in a
--- handler.
-newDebouncePayload :: WatchConfig -> IO DebouncePayload
-newDebouncePayload DebounceDefault    = newIORef eventDefault >>= return . Just . DebounceData epsilonDefault
-newDebouncePayload (Debounce epsilon) = newIORef eventDefault >>= return . Just . DebounceData epsilon
-newDebouncePayload NoDebounce         = return Nothing

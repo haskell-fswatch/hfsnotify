@@ -2,14 +2,22 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE TypeFamilies #-}
-
 module System.FSNotify.OSX
-       ( FileListener(..)
-       , NativeManager
+       ( newSession
        ) where
 
 import Prelude hiding (FilePath, catch)
+import System.FSNotify.Polling (newPollingSession)
+
+-- NOTE: this version of FSNotify has recently had a major overhaul.
+-- If someone with access to OSX > 10.6 could cajole the following
+-- code into working order, it'd be appreciated. Following is a best 
+-- effort without compiling it.
+
+
+
+
+{-
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
@@ -115,7 +123,6 @@ handleEvents actPred chan dbp (event:events) = do
 handleEvents _ _ _ [] = void
 
 instance FileListener OSXManager where
-  type WatchID OSXManager = FSE.EventStream
 
   initSession = do
     (v1, v2, _) <- FSE.osVersion
@@ -132,8 +139,6 @@ instance FileListener OSXManager where
   killListener _ = FSE.eventStreamDestroy
 
   listen db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
     return eventStream
@@ -142,11 +147,12 @@ instance FileListener OSXManager where
       handler = handleNonRecursiveFSEEvent actPred chan
 
   listenRecursive db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
     return eventStream
     where
       handler :: DebouncePayload -> FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan
+-}
+
+
