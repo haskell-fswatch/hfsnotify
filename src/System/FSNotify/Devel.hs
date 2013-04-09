@@ -12,6 +12,7 @@ import System.FSNotify
 -- import System.FSNotify.Path (fp)
 
 -- | Example of compiling scss files with compass
+--
 -- @
 -- compass :: WatchManager -> FilePath -> IO ()
 -- compass man dir = do
