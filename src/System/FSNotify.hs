@@ -7,8 +7,13 @@
 -- | cross-platform file watching.
 
 module System.FSNotify
-       ( Event(..)
+       (
+       
+       -- * Events
+         Event(..)
        , EventChannel
+       , eventTime
+       , eventPath
        , Action
        , ActionPredicate
 
