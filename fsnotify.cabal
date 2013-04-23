@@ -1,5 +1,5 @@
 Name:                   fsnotify
-Version:                0.0.9
+Version:                0.0.10
 Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>
 Maintainer:             Mark Dittmer <mark.s.dittmer@gmail.com>, Greg Weber <greg@gregweber.info>
 License:                BSD3
@@ -24,7 +24,7 @@ Library
                         , system-fileio >= 0.3.8 && < 0.4
                         , system-filepath >= 0.4.6 && <= 0.5
                         , text >= 0.11.0
-                        , time >= 1.4
+                        , time >= 1.1
   Exposed-Modules:        System.FSNotify
                         , System.FSNotify.Devel
   Other-Modules:          System.FSNotify.Listener
@@ -59,7 +59,7 @@ Library
 --                 , system-fileio >= 0.3.8
 --                 , system-filepath >= 0.4.6
 --                 , text >= 0.11.0
---                 , time >= 1.4
+--                 , time >= 1.1
 
 Test-Suite test
   Type:                 exitcode-stdio-1.0
@@ -78,7 +78,7 @@ Test-Suite test
                         , system-filepath >= 0.4.6
                         , system-fileio >= 0.3.7
                         , text >= 0.10
-                        , time >= 1.4
+                        , time >= 1.1
                         , QuickCheck >= 2.4.2
                         , uniqueid >= 0.1.1
   if os(linux)
