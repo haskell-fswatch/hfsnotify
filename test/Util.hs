@@ -18,7 +18,6 @@ import Filesystem (createTree, removeTree)
 import System.IO.Error (isPermissionError)
 import System.FSNotify
 import System.FSNotify.Path
-import System.FSNotify.Types
 import System.Random
 import System.Timeout (timeout)
 
