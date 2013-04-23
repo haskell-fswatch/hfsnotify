@@ -14,7 +14,7 @@ import Control.Exception
 import Control.Monad (when)
 import Data.Unique.Id
 import Filesystem.Path.CurrentOS hiding (concat)
-import System.Directory
+import Filesystem (createTree, removeTree)
 import System.IO.Error (isPermissionError)
 import System.FSNotify
 import System.FSNotify.Path
@@ -94,21 +94,19 @@ withNestedTempDir :: FilePath -> (FilePath -> IO ()) -> IO ()
 withNestedTempDir firstPath fn = do
   secondPath <- testName
   let path = if firstPath /= empty then
-               fp $ firstPath </> secondPath
+               firstPath </> secondPath
              else
-               fp secondPath
-  bracket (createDirectory path >> threadDelay dirPreAction >> return path) (attemptDirectoryRemoval . fp) (fn . fp)
+               secondPath
+  bracket (createTree path >> threadDelay dirPreAction >> return path) attemptDirectoryRemoval fn
 
 attemptDirectoryRemoval :: FilePath -> IO ()
 attemptDirectoryRemoval path = do
   threadDelay dirPostAction
   catch
-    (removeDirectoryRecursive pathString)
+    (removeTree path)
     (\e -> when
            (not $ isPermissionError e)
            (throw e))
-  where
-    pathString = fp path
 
 performAction :: TestAction -> FilePath -> IO ()
 performAction action path = action path
