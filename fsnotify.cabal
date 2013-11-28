@@ -96,4 +96,4 @@ Test-Suite test
 
 Source-Repository head
   Type:                 git
-  Location:             git://github.com/mdittmer/hfsnotify
+  Location:             git://github.com/haskell-fswatch/hfsnotify
