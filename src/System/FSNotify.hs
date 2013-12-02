@@ -26,6 +26,7 @@ module System.FSNotify
        , WatchConfig(..)
        , withManagerConf
        , startManagerConf
+       , StopListening
 
        -- * Watching
        , watchDir
@@ -57,6 +58,8 @@ type NativeManager = PollManager
 #    endif
 #  endif
 #endif
+
+import System.FSNotify.Listener (StopListening)
 
 data WatchManager = WatchManager WatchConfig (Either PollManager NativeManager)
 defaultConfig :: WatchConfig
@@ -99,13 +102,13 @@ startManagerConf debounce = initSession >>= createManager
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
 watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
-watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
 watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursive db) wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
@@ -113,7 +116,7 @@ watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursiv
 -- associated with files within the specified directory, and not files
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
-watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 watchDir (WatchManager db wm) = either runFallback runNative wm
   where
     runFallback = threadChanFallback $ listen db
@@ -138,7 +141,7 @@ threadChan action runListener = do
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
-watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO ()
+watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 watchTree (WatchManager db wm) = either runFallback runNative wm
   where
     runFallback = threadChanFallback $ listenRecursive db
