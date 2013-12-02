@@ -7,6 +7,7 @@ module System.FSNotify.Listener
        ( debounce
        , epsilonDefault
        , FileListener(..)
+       , StopListening
        , newDebouncePayload
        ) where
 
@@ -18,6 +19,8 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Filesystem.Path.CurrentOS
 import System.FSNotify.Path (fp)
 import System.FSNotify.Types
+
+type StopListening = IO ()
 
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
@@ -36,13 +39,13 @@ class FileListener sessionType where
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listen :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO ()
+  listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
 
 -- | The default maximum difference (exclusive, in seconds) for two
 -- events to be considered as occuring "at the same time".

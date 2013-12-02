@@ -70,13 +70,13 @@ instance FileListener WNo.WatchManager where
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan dbp)
-    void
+    return $ return ()
 
   listenRecursive db watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan dbp)
-    void
+    return $ return ()
 
 handler :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
 handler = handleWNoEvent

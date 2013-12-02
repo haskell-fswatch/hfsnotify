@@ -132,6 +132,7 @@ instance FileListener OSXManager where
     dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
+    return $ return ()
     where
       handler :: FilePath -> DebouncePayload -> FSE.Event -> IO ()
       handler = handleNonRecursiveFSEEvent actPred chan
@@ -141,6 +142,7 @@ instance FileListener OSXManager where
     dbp <- newDebouncePayload db
     eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
     modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
+    return $ return ()
     where
       handler :: DebouncePayload -> FSE.Event -> IO ()
       handler = handleFSEEvent actPred chan

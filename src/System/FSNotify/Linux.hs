@@ -76,7 +76,7 @@ instance FileListener INo.INotify where
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
     _ <- INo.addWatch iNotify varieties (encodeString path') (handler path' dbp)
-    void
+    return $ return ()
     where
       handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
       handler = handleInoEvent actPred chan
@@ -85,6 +85,7 @@ instance FileListener INo.INotify where
     path' <- canonicalizeDirPath path
     paths <- findDirs True path'
     mapM_ pathHandler (path':paths)
+    return $ return ()
     where
       pathHandler :: FilePath -> IO ()
       pathHandler filePath = do
@@ -93,7 +94,8 @@ instance FileListener INo.INotify where
         void
         where
           handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir _   (INo.Created True dirPath) =
+          handler baseDir _   (INo.Created True dirPath) = do
             listenRecursive db iNotify (baseDir </> (fp dirPath)) actPred chan
+            return ()
           handler baseDir dbp event                      =
             handleInoEvent actPred chan baseDir dbp event

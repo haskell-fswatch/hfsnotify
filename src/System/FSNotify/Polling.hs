@@ -106,9 +106,11 @@ instance FileListener PollManager where
     pmMap <- pathModMap False path'
     threadId <- forkIO $ pollPath False chan path' actPred pmMap
     modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    return $ return ()
 
   listenRecursive _ (PollManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap True  path'
     threadId <- forkIO $ pollPath True chan path' actPred pmMap
     modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    return $ return ()
