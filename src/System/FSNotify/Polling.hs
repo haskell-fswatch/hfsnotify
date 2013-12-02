@@ -91,24 +91,35 @@ pollPath recursive chan filePath actPred oldPathMap = do
 createPollManager :: IO PollManager
 createPollManager = fmap PollManager $ newMVar Map.empty
 
+killWatchingThread :: WatchKey -> IO ()
+killWatchingThread (WatchKey threadId) = killThread threadId
+
+killAndUnregister :: MVar WatchMap -> WatchKey -> IO ()
+killAndUnregister mvarMap wk = do
+  _ <- withMVar mvarMap $ \m -> do
+    killWatchingThread wk
+    return $ Map.delete wk m
+  return ()
+
 instance FileListener PollManager where
   initSession = fmap Just createPollManager
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap
-    forM_ (Map.keys watchMap) killThread'
-    where
-      killThread' :: WatchKey -> IO ()
-      killThread' (WatchKey threadId) = killThread threadId
+    forM_ (Map.keys watchMap) killWatchingThread
 
   listen _ (PollManager mvarMap) path actPred chan  = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap False path'
     threadId <- forkIO $ pollPath False chan path' actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    let wk = WatchKey threadId
+    modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
+    return $ killAndUnregister mvarMap wk
 
   listenRecursive _ (PollManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap True  path'
     threadId <- forkIO $ pollPath True chan path' actPred pmMap
-    modifyMVar_ mvarMap $ return . Map.insert (WatchKey threadId) (WatchData path' chan)
+    let wk = WatchKey threadId
+    modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
+    return $ killAndUnregister mvarMap wk
