@@ -82,6 +82,13 @@ instance FileListener INo.INotify where
       handler = handleInoEvent actPred chan
 
   listenRecursive db iNotify path actPred chan = do
+    -- wdVar stores the list of created watch descriptors. We use it to
+    -- cancel the whole recursive listening task.
+    --
+    -- To avoid a race condition (when a new watch is added right after
+    -- we've stopped listening), we replace the MVar contents with Nothing
+    -- to signify that the listening task is cancelled, and no new watches
+    -- should be added.
     wdVar <- newIORef (Just [])
     listenRecursiveWatchVar wdVar db iNotify path actPred chan
     return $ stopListening wdVar
@@ -102,26 +109,18 @@ listenRecursiveWatchVar wdVar db iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
     paths <- findDirs True path'
 
-    -- wdVar stores the list of created watch descriptors. We use it to
-    -- cancel the whole recursive listening task.
-    --
-    -- To avoid a race condition (when a new watch is added right after
-    -- we've stopped listening), we replace the MVar contents with Nothing
-    -- to signify that the listening task is cancelled, and no new watches
-    -- should be added.
-
-
     newWatches <- mapM pathHandler (path':paths)
-    -- should do something nicer
     addWatches newWatches
     return ()
   where
-    addWatches newWatches = atomicModifyIORef' wdVar $ \mbWds ->
-        -- Atomically add a watch and record its descriptor. Also, check
-        -- if the listening task is cancelled, in which case do nothing.
-        case mbWds of
-          Nothing -> (mbWds, ())
-          Just wds -> (Just $ newWatches ++ wds, ())
+    -- Atomically add watch descriptors to the list.
+    -- if the listening task is already cancelled then cancel the watches instead of adding them
+    addWatches newWatches = do
+        added <- atomicModifyIORef' wdVar $ \mbWds ->
+            case mbWds of
+              Nothing -> (mbWds, False)
+              Just wds -> (Just $ newWatches ++ wds, True)
+        unless added $ mapM_ INo.removeWatch newWatches
 
     pathHandler :: FilePath -> IO INo.WatchDescriptor
     pathHandler filePath = do
