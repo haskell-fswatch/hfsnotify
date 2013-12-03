@@ -13,10 +13,9 @@ module System.FSNotify.Linux
 import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
-import Control.Concurrent.MVar
 import Control.Exception
-import Control.Monad (when)
-import Data.IORef (atomicModifyIORef, readIORef)
+import Control.Monad (when, unless)
+import Data.IORef (atomicModifyIORef', readIORef, newIORef, IORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 -- import Debug.Trace (trace)
@@ -57,8 +56,8 @@ handleEvent actPred chan dbp (Just event) =
   when (actPred event) $ case dbp of
     (Just (DebounceData epsilon ior)) -> do
       lastEvent <- readIORef ior
-      when (not $ debounce epsilon lastEvent event) writeToChan
-      atomicModifyIORef ior (\_ -> (event, ()))
+      unless (debounce epsilon lastEvent event) writeToChan
+      atomicModifyIORef' ior (const (event, ()))
     Nothing                           -> writeToChan
   where
     writeToChan = writeChan chan event
@@ -83,9 +82,6 @@ instance FileListener INo.INotify where
       handler = handleInoEvent actPred chan
 
   listenRecursive db iNotify path actPred chan = do
-    path' <- canonicalizeDirPath path
-    paths <- findDirs True path'
-
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -93,34 +89,46 @@ instance FileListener INo.INotify where
     -- we've stopped listening), we replace the MVar contents with Nothing
     -- to signify that the listening task is cancelled, and no new watches
     -- should be added.
-    wdVar <- newMVar (Just [])
-
-    let
-      stopListening = do
-        withMVar wdVar $ \mbWds -> do
-          maybe (return ()) (mapM_ INo.removeWatch) mbWds
-          return Nothing
-        return ()
-
-    mapM_ (pathHandler wdVar) (path':paths)
-    return stopListening
+    wdVar <- newIORef (Just [])
+    listenRecursiveWatchVar wdVar db iNotify path actPred chan
+    return $ stopListening wdVar
     where
-      pathHandler :: MVar (Maybe [INo.WatchDescriptor]) -> FilePath -> IO ()
-      pathHandler wdVar filePath = do
-        dbp <- newDebouncePayload db
-        withMVar wdVar $ \mbWds ->
-          -- Atomically add a watch and record its descriptor. Also, check
-          -- if the listening task is cancelled, in which case do nothing.
-          case mbWds of
-            Nothing -> return mbWds
-            Just wds -> do
-              wd <- INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
-              return $ Just (wd:wds)
-        return ()
-        where
-          handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir _   (INo.Created True dirPath) = do
-            listenRecursive db iNotify (baseDir </> (fp dirPath)) actPred chan
-            return ()
-          handler baseDir dbp event                      =
-            handleInoEvent actPred chan baseDir dbp event
+      stopListening wdVar = do
+          mbWds <- atomicModifyIORef' wdVar $ \mbWds -> (Nothing, mbWds)
+          maybe (return ()) (mapM_ INo.removeWatch) mbWds
+
+
+listenRecursiveWatchVar :: IORef (Maybe [INo.WatchDescriptor])
+                           -> WatchConfig
+                           -> INo.INotify
+                           -> FilePath
+                           -> ActionPredicate
+                           -> EventChannel
+                           -> IO ()
+listenRecursiveWatchVar wdVar db iNotify path actPred chan = do
+    path' <- canonicalizeDirPath path
+    paths <- findDirs True path'
+
+    newWatches <- mapM pathHandler (path':paths)
+    addWatches newWatches
+    return ()
+  where
+    -- Atomically add watch descriptors to the list.
+    -- if the listening task is already cancelled then cancel the watches instead of adding them
+    addWatches newWatches = do
+        added <- atomicModifyIORef' wdVar $ \mbWds ->
+            case mbWds of
+              Nothing -> (mbWds, False)
+              Just wds -> (Just $ newWatches ++ wds, True)
+        unless added $ mapM_ INo.removeWatch newWatches
+
+    pathHandler :: FilePath -> IO INo.WatchDescriptor
+    pathHandler filePath = do
+      dbp <- newDebouncePayload db
+      INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
+      where
+        handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
+        handler baseDir _   (INo.Created True dirPath) =
+          listenRecursiveWatchVar wdVar db iNotify (baseDir </> fp dirPath) actPred chan
+        handler baseDir dbp event                      =
+          handleInoEvent actPred chan baseDir dbp event
