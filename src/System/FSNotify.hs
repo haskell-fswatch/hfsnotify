@@ -120,6 +120,13 @@ watchTreeChan (WatchManager db wm) = listenRecursive db wm
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 watchDir (WatchManager db wm) = threadChan (listen db) wm
 
+-- | Watch all the contents of a directory by committing an Action for each event.
+-- Watching all the contents of a directory will report events associated with
+-- files within the specified directory and its subdirectories. No two events
+-- pertaining to the same FilePath will be executed concurrently.
+watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+watchTree (WatchManager db wm) = threadChan (listenRecursive db) wm
+
 threadChan
   :: FileListener manager
   => (manager -> FilePath -> ActionPredicate -> Chan Event -> IO b)
@@ -129,16 +136,6 @@ threadChan listener iface path actPred action = do
   withAsync (readEvents chan action Map.empty) $ \asy -> do
     link asy
     listener iface path actPred chan
-
--- | Watch all the contents of a directory by committing an Action for each event.
--- Watching all the contents of a directory will report events associated with
--- files within the specified directory and its subdirectories. No two events
--- pertaining to the same FilePath will be executed concurrently.
-watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchTree (WatchManager db wm) = threadChan (listenRecursive db) wm
-
-type ThreadLock = MVar ()
-type PathLockMap = Map FilePath ThreadLock
 
 readEvents :: EventChannel -> Action -> PathLockMap -> IO ()
 readEvents chan action  pathMap = do
