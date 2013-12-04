@@ -38,9 +38,6 @@ type CurriedEventProcessor = TestReport -> IO (TestResult)
 type EventProcessor = MTestResult -> CurriedEventProcessor
 data EventPredicate = EventPredicate String (Event -> Bool)
 
-void :: IO ()
-void = return ()
-
 predicateName :: EventPredicate -> String
 predicateName (EventPredicate name _) = name
 
@@ -138,7 +135,7 @@ timeoutTest mResult (Just _) = do
   result <- readMVar mResult
   case result of
     (TestResult False _ _) -> error $ show result
-    (TestResult True  _ _) -> void
+    (TestResult True  _ _) -> return ()
 
 runTest :: TestCase -> IO ()
 runTest test = do
@@ -166,8 +163,8 @@ inTempDirChanEnv caEnv dtEnv reportPred action eventProcessor path manager chan 
     watchInEnv caEnv dtEnv manager path reportPred chan
     runTest $ \mVar -> do
       _ <- actAndReport action path chan $ eventProcessor mVar
-      void
-    void
+      return ()
+    return ()
 
 actionAsChan :: (WatchManager -> FilePath -> ActionPredicate -> Action       -> IO ()) ->
                  WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO ()

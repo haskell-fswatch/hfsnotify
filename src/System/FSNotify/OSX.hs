@@ -12,7 +12,7 @@ import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Monad hiding (void)
+import Control.Monad
 import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
@@ -35,9 +35,6 @@ data WatchData = WatchData FSE.EventStream ListenType EventChannel
 type WatchMap = Map FilePath WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 type NativeManager = OSXManager
-
-void :: IO ()
-void = return ()
 
 nil :: Word64
 nil = 0x00
@@ -93,7 +90,7 @@ handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
       Nothing                           -> writeChan chan event
     handleNonRecursiveEvents actPred chan dirPath dbp events
   | otherwise                                                         = handleNonRecursiveEvents actPred chan dirPath dbp events
-handleNonRecursiveEvents _ _ _ _ []                                   = void
+handleNonRecursiveEvents _ _ _ _ []                                   = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
 -- handleFSEEvent _       _    _   fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
@@ -112,7 +109,7 @@ handleEvents actPred chan dbp (event:events) = do
         atomicModifyIORef ior (\_ -> (event, ()))
       Nothing                           -> writeChan chan event
   handleEvents actPred chan dbp events
-handleEvents _ _ _ [] = void
+handleEvents _ _ _ [] = return ()
 
 instance FileListener OSXManager where
   initSession = do

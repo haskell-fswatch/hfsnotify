@@ -26,9 +26,6 @@ type NativeManager = WNo.WatchManager
 -- event paths. In Linux this required passing the base dir to
 -- handle[native]Event.
 
-void :: IO ()
-void = return ()
-
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
 fsnEvent :: UTCTime -> WNo.Event -> Maybe Event
 fsnEvent timestamp (WNo.Created  False name) = Just $ Added    (fp name) timestamp
@@ -46,7 +43,7 @@ handleWNoEvent actPred chan dbp inoEvent = do
   let maybeEvent = fsnEvent currentTime inoEvent
   case maybeEvent of
     Just evt -> handleEvent actPred chan dbp evt
-    Nothing  -> void
+    Nothing  -> return ()
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
 handleEvent actPred chan dbp event =
   when (actPred event) $ case dbp of

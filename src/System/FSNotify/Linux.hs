@@ -30,9 +30,6 @@ type NativeManager = INo.INotify
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
 
-void :: IO ()
-void = return ()
-
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
 fsnEvent :: FilePath -> UTCTime -> INo.Event -> Maybe Event
@@ -62,7 +59,7 @@ handleEvent actPred chan dbp (Just event) =
   where
     writeToChan = writeChan chan event
 -- handleEvent _ _ _ Nothing | trace ("Linux handleEvent Nothing") False = undefined
-handleEvent _ _ _ Nothing = void
+handleEvent _ _ _ Nothing = return ()
 
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
@@ -91,7 +88,7 @@ instance FileListener INo.INotify where
       pathHandler filePath = do
         dbp <- newDebouncePayload db
         _ <- INo.addWatch iNotify varieties (fp filePath) (handler filePath dbp)
-        void
+        return ()
         where
           handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
           handler baseDir _   (INo.Created True dirPath) = do
