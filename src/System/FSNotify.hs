@@ -38,6 +38,7 @@ module System.FSNotify
 import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Applicative
 import Data.Map (Map)
@@ -125,8 +126,9 @@ threadChan
   ->  manager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChan listener iface path actPred action = do
   chan <- newChan
-  _    <- forkIO $ readEvents chan action Map.empty
-  listener iface path actPred chan
+  withAsync (readEvents chan action Map.empty) $ \asy -> do
+    link asy
+    listener iface path actPred chan
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with

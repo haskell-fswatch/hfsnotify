@@ -25,6 +25,7 @@ Library
                         , system-filepath >= 0.4.6 && <= 0.5
                         , text >= 0.11.0
                         , time >= 1.1
+                        , async >= 2.0.1
   Exposed-Modules:        System.FSNotify
                         , System.FSNotify.Devel
   Other-Modules:          System.FSNotify.Listener
