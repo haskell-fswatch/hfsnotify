@@ -41,11 +41,10 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Applicative
-import Data.Map (Map)
+import Control.Monad
 import Filesystem.Path.CurrentOS
 import System.FSNotify.Polling
 import System.FSNotify.Types
-import qualified Data.Map as Map
 
 import System.FSNotify.Listener (StopListening)
 
@@ -133,18 +132,19 @@ threadChan
   ->  manager -> FilePath -> ActionPredicate -> Action -> IO b
 threadChan listener iface path actPred action = do
   chan <- newChan
-  withAsync (readEvents chan action Map.empty) $ \asy -> do
+  withAsync (readEvents chan action) $ \asy -> do
     link asy
     listener iface path actPred chan
 
-readEvents :: EventChannel -> Action -> PathLockMap -> IO ()
-readEvents chan action  pathMap = do
+readEvents :: EventChannel -> Action -> IO ()
+readEvents chan action = forever $ do
   event <- readChan chan
-  let path = eventPath event
-  mVar <- getMVar $ Map.lookup path pathMap
-  _ <- takeMVar mVar >> (forkIO $ action event `finally` putMVar mVar ())
-  readEvents chan action  $ Map.insert path mVar pathMap
-  where
-    getMVar :: Maybe ThreadLock -> IO ThreadLock
-    getMVar (Just tl) = return tl
-    getMVar Nothing   = newMVar ()
+  us <- myThreadId
+  -- Execute the event handler in a separate thread, but throw any
+  -- exceptions back to us.
+  --
+  -- Note that there's a possibility that we may miss some exceptions, if
+  -- an event handler finishes after the listen is cancelled (and so this
+  -- thread is dead). How bad is that? The alternative is to kill the
+  -- handler anyway when we're cancelling.
+  forkFinally (action event) $ either (throwTo us) (const $ return ())
