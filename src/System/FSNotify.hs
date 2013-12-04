@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification #-}
 
 -- | cross-platform file watching.
 
@@ -39,6 +39,7 @@ import Prelude hiding (FilePath, catch)
 
 import Control.Concurrent
 import Control.Exception
+import Control.Applicative
 import Data.Map (Map)
 import Filesystem.Path.CurrentOS
 import System.FSNotify.Polling
@@ -61,7 +62,9 @@ type NativeManager = PollManager
 #  endif
 #endif
 
-data WatchManager = WatchManager WatchConfig (Either PollManager NativeManager)
+data WatchManager
+  =  forall manager . FileListener manager
+  => WatchManager WatchConfig manager
 defaultConfig :: WatchConfig
 defaultConfig = DebounceDefault
 
@@ -83,10 +86,7 @@ startManager = startManagerConf defaultConfig
 -- Stopping a watch manager will immediately stop
 -- watching for files and free resources.
 stopManager :: WatchManager -> IO ()
-stopManager (WatchManager _ wm) =
-  case wm of
-    Right native -> killSession native
-    Left poll    -> killSession poll
+stopManager (WatchManager _ wm) = killSession wm
 
 withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
 withManagerConf debounce = bracket (startManagerConf debounce) stopManager
@@ -95,21 +95,21 @@ startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf debounce = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
-    createManager (Just nativeManager) = return (WatchManager debounce (Right nativeManager))
-    createManager Nothing = return . (WatchManager debounce) . Left =<< createPollManager
+    createManager (Just nativeManager) = return (WatchManager debounce nativeManager)
+    createManager Nothing = WatchManager debounce <$> createPollManager
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
-watchDirChan (WatchManager db wm) = either (listen db) (listen db) wm
+watchDirChan (WatchManager db wm) = listen db wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
-watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursive db) wm
+watchTreeChan (WatchManager db wm) = listenRecursive db wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
@@ -117,35 +117,23 @@ watchTreeChan (WatchManager db wm) = either (listenRecursive db) (listenRecursiv
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchDir (WatchManager db wm) = either runFallback runNative wm
-  where
-    runFallback = threadChanFallback $ listen db
-    runNative   = threadChanNative   $ listen db
+watchDir (WatchManager db wm) = threadChan (listen db) wm
 
-threadChanNative :: (NativeManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> NativeManager -> FilePath -> ActionPredicate -> Action -> IO b
-threadChanNative listener iface path actPred action =
-      threadChan action $ listener iface path actPred
-
-threadChanFallback :: (PollManager -> FilePath -> ActionPredicate -> Chan Event -> IO b) -> PollManager -> FilePath -> ActionPredicate -> Action -> IO b
-threadChanFallback listener iface path actPred action =
-      threadChan action $ listener iface path actPred
-
-threadChan :: Action -> (Chan Event -> IO b) -> IO b
-threadChan action runListener = do
-      chan <- newChan
-      _    <- forkIO $ readEvents chan action Map.empty
-      runListener chan
-
+threadChan
+  :: FileListener manager
+  => (manager -> FilePath -> ActionPredicate -> Chan Event -> IO b)
+  ->  manager -> FilePath -> ActionPredicate -> Action -> IO b
+threadChan listener iface path actPred action = do
+  chan <- newChan
+  _    <- forkIO $ readEvents chan action Map.empty
+  listener iface path actPred chan
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchTree (WatchManager db wm) = either runFallback runNative wm
-  where
-    runFallback = threadChanFallback $ listenRecursive db
-    runNative   = threadChanNative   $ listenRecursive db
+watchTree (WatchManager db wm) = threadChan (listenRecursive db) wm
 
 type ThreadLock = MVar ()
 type PathLockMap = Map FilePath ThreadLock
