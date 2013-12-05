@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes #-}
 
 -- | cross-platform file watching.
 
@@ -37,6 +37,7 @@ module System.FSNotify
 
 import Prelude hiding (FilePath, catch)
 
+import Data.Maybe
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
@@ -64,7 +65,10 @@ type NativeManager = PollManager
 
 data WatchManager
   =  forall manager . FileListener manager
-  => WatchManager WatchConfig manager
+  => WatchManager
+       WatchConfig
+       manager
+       (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
 defaultConfig :: WatchConfig
 defaultConfig = DebounceDefault
 
@@ -86,7 +90,10 @@ startManager = startManagerConf defaultConfig
 -- Stopping a watch manager will immediately stop
 -- watching for files and free resources.
 stopManager :: WatchManager -> IO ()
-stopManager (WatchManager _ wm) = killSession wm
+stopManager (WatchManager _ wm cleanupVar) = do
+  mbCleanup <- swapMVar cleanupVar Nothing
+  fromMaybe (return ()) mbCleanup
+  killSession wm
 
 withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
 withManagerConf debounce = bracket (startManagerConf debounce) stopManager
@@ -95,21 +102,24 @@ startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf debounce = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
-    createManager (Just nativeManager) = return (WatchManager debounce nativeManager)
-    createManager Nothing = WatchManager debounce <$> createPollManager
+    createManager (Just nativeManager) =
+      WatchManager debounce nativeManager <$> cleanupVar
+    createManager Nothing =
+      WatchManager debounce <$> createPollManager <*> cleanupVar
+    cleanupVar = newMVar (Just (return ()))
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
-watchDirChan (WatchManager db wm) = listen db wm
+watchDirChan (WatchManager db wm _) = listen db wm
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTreeChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
-watchTreeChan (WatchManager db wm) = listenRecursive db wm
+watchTreeChan (WatchManager db wm _) = listenRecursive db wm
 
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
@@ -117,24 +127,35 @@ watchTreeChan (WatchManager db wm) = listenRecursive db wm
 -- within its subdirectories. No two events pertaining to the same FilePath will
 -- be executed concurrently.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchDir (WatchManager db wm) = threadChan (listen db) wm
+watchDir wm = threadChan listen wm
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories. No two events
 -- pertaining to the same FilePath will be executed concurrently.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchTree (WatchManager db wm) = threadChan (listenRecursive db) wm
+watchTree wm = threadChan listenRecursive wm
 
 threadChan
-  :: FileListener manager
-  => (manager -> FilePath -> ActionPredicate -> Chan Event -> IO b)
-  ->  manager -> FilePath -> ActionPredicate -> Action -> IO b
-threadChan listener iface path actPred action = do
-  chan <- newChan
-  withAsync (readEvents chan action) $ \asy -> do
-    link asy
-    listener iface path actPred chan
+  :: (forall sessionType . FileListener sessionType =>
+      WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening)
+      -- (^ this is the type of listen and listenRecursive)
+  ->  WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
+  modifyMVar cleanupVar $ \mbCleanup ->
+  case mbCleanup of
+    -- check if we've been stopped
+    Nothing -> return (Nothing, return ()) -- or throw an exception?
+    Just cleanup -> do
+      chan <- newChan
+      asy <- async $ readEvents chan action
+      link asy
+      stopListener <- listenFn db listener path actPred chan
+      let cleanThisUp = cancel asy
+      return
+        ( Just $ cleanup >> cleanThisUp
+        , stopListener >> cleanThisUp
+        )
 
 readEvents :: EventChannel -> Action -> IO ()
 readEvents chan action = forever $ do
