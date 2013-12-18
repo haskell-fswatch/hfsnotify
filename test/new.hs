@@ -17,7 +17,7 @@ import Text.Printf
 
 -- Time to wait for events, microseconds
 timeInterval :: Int
-timeInterval = 10^5
+timeInterval = 5*10^5
 
 delay :: IO ()
 delay = threadDelay timeInterval
