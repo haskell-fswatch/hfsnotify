@@ -18,29 +18,36 @@ import Data.Time (getCurrentTime, UTCTime)
 import System.FSNotify.Listener
 import System.FSNotify.Path (fp, canonicalizeDirPath)
 import System.FSNotify.Types
+import Filesystem.Path
 import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
+
+-- | Apparently Win32 gives back relative paths, so we pass around the base
+-- directory to turn them into absolute ones
+type BaseDir = FilePath
 
 -- NEXT TODO: Need to ensure we use properly canonalized paths as
 -- event paths. In Linux this required passing the base dir to
 -- handle[native]Event.
 
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
-fsnEvent :: UTCTime -> WNo.Event -> Maybe Event
-fsnEvent timestamp (WNo.Created  False name) = Just $ Added    (fp name) timestamp
-fsnEvent timestamp (WNo.Modified False name) = Just $ Modified (fp name) timestamp
-fsnEvent timestamp (WNo.Deleted  False name) = Just $ Removed  (fp name) timestamp
-fsnEvent _         _                         = Nothing
+fsnEvent :: BaseDir -> UTCTime -> WNo.Event -> Maybe Event
+fsnEvent basedir timestamp ev =
+  case ev of
+    WNo.Created  False name -> Just $ Added    (basedir </> fp name) timestamp
+    WNo.Modified False name -> Just $ Modified (basedir </> fp name) timestamp
+    WNo.Deleted  False name -> Just $ Removed  (basedir </> fp name) timestamp
+    _                       -> Nothing
 {-
 fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
 fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
 -}
 
-handleWNoEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
-handleWNoEvent actPred chan dbp inoEvent = do
+handleWNoEvent :: BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
+handleWNoEvent basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
-  let maybeEvent = fsnEvent currentTime inoEvent
+  let maybeEvent = fsnEvent basedir currentTime inoEvent
   case maybeEvent of
     Just evt -> handleEvent actPred chan dbp evt
     Nothing  -> return ()
@@ -66,17 +73,14 @@ instance FileListener WNo.WatchManager where
   listen db watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
-    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handler actPred chan dbp)
+    _ <- WNo.watchDirectory watchManager (fp path') False varieties (handleWNoEvent path' actPred chan dbp)
     return $ return ()
 
   listenRecursive db watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload db
-    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handler actPred chan dbp)
+    _ <- WNo.watchDirectory watchManager (fp path') True varieties (handleWNoEvent path' actPred chan dbp)
     return $ return ()
-
-handler :: ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
-handler = handleWNoEvent
 
 varieties :: [WNo.EventVariety]
 varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]
