@@ -74,9 +74,10 @@ gatherEvents
 gatherEvents watch path = do
   mgr <- startManagerConf NoDebounce
   eventsVar <- newIORef []
-  _ <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
+  stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
   async $ do
     delay
+    stop
     reverse <$> readIORef eventsVar
 
 expectEvents
