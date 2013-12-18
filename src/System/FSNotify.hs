@@ -149,7 +149,12 @@ threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
     Just cleanup -> do
       chan <- newChan
       asy <- async $ readEvents chan action
-      link asy
+      -- Ideally, the the asy thread should be linked to the current one
+      -- (@link asy@), so that it doesn't die quietly.
+      -- However, if we do that, then cancelling asy will also kill
+      -- ourselves. I haven't figured out how to do this (probably we
+      -- should just abandon async and use lower-level primitives). For now
+      -- we don't link the thread.
       stopListener <- listenFn db listener path actPred chan
       let cleanThisUp = cancel asy
       return
