@@ -13,9 +13,13 @@ main = defaultMain $
     (createDirectory $ encodeString testDirPath)
     (const $ removeDirectoryRecursive $ encodeString testDirPath) $
     testGroup "Tests"
-      [ tNewFile
-      , tModFile
-      , tDelFile
+      [ testGroup "Non-recursive"
+        [ tNewFile
+        , tModFile
+        , tDelFile
+        , tCreateRmDir
+        , tNonRec
+        ]
       ]
 
 tNewFile = testCase "new file" $ do
@@ -36,3 +40,17 @@ tDelFile = testCase "remove file" $ do
   delay
   expectEventsHere [evRemoved f] $
     removeFile (encodeString f)
+
+tCreateRmDir = testCase "directories are ignored" $ do
+  let dir = testDirPath </> "tCreateRmDir"
+  expectEventsHere [] $ do
+    createDirectory (encodeString dir)
+    removeDirectory (encodeString dir)
+
+tNonRec = testCase "doesn't watch recursively" $ do
+  let dir = testDirPath </> "tNonRecDir"
+      fInDir = dir </> "file"
+  createDirectory (encodeString dir)
+  expectEventsHere [] $ do
+    writeFile  (encodeString fInDir) "foo"
+    removeFile (encodeString fInDir)
