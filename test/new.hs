@@ -5,52 +5,45 @@ import Test.Tasty.HUnit
 import Filesystem.Path
 import Filesystem.Path.CurrentOS
 import System.Directory
+import Text.Printf
+import Control.Monad
+import Control.Exception
 
 import EventUtils
 
+subdirPath = testDirPath </> "subdir"
+
 main = defaultMain $
   withResource
-    (createDirectory $ encodeString testDirPath)
+    (createDirectoryIfMissing True (encodeString subdirPath))
     (const $ removeDirectoryRecursive $ encodeString testDirPath) $
-    testGroup "Tests"
-      [ testGroup "Non-recursive"
-        [ tNewFile
-        , tModFile
-        , tDelFile
-        , tCreateRmDir
-        , tNonRec
-        ]
-      ]
+    tests
 
-tNewFile = testCase "new file" $ do
-  let f = testDirPath </> "tNewFile"
-  expectEventsHere [evAdded f, evModified f] $
-    writeFile (encodeString f) "foo"
+tests = testGroup "Tests" $ do
+  recursive <- [False, True]
+  return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
+  nested <- [False, True]
+  return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
+  t <-
+    [ mkTest "new file" [evAdded, evModified] (const $ return ()) (\f -> writeFile f "foo")
+    , mkTest "modify file" [evModified] (\f -> writeFile f "") (\f -> writeFile f "foo")
+    , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
+    , mkTest "directories are ignored" [] (const $ return ())
+        (\f -> createDirectory f >> removeDirectory f)
+    ]
+  return $ t nested recursive
+  where
+    mkTest title evs prepare action nested recursive =
+      testCase title $ do
+        let baseDir = if nested then subdirPath else testDirPath
+            f = baseDir </> filename
+            fStr = encodeString f
+            expectEvents =
+              if recursive
+                then expectEventsHereRec
+                else expectEventsHere
+        (prepare fStr >>
+         expectEvents (if not nested || recursive then map ($ f) evs else []) (action fStr))
+          `finally` (doesFileExist fStr >>= \b -> when b (removeFile fStr))
 
-tModFile = testCase "modify file" $ do
-  let f = testDirPath </> "tModFile"
-  writeFile (encodeString f) ""
-  delay
-  expectEventsHere [evModified f] $
-    writeFile (encodeString f) "foo"
-
-tDelFile = testCase "remove file" $ do
-  let f = testDirPath </> "tDelFile"
-  writeFile (encodeString f) ""
-  delay
-  expectEventsHere [evRemoved f] $
-    removeFile (encodeString f)
-
-tCreateRmDir = testCase "directories are ignored" $ do
-  let dir = testDirPath </> "tCreateRmDir"
-  expectEventsHere [] $ do
-    createDirectory (encodeString dir)
-    removeDirectory (encodeString dir)
-
-tNonRec = testCase "doesn't watch recursively" $ do
-  let dir = testDirPath </> "tNonRecDir"
-      fInDir = dir </> "file"
-  createDirectory (encodeString dir)
-  expectEventsHere [] $ do
-    writeFile  (encodeString fInDir) "foo"
-    removeFile (encodeString fInDir)
+    filename = "testfile"
