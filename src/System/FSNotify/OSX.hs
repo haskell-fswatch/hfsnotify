@@ -18,6 +18,7 @@ import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
+import Data.Unique
 import Filesystem (isFile)
 import Filesystem.Path hiding (concat)
 import System.FSNotify.Listener
@@ -29,9 +30,7 @@ import qualified System.OSX.FSEvents as FSE
 data ListenType = NonRecursive | Recursive
 data WatchData = WatchData FSE.EventStream ListenType EventChannel
 
--- TODO: We really should use something other than FilePath as a key to allow
--- for more than one listener per FilePath.
-type WatchMap = Map FilePath WatchData
+type WatchMap = Map Unique WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 type NativeManager = OSXManager
 
@@ -113,8 +112,9 @@ listenFn
 listenFn handler db (OSXManager mvarMap) path actPred chan = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload db
+  unique <- newUnique
   eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler actPred chan path' dbp)
-  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
+  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream NonRecursive chan) watchMap)
   return $ return ()
 
 instance FileListener OSXManager where
