@@ -115,7 +115,9 @@ listenFn handler db (OSXManager mvarMap) path actPred chan = do
   unique <- newUnique
   eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler actPred chan path' dbp)
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream NonRecursive chan) watchMap)
-  return $ return ()
+  return $ do
+    FSE.eventStreamDestroy eventStream
+    modifyMVar_ mvarMap $ \watchMap -> return $ Map.delete unique watchMap
 
 instance FileListener OSXManager where
   initSession = do
