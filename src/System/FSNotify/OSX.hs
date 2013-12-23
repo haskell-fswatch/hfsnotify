@@ -102,6 +102,21 @@ handleEvents actPred chan dbp (event:events) = do
   handleEvents actPred chan dbp events
 handleEvents _ _ _ [] = return ()
 
+listenFn
+  :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
+  -> WatchConfig
+  -> OSXManager
+  -> FilePath
+  -> ActionPredicate
+  -> EventChannel
+  -> IO StopListening
+listenFn handler db (OSXManager mvarMap) path actPred chan = do
+  path' <- canonicalizeDirPath path
+  dbp <- newDebouncePayload db
+  eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler actPred chan path' dbp)
+  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
+  return $ return ()
+
 instance FileListener OSXManager where
   initSession = do
     (v1, v2, _) <- FSE.osVersion
@@ -115,22 +130,6 @@ instance FileListener OSXManager where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
 
-  listen db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler path' dbp)
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream NonRecursive chan) watchMap)
-    return $ return ()
-    where
-      handler :: FilePath -> DebouncePayload -> FSE.Event -> IO ()
-      handler = handleNonRecursiveFSEEvent actPred chan
+  listen = listenFn handleNonRecursiveFSEEvent
 
-  listenRecursive db (OSXManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
-    eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True $ handler dbp
-    modifyMVar_ mvarMap $ \watchMap -> return (Map.insert path' (WatchData eventStream Recursive chan) watchMap)
-    return $ return ()
-    where
-      handler :: DebouncePayload -> FSE.Event -> IO ()
-      handler = handleFSEEvent actPred chan
+  listenRecursive = listenFn $ \actPred chan path -> handleFSEEvent actPred chan
