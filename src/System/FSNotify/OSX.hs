@@ -18,7 +18,6 @@ import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word
--- import Debug.Trace (trace)
 import Filesystem (isFile)
 import Filesystem.Path hiding (concat)
 import System.FSNotify.Listener
@@ -69,17 +68,11 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
 -- hfsevents package doesn't support non-recursive event reporting.
 
 handleNonRecursiveFSEEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
--- handleNonRecursiveFSEEvent _       _    dirPath _   fseEvent | trace ("OSX: handleNonRecursiveFSEEvent " ++ show dirPath ++ " " ++ show fseEvent) False = undefined
 handleNonRecursiveFSEEvent actPred chan dirPath dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleNonRecursiveEvents actPred chan dirPath dbp events
 handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
--- handleNonRecursiveEvents actPred _    dirPath _   (event:_     ) | trace (   "OSX: handleNonRecursiveEvents "
---                                                                       ++ show dirPath ++ " " ++ show event
---                                                                       ++ "\n  " ++ fp (directory dirPath)
---                                                                       ++ "\n  " ++ fp (directory (eventPath event))
---                                                                       ++ "\n  " ++ show (actPred event)) False = undefined
 handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
   | directory dirPath == directory (eventPath event) && actPred event = do
     case dbp of
@@ -93,14 +86,12 @@ handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
 handleNonRecursiveEvents _ _ _ _ []                                   = return ()
 
 handleFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
--- handleFSEEvent _       _    _   fseEvent | trace ("OSX: handleFSEEvent " ++ show fseEvent) False = undefined
 handleFSEEvent actPred chan dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleEvents actPred chan dbp events
 
 handleEvents :: ActionPredicate -> EventChannel -> DebouncePayload -> [Event] -> IO ()
--- handleEvents actPred _    _   (event:_     ) | trace ("OSX: handleEvents " ++ show event ++ " " ++ show (actPred event)) False = undefined
 handleEvents actPred chan dbp (event:events) = do
   when (actPred event) $ case dbp of
       (Just (DebounceData epsilon ior)) -> do
