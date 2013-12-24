@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams #-}
 module EventUtils where
 
 import Prelude hiding (FilePath)
@@ -15,12 +15,8 @@ import System.IO.Unsafe
 import System.Directory
 import Text.Printf
 
--- Time to wait for events, microseconds
-timeInterval :: Int
-timeInterval = 5*10^5
-
-delay :: IO ()
-delay = threadDelay timeInterval
+delay :: (?timeInterval :: Int) => IO ()
+delay = threadDelay ?timeInterval
 
 -- event patterns
 data EventPattern = EventPattern
@@ -65,7 +61,8 @@ instance Show EventPattern where
   show p = printf "%s %s" (patName p) (show $ patFile p)
 
 gatherEvents
-  :: Bool -- use polling?
+  :: (?timeInterval :: Int)
+  => Bool -- use polling?
   -> (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
      -- (^ this is the type of watchDir/watchTree)
   -> FilePath
@@ -74,7 +71,7 @@ gatherEvents poll watch path = do
   mgr <- startManagerConf defaultConfig
     { confDebounce = NoDebounce
     , confUsePolling = poll
-    , confPollInterval = timeInterval `div` 2
+    , confPollInterval = ?timeInterval `div` 2
     }
   eventsVar <- newIORef []
   stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
@@ -84,7 +81,8 @@ gatherEvents poll watch path = do
     reverse <$> readIORef eventsVar
 
 expectEvents
-  :: Bool
+  :: (?timeInterval :: Int)
+  => Bool
   -> (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
   -> FilePath -> [EventPattern] -> IO () -> Assertion
 expectEvents poll w path pats action = do

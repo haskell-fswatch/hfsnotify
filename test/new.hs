@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams #-}
 import Prelude hiding (FilePath)
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -9,6 +9,7 @@ import System.FSNotify
 import Text.Printf
 import Control.Monad
 import Control.Exception
+import Control.Concurrent
 
 import EventUtils
 
@@ -35,6 +36,10 @@ tests hasNative = testGroup "Tests" $ do
     if hasNative
       then [False, True]
       else [True]
+  let ?timeInterval =
+        if poll
+          then 2*10^6
+          else 5*10^5
   return $ testGroup (if poll then "Polling" else "Native") $ do
   recursive <- [False, True]
   return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
@@ -42,7 +47,8 @@ tests hasNative = testGroup "Tests" $ do
   return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
   t <-
     [ mkTest "new file" [evAdded, evModified] (const $ return ()) (\f -> writeFile f "foo")
-    , mkTest "modify file" [evModified] (\f -> writeFile f "") (\f -> writeFile f "foo")
+    , mkTest "modify file" [evModified] (\f -> writeFile f "")
+        (\f -> when poll (threadDelay $ 10^6) >> writeFile f "foo")
     , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
     , mkTest "directories are ignored" [] (const $ return ())
         (\f -> createDirectory f >> removeDirectory f)
