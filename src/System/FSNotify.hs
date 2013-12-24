@@ -28,6 +28,7 @@ module System.FSNotify
        , withManagerConf
        , startManagerConf
        , StopListening
+       , isPollingManager
 
        -- * Watching
        , watchDir
@@ -118,6 +119,10 @@ startManagerConf conf
       WatchManager conf <$> createPollManager <*> cleanupVar
 
     cleanupVar = newMVar (Just (return ()))
+
+-- | Does this manager use polling?
+isPollingManager :: WatchManager -> Bool
+isPollingManager (WatchManager _ wm _) = usesPolling wm
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events

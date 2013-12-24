@@ -135,3 +135,5 @@ instance FileListener OSXManager where
   listen = listenFn handleNonRecursiveFSEEvent
 
   listenRecursive = listenFn $ \actPred chan path -> handleFSEEvent actPred chan
+
+  usesPolling = const False

@@ -47,6 +47,9 @@ class FileListener sessionType where
   -- subdirectories.
   listenRecursive :: WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
 
+  -- | Does this manager use polling?
+  usesPolling :: sessionType -> Bool
+
 -- | The default maximum difference (exclusive, in seconds) for two
 -- events to be considered as occuring "at the same time".
 epsilonDefault :: NominalDiffTime

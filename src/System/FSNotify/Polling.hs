@@ -123,3 +123,5 @@ instance FileListener PollManager where
     let wk = WatchKey threadId
     modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
     return $ killAndUnregister mvarMap wk
+
+  usesPolling = const True

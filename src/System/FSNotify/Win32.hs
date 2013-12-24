@@ -82,5 +82,7 @@ instance FileListener WNo.WatchManager where
     wid <- WNo.watchDirectory watchManager (fp path') True varieties (handleWNoEvent path' actPred chan dbp)
     return $ WNo.killWatch wid
 
+  usesPolling = const False
+
 varieties :: [WNo.EventVariety]
 varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]

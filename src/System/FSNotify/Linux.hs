@@ -124,3 +124,5 @@ instance FileListener INo.INotify where
             listenRec (baseDir </> fp dirPath) wdVar
           handler baseDir dbp event                      =
             handleInoEvent actPred chan baseDir dbp event
+
+  usesPolling = const False
