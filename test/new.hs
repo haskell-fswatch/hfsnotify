@@ -46,7 +46,10 @@ tests hasNative = testGroup "Tests" $ do
   nested <- [False, True]
   return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
   t <-
-    [ mkTest "new file" [evAdded, evModified] (const $ return ()) (\f -> writeFile f "foo")
+    [ mkTest "new file"
+        (if poll then [evAdded] else [evAdded, evModified])
+        (const $ return ())
+        (\f -> writeFile f "foo")
     , mkTest "modify file" [evModified] (\f -> writeFile f "")
         (\f -> when poll (threadDelay $ 10^6) >> writeFile f "foo")
     , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
