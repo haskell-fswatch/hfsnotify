@@ -59,9 +59,9 @@ pathModMap' files = fmap Map.fromList $ mapM pathAndTime files
       modTime <- getModified path
       return (path, modTime)
 
-pollPath :: Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()
-pollPath recursive chan filePath actPred oldPathMap = do
-  threadDelay 1000000
+pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()
+pollPath interval recursive chan filePath actPred oldPathMap = do
+  threadDelay interval
   newPathMap  <- pathModMap recursive filePath
   currentTime <- getCurrentTime
   let deletedMap = Map.difference oldPathMap newPathMap
@@ -83,7 +83,7 @@ pollPath recursive chan filePath actPred oldPathMap = do
     handleEvents = mapM_ (handleEvent chan actPred)
 
     pollPath' :: Map FilePath UTCTime -> IO ()
-    pollPath' = pollPath recursive chan filePath actPred
+    pollPath' = pollPath interval recursive chan filePath actPred
 
 
 -- Additional init funciton exported to allow startManager to unconditionally
@@ -108,18 +108,18 @@ instance FileListener PollManager where
     watchMap <- readMVar mvarMap
     forM_ (Map.keys watchMap) killWatchingThread
 
-  listen _ (PollManager mvarMap) path actPred chan  = do
+  listen conf (PollManager mvarMap) path actPred chan  = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap False path'
-    threadId <- forkIO $ pollPath False chan path' actPred pmMap
+    threadId <- forkIO $ pollPath (confPollInterval conf) False chan path' actPred pmMap
     let wk = WatchKey threadId
     modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
     return $ killAndUnregister mvarMap wk
 
-  listenRecursive _ (PollManager mvarMap) path actPred chan = do
+  listenRecursive conf (PollManager mvarMap) path actPred chan = do
     path' <- canonicalizeDirPath path
     pmMap <- pathModMap True  path'
-    threadId <- forkIO $ pollPath True chan path' actPred pmMap
+    threadId <- forkIO $ pollPath (confPollInterval conf) True chan path' actPred pmMap
     let wk = WatchKey threadId
     modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
     return $ killAndUnregister mvarMap wk

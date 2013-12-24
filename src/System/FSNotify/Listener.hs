@@ -68,7 +68,7 @@ debounce epsilon e1 e2 =
 
 -- | Produces a fresh data payload used for debouncing events in a
 -- handler.
-newDebouncePayload :: WatchConfig -> IO DebouncePayload
+newDebouncePayload :: Debounce -> IO DebouncePayload
 newDebouncePayload DebounceDefault    = newIORef eventDefault >>= return . Just . DebounceData epsilonDefault
 newDebouncePayload (Debounce epsilon) = newIORef eventDefault >>= return . Just . DebounceData epsilon
 newDebouncePayload NoDebounce         = return Nothing

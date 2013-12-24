@@ -109,9 +109,9 @@ listenFn
   -> ActionPredicate
   -> EventChannel
   -> IO StopListening
-listenFn handler db (OSXManager mvarMap) path actPred chan = do
+listenFn handler conf (OSXManager mvarMap) path actPred chan = do
   path' <- canonicalizeDirPath path
-  dbp <- newDebouncePayload db
+  dbp <- newDebouncePayload $ confDebounce conf
   unique <- newUnique
   eventStream <- FSE.eventStreamCreate [fp path'] 0.0 True False True (handler actPred chan path' dbp)
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream NonRecursive chan) watchMap)

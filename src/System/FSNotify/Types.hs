@@ -8,6 +8,7 @@ module System.FSNotify.Types
        , ActionPredicate
        , Action
        , WatchConfig(..)
+       , Debounce(..)
        , DebounceData(..)
        , DebouncePayload
        , Event(..)
@@ -50,7 +51,16 @@ eventTime (Removed  _ timestamp) = timestamp
 type EventChannel = Chan Event
 
 -- | Config object, currently used just for debouncing events.
-data WatchConfig = DebounceDefault | Debounce NominalDiffTime | NoDebounce
+data WatchConfig = WatchConfig
+  { confDebounce :: Debounce
+  , confPollInterval :: Int
+    -- ^ Polling interval if polling is used (microseconds)
+  , confUsePolling :: Bool
+    -- ^ Force use of polling, even if a more effective method may be
+    -- available. This is mostly for testing purposes.
+  }
+
+data Debounce = DebounceDefault | Debounce NominalDiffTime | NoDebounce
 
 type IOEvent = IORef Event
 

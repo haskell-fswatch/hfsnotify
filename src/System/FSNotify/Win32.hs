@@ -70,15 +70,15 @@ instance FileListener WNo.WatchManager where
 
   killSession = WNo.killWatchManager
 
-  listen db watchManager path actPred chan = do
+  listen conf watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
+    dbp <- newDebouncePayload $ confDebounce conf
     wid <- WNo.watchDirectory watchManager (fp path') False varieties (handleWNoEvent path' actPred chan dbp)
     return $ WNo.killWatch wid
 
-  listenRecursive db watchManager path actPred chan = do
+  listenRecursive conf watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
+    dbp <- newDebouncePayload $ confDebounce conf
     wid <- WNo.watchDirectory watchManager (fp path') True varieties (handleWNoEvent path' actPred chan dbp)
     return $ WNo.killWatch wid
 

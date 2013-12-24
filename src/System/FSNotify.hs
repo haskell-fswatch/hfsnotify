@@ -8,7 +8,7 @@
 
 module System.FSNotify
        (
-       
+
        -- * Events
          Event(..)
        , EventChannel
@@ -24,6 +24,7 @@ module System.FSNotify
        , stopManager
        , defaultConfig
        , WatchConfig(..)
+       , Debounce(..)
        , withManagerConf
        , startManagerConf
        , StopListening
@@ -70,7 +71,12 @@ data WatchManager
        manager
        (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
 defaultConfig :: WatchConfig
-defaultConfig = DebounceDefault
+defaultConfig =
+  WatchConfig
+    { confDebounce = DebounceDefault
+    , confPollInterval = 10^6 -- 1 second
+    , confUsePolling = False
+    }
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.
@@ -96,16 +102,21 @@ stopManager (WatchManager _ wm cleanupVar) = do
   killSession wm
 
 withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
-withManagerConf debounce = bracket (startManagerConf debounce) stopManager
+withManagerConf conf = bracket (startManagerConf conf) stopManager
 
 startManagerConf :: WatchConfig -> IO WatchManager
-startManagerConf debounce = initSession >>= createManager
+startManagerConf conf
+  | confUsePolling conf = pollingManager
+  | otherwise = initSession >>= createManager
   where
     createManager :: Maybe NativeManager -> IO WatchManager
     createManager (Just nativeManager) =
-      WatchManager debounce nativeManager <$> cleanupVar
-    createManager Nothing =
-      WatchManager debounce <$> createPollManager <*> cleanupVar
+      WatchManager conf nativeManager <$> cleanupVar
+    createManager Nothing = pollingManager
+
+    pollingManager =
+      WatchManager conf <$> createPollManager <*> cleanupVar
+
     cleanupVar = newMVar (Just (return ()))
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.

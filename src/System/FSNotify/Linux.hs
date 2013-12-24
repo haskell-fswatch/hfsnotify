@@ -70,16 +70,16 @@ instance FileListener INo.INotify where
 
   killSession = INo.killINotify
 
-  listen db iNotify path actPred chan = do
+  listen conf iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload db
+    dbp <- newDebouncePayload $ confDebounce conf
     wd <- INo.addWatch iNotify varieties (encodeString path') (handler path' dbp)
     return $ INo.removeWatch wd
     where
       handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
       handler = handleInoEvent actPred chan
 
-  listenRecursive db iNotify initialPath actPred chan = do
+  listenRecursive conf iNotify initialPath actPred chan = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -109,7 +109,7 @@ instance FileListener INo.INotify where
 
       pathHandler :: MVar (Maybe [INo.WatchDescriptor]) -> FilePath -> IO ()
       pathHandler wdVar filePath = do
-        dbp <- newDebouncePayload db
+        dbp <- newDebouncePayload $ confDebounce conf
         modifyMVar_ wdVar $ \mbWds ->
           -- Atomically add a watch and record its descriptor. Also, check
           -- if the listening task is cancelled, in which case do nothing.
