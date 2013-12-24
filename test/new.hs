@@ -20,6 +20,8 @@ main = defaultMain $
     tests
 
 tests = testGroup "Tests" $ do
+  poll <- [False, True]
+  return $ testGroup (if poll then "Polling" else "Native") $ do
   recursive <- [False, True]
   return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
   nested <- [False, True]
@@ -31,17 +33,18 @@ tests = testGroup "Tests" $ do
     , mkTest "directories are ignored" [] (const $ return ())
         (\f -> createDirectory f >> removeDirectory f)
     ]
-  return $ t nested recursive
+  return $ t nested recursive poll
   where
-    mkTest title evs prepare action nested recursive =
+    mkTest title evs prepare action nested recursive poll =
       testCase title $ do
         let baseDir = if nested then subdirPath else testDirPath
             f = baseDir </> filename
             fStr = encodeString f
             expectEvents =
-              if recursive
+              (if recursive
                 then expectEventsHereRec
-                else expectEventsHere
+                else expectEventsHere)
+              poll
         (prepare fStr >>
          expectEvents (if not nested || recursive then map ($ f) evs else []) (action fStr))
           `finally` (doesFileExist fStr >>= \b -> when b (removeFile fStr))

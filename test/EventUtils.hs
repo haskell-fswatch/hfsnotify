@@ -65,12 +65,17 @@ instance Show EventPattern where
   show p = printf "%s %s" (patName p) (show $ patFile p)
 
 gatherEvents
-  :: (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
+  :: Bool -- use polling?
+  -> (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
      -- (^ this is the type of watchDir/watchTree)
   -> FilePath
   -> IO (Async [Event])
-gatherEvents watch path = do
-  mgr <- startManagerConf NoDebounce
+gatherEvents poll watch path = do
+  mgr <- startManagerConf defaultConfig
+    { confDebounce = NoDebounce
+    , confUsePolling = poll
+    , confPollInterval = timeInterval `div` 2
+    }
   eventsVar <- newIORef []
   stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
   async $ do
@@ -79,10 +84,11 @@ gatherEvents watch path = do
     reverse <$> readIORef eventsVar
 
 expectEvents
-  :: (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
+  :: Bool
+  -> (WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening)
   -> FilePath -> [EventPattern] -> IO () -> Assertion
-expectEvents w path pats action = do
-  a <- gatherEvents w path
+expectEvents poll w path pats action = do
+  a <- gatherEvents poll w path
   action
   evs <- wait a
   matchEvents pats evs
@@ -90,5 +96,5 @@ expectEvents w path pats action = do
 testDirPath :: FilePath
 testDirPath = decodeString (unsafePerformIO getCurrentDirectory) </> "testdir"
 
-expectEventsHere = expectEvents watchDir testDirPath
-expectEventsHereRec = expectEvents watchTree testDirPath
+expectEventsHere poll = expectEvents poll watchDir testDirPath
+expectEventsHereRec poll = expectEvents poll watchTree testDirPath
