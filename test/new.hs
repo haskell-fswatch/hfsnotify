@@ -5,6 +5,7 @@ import Test.Tasty.HUnit
 import Filesystem.Path
 import Filesystem.Path.CurrentOS
 import System.Directory
+import System.FSNotify
 import Text.Printf
 import Control.Monad
 import Control.Exception
@@ -13,14 +14,27 @@ import EventUtils
 
 subdirPath = testDirPath </> "subdir"
 
-main = defaultMain $
-  withResource
-    (createDirectoryIfMissing True (encodeString subdirPath))
-    (const $ removeDirectoryRecursive $ encodeString testDirPath) $
-    tests
+nativeMgrSupported :: IO Bool
+nativeMgrSupported = do
+  mgr <- startManager
+  stopManager mgr
+  return $ not $ isPollingManager mgr
 
-tests = testGroup "Tests" $ do
-  poll <- [False, True]
+main = do
+  hasNative <- nativeMgrSupported
+  unless hasNative $
+    putStrLn "WARNING: native manager cannot be used or tested on this platform"
+  defaultMain $
+    withResource
+      (createDirectoryIfMissing True (encodeString subdirPath))
+      (const $ removeDirectoryRecursive $ encodeString testDirPath) $
+      tests hasNative
+
+tests hasNative = testGroup "Tests" $ do
+  poll <-
+    if hasNative
+      then [False, True]
+      else [True]
   return $ testGroup (if poll then "Polling" else "Native") $ do
   recursive <- [False, True]
   return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
