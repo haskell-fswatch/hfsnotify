@@ -71,7 +71,7 @@ gatherEvents poll watch path = do
   mgr <- startManagerConf defaultConfig
     { confDebounce = NoDebounce
     , confUsePolling = poll
-    , confPollInterval = ?timeInterval `div` 2
+    , confPollInterval = 2 * 10^5
     }
   eventsVar <- newIORef []
   stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
