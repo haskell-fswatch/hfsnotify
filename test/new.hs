@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings, ImplicitParams #-}
-import Prelude hiding (FilePath)
+import Prelude hiding
+  ( FilePath, writeFile, writeFile, removeFile
+  , createDirectory, removeDirectory)
 import Test.Tasty
 import Test.Tasty.HUnit
+import Filesystem
 import Filesystem.Path
 import Filesystem.Path.CurrentOS
-import System.Directory
 import System.FSNotify
 import Text.Printf
 import Control.Monad
@@ -27,8 +29,8 @@ main = do
     putStrLn "WARNING: native manager cannot be used or tested on this platform"
   defaultMain $
     withResource
-      (createDirectoryIfMissing True (encodeString subdirPath))
-      (const $ removeDirectoryRecursive $ encodeString testDirPath) $
+      (createTree subdirPath)
+      (const $ removeTree testDirPath) $
       tests hasNative
 
 tests hasNative = testGroup "Tests" $ do
@@ -54,7 +56,7 @@ tests hasNative = testGroup "Tests" $ do
         (\f -> when poll (threadDelay $ 10^6) >> writeFile f "foo")
     , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
     , mkTest "directories are ignored" [] (const $ return ())
-        (\f -> createDirectory f >> removeDirectory f)
+        (\f -> createDirectory False f >> removeDirectory f)
     ]
   return $ t nested recursive poll
   where
@@ -62,14 +64,13 @@ tests hasNative = testGroup "Tests" $ do
       testCase title $ do
         let baseDir = if nested then subdirPath else testDirPath
             f = baseDir </> filename
-            fStr = encodeString f
             expectEvents =
               (if recursive
                 then expectEventsHereRec
                 else expectEventsHere)
               poll
-        (prepare fStr >>
-         expectEvents (if not nested || recursive then map ($ f) evs else []) (action fStr))
-          `finally` (doesFileExist fStr >>= \b -> when b (removeFile fStr))
+        (prepare f >>
+         expectEvents (if not nested || recursive then map ($ f) evs else []) (action f))
+          `finally` (isFile f >>= \b -> when b (removeFile f))
 
     filename = "testfile"

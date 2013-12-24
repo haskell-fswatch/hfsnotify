@@ -73,7 +73,8 @@ Test-Suite test
   Build-depends:          base >= 4.3.1.0
                         , tasty >= 0.5
                         , tasty-hunit
-                        , system-filepath
+                        , system-filepath >= 0.4.7
+                        , system-fileio >= 0.3.11
                         , directory
                         , fsnotify
                         , async >= 2
