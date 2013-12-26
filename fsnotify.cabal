@@ -78,6 +78,7 @@ Test-Suite test
                         , directory
                         , fsnotify
                         , async >= 2
+                        , temporary >= 1.1.2
 
 Source-Repository head
   Type:                 git

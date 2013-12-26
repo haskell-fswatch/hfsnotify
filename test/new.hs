@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams, ViewPatterns #-}
 import Prelude hiding
   ( FilePath, writeFile, writeFile, removeFile
   , createDirectory, removeDirectory)
@@ -8,14 +8,13 @@ import Filesystem
 import Filesystem.Path
 import Filesystem.Path.CurrentOS
 import System.FSNotify
+import System.IO.Temp
 import Text.Printf
 import Control.Monad
 import Control.Exception
 import Control.Concurrent
 
 import EventUtils
-
-subdirPath = testDirPath </> "subdir"
 
 nativeMgrSupported :: IO Bool
 nativeMgrSupported = do
@@ -29,9 +28,9 @@ main = do
     putStrLn "WARNING: native manager cannot be used or tested on this platform"
   defaultMain $
     withResource
-      (createTree subdirPath)
+      (createTree testDirPath)
       (const $ removeTree testDirPath) $
-      tests hasNative
+      const $ tests hasNative
 
 tests hasNative = testGroup "Tests" $ do
   poll <-
@@ -61,16 +60,17 @@ tests hasNative = testGroup "Tests" $ do
   return $ t nested recursive poll
   where
     mkTest title evs prepare action nested recursive poll =
-      testCase title $ do
-        let baseDir = if nested then subdirPath else testDirPath
+      testCase title $
+        withTempDirectory (encodeString testDirPath) "test." $ \(decodeString -> watchedDir) -> do
+        let baseDir = if nested then watchedDir </> "subdir" else watchedDir
             f = baseDir </> filename
-            expectEvents =
-              (if recursive
-                then expectEventsHereRec
-                else expectEventsHere)
-              poll
+            expect =
+              expectEvents poll
+                (if recursive then watchTree else watchDir)
+                watchedDir
+        createDirectory True baseDir
         (prepare f >>
-         expectEvents (if not nested || recursive then map ($ f) evs else []) (action f))
+         expect (if not nested || recursive then map ($ f) evs else []) (action f))
           `finally` (isFile f >>= \b -> when b (removeFile f))
 
     filename = "testfile"
