@@ -1,6 +1,11 @@
 Changes
 =======
 
+Version 0.1.0.1
+---------------
+
+Include CHANGELOG.md and README.md in the source distribution.
+
 Version 0.1
 -----------
 
