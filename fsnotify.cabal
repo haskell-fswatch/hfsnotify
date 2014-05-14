@@ -18,10 +18,10 @@ Extra-Source-Files:
 
 
 Library
-  Build-Depends:          base >= 4.3.1.0 && < 5
+  Build-Depends:          base >= 4.3.1 && < 5
                         , containers >= 0.4
-                        , system-fileio >= 0.3.8 && < 0.4
-                        , system-filepath >= 0.4.6 && <= 0.5
+                        , system-fileio >= 0.3.8
+                        , system-filepath >= 0.4.6
                         , text >= 0.11.0
                         , time >= 1.1
                         , async >= 2.0.1
@@ -36,7 +36,7 @@ Library
   if os(linux)
     CPP-Options:        -DOS_Linux
     Other-Modules:      System.FSNotify.Linux
-    Build-Depends:      hinotify >= 0.3.7 && < 0.4
+    Build-Depends:      hinotify >= 0.3.7
   else
     if os(windows)
       CPP-Options:      -DOS_Win32
