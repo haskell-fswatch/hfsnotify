@@ -65,12 +65,15 @@ type NativeManager = PollManager
 #  endif
 #endif
 
+-- | Watch manager. You need one in order to create watching jobs.
 data WatchManager
   =  forall manager . FileListener manager
   => WatchManager
        WatchConfig
        manager
        (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
+
+-- | Default configuration
 defaultConfig :: WatchConfig
 defaultConfig =
   WatchConfig
@@ -102,9 +105,11 @@ stopManager (WatchManager _ wm cleanupVar) = do
   fromMaybe (return ()) mbCleanup
   killSession wm
 
+-- | Like 'withManager', but configurable
 withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
 withManagerConf conf = bracket (startManagerConf conf) stopManager
 
+-- | Like 'startManager', but configurable
 startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf conf
   | confUsePolling conf = pollingManager

@@ -20,6 +20,7 @@ import Filesystem.Path.CurrentOS
 import System.FSNotify.Path (fp)
 import System.FSNotify.Types
 
+-- | An action that cancels a watching/listening job
 type StopListening = IO ()
 
 -- | A typeclass that imposes structure on watch managers capable of listening

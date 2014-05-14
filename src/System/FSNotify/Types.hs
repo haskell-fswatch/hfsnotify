@@ -50,9 +50,10 @@ eventTime (Removed  _ timestamp) = timestamp
 
 type EventChannel = Chan Event
 
--- | Config object, currently used just for debouncing events.
+-- | Watch configuration
 data WatchConfig = WatchConfig
   { confDebounce :: Debounce
+    -- ^ Debounce configuration
   , confPollInterval :: Int
     -- ^ Polling interval if polling is used (microseconds)
   , confUsePolling :: Bool
@@ -60,7 +61,15 @@ data WatchConfig = WatchConfig
     -- available. This is mostly for testing purposes.
   }
 
-data Debounce = DebounceDefault | Debounce NominalDiffTime | NoDebounce
+-- | This specifies whether events close to each other should be collapsed
+-- together, and how close is close enough.
+data Debounce
+  = DebounceDefault
+    -- ^ perform debouncing based on the default time interval
+  | Debounce NominalDiffTime
+    -- ^ perform debouncing based on the specified time interval
+  | NoDebounce
+    -- ^ do not perform debouncing
 
 type IOEvent = IORef Event
 
