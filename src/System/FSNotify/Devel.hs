@@ -4,7 +4,7 @@ module System.FSNotify.Devel
     allEvents, existsEvents
   ) where
 
-import Prelude hiding (FilePath, catch)
+import Prelude hiding (FilePath)
 
 import Data.Text
 import Filesystem.Path.CurrentOS

@@ -8,7 +8,7 @@ module System.FSNotify.OSX
        , NativeManager
        ) where
 
-import Prelude hiding (FilePath, catch)
+import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar

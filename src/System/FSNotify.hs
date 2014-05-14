@@ -37,7 +37,7 @@ module System.FSNotify
        , watchTreeChan
        ) where
 
-import Prelude hiding (FilePath, catch)
+import Prelude hiding (FilePath)
 
 import Data.Maybe
 import Control.Concurrent
@@ -78,7 +78,7 @@ defaultConfig :: WatchConfig
 defaultConfig =
   WatchConfig
     { confDebounce = DebounceDefault
-    , confPollInterval = 10^6 -- 1 second
+    , confPollInterval = 10^(6 :: Int) -- 1 second
     , confUsePolling = False
     }
 
