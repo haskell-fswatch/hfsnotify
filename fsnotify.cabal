@@ -13,6 +13,8 @@ Category:               Filesystem
 Cabal-Version:          >= 1.8
 Build-Type:             Simple
 Extra-Source-Files:
+  README.md
+  CHANGELOG.md
   test/test.hs
   test/EventUtils.hs
 
