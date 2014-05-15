@@ -7,7 +7,7 @@ License-File:           LICENSE
 Synopsis:               Cross platform library for file change notification.
 Description:            Cross platform library for file creation, modification,
                         and deletion notification. This library builds upon
-                        existing libraries for platform-specific Window, Mac,
+                        existing libraries for platform-specific Windows, Mac,
                         and Linux filesystem event notification.
 Category:               Filesystem
 Cabal-Version:          >= 1.8
