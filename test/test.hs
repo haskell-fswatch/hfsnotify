@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings, ImplicitParams, ViewPatterns #-}
 import Prelude hiding
-  ( FilePath, writeFile, writeFile, removeFile
-  , createDirectory, removeDirectory)
+  ( FilePath, writeFile, writeFile )
 import Test.Tasty
 import Test.Tasty.HUnit
 import Filesystem
