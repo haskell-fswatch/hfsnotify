@@ -1,16 +1,6 @@
-module System.FSNotify.Devel
-  ( treeExtAny, treeExtExists,
-    doAllEvents,
-    allEvents, existsEvents
-  ) where
-
-import Prelude hiding (FilePath)
-
-import Data.Text
-import Filesystem.Path.CurrentOS
-import System.FSNotify
-
--- | Example of compiling scss files with compass
+-- | Some additional functions on top of "System.FSNotify".
+--
+-- Example of compiling scss files with compass
 --
 -- @
 -- compass :: WatchManager -> FilePath -> IO ()
@@ -23,10 +13,21 @@ import System.FSNotify
 --  return ()
 -- @
 
--- | In the given directory tree,
--- watch for any Added and Modified events (but ignore Removed events)
--- for files with the given file extension
--- perform the given action
+module System.FSNotify.Devel
+  ( treeExtAny, treeExtExists,
+    doAllEvents,
+    allEvents, existsEvents
+  ) where
+
+import Prelude hiding (FilePath)
+
+import Data.Text
+import Filesystem.Path.CurrentOS
+import System.FSNotify
+
+-- | In the given directory tree, watch for any 'Added' and 'Modified'
+-- events (but ignore 'Removed' events) for files with the given file
+-- extension
 treeExtExists :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
@@ -35,9 +36,8 @@ treeExtExists :: WatchManager
 treeExtExists man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
--- | In the given directory tree,
--- for files with the given file extension
--- perform the given action
+-- | In the given directory tree, watch for any events for files with the
+-- given file extension
 treeExtAny :: WatchManager
          -> FilePath -- ^ Directory to watch
          -> Text -- ^ extension
@@ -46,6 +46,8 @@ treeExtAny :: WatchManager
 treeExtAny man dir ext action =
   watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
 
+-- | Turn a 'FilePath' callback into an 'Event' callback that ignores the
+-- 'Event' type and timestamp
 doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
 doAllEvents action event =
   case event of
@@ -53,6 +55,8 @@ doAllEvents action event =
     Modified f _ -> action f
     Removed  f _ -> action f
 
+-- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
+-- only 'Added' and 'Modified' event types
 existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
 existsEvents filt event =
   case event of
@@ -60,6 +64,8 @@ existsEvents filt event =
     Modified f _ -> filt f
     Removed  _ _ -> False
 
+-- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
+-- any event types
 allEvents :: (FilePath -> Bool) -> (Event -> Bool)
 allEvents filt event =
   case event of
