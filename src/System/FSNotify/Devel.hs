@@ -9,7 +9,6 @@ import Prelude hiding (FilePath)
 import Data.Text
 import Filesystem.Path.CurrentOS
 import System.FSNotify
--- import System.FSNotify.Path (fp)
 
 -- | Example of compiling scss files with compass
 --
