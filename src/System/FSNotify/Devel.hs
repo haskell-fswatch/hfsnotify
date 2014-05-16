@@ -44,7 +44,7 @@ treeExtAny :: WatchManager
          -> (FilePath -> IO ()) -- ^ action to run on file
          -> IO StopListening
 treeExtAny man dir ext action =
-  watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
+  watchTree man dir (allEvents $ flip hasExtension ext) (doAllEvents action)
 
 -- | Turn a 'FilePath' callback into an 'Event' callback that ignores the
 -- 'Event' type and timestamp
