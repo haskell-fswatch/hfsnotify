@@ -1,6 +1,14 @@
 Changes
 =======
 
+Version 0.1.0.2
+---------------
+
+* Restore compatibility with GHC 7.4
+* Fix a bug in `treeExtAny`, which previously work identically to
+  `treeExtExists`
+* Improve documentation
+
 Version 0.1.0.1
 ---------------
 
