@@ -213,3 +213,10 @@ readEvents chan action = forever $ do
   -- thread is dead). How bad is that? The alternative is to kill the
   -- handler anyway when we're cancelling.
   forkFinally (action event) $ either (throwTo us) (const $ return ())
+
+#if !MIN_VERSION_base(4,6,0)
+forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
+forkFinally action and_then =
+  mask $ \restore ->
+    forkIO $ try (restore action) >>= and_then
+#endif
