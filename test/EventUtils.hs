@@ -8,6 +8,8 @@ import Control.Concurrent.Async
 import Control.Applicative
 import Control.Monad
 import Data.IORef
+import Data.List (sortBy)
+import Data.Ord (comparing)
 import Filesystem.Path
 import Filesystem.Path.CurrentOS
 import System.FSNotify
@@ -89,7 +91,7 @@ expectEvents poll w path pats action = do
   a <- gatherEvents poll w path
   action
   evs <- wait a
-  matchEvents pats evs
+  matchEvents pats $ sortBy (comparing eventTime) evs
 
 testDirPath :: FilePath
 testDirPath = decodeString (unsafePerformIO getCurrentDirectory) </> "testdir"
