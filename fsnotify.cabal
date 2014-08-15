@@ -12,6 +12,7 @@ Description:            Cross platform library for file creation, modification,
 Category:               Filesystem
 Cabal-Version:          >= 1.8
 Build-Type:             Simple
+Homepage:               https://github.com/haskell-fswatch/hfsnotify
 Extra-Source-Files:
   README.md
   CHANGELOG.md
