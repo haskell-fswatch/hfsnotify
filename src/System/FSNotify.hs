@@ -22,7 +22,7 @@
 -- >      print        -- action
 -- >
 -- >    -- sleep forever (until interrupted)
--- >    forever $ threadDelay maxBound
+-- >    forever $ threadDelay 1000000
 
 module System.FSNotify
        (
