@@ -4,7 +4,7 @@ module EventUtils where
 import Prelude hiding (FilePath)
 import Test.Tasty.HUnit
 import Control.Concurrent
-import Control.Concurrent.Async
+import Control.Concurrent.Async hiding (poll)
 import Control.Applicative
 import Control.Monad
 import Data.IORef
@@ -73,7 +73,7 @@ gatherEvents poll watch path = do
   mgr <- startManagerConf defaultConfig
     { confDebounce = NoDebounce
     , confUsePolling = poll
-    , confPollInterval = 2 * 10^5
+    , confPollInterval = 2 * 10^(5 :: Int)
     }
   eventsVar <- newIORef []
   stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
@@ -96,5 +96,8 @@ expectEvents poll w path pats action = do
 testDirPath :: FilePath
 testDirPath = decodeString (unsafePerformIO getCurrentDirectory) </> "testdir"
 
+expectEventsHere :: (?timeInterval::Int) => Bool -> [EventPattern] -> IO () -> Assertion
 expectEventsHere poll = expectEvents poll watchDir testDirPath
+
+expectEventsHereRec :: (?timeInterval::Int) => Bool -> [EventPattern] -> IO () -> Assertion
 expectEventsHereRec poll = expectEvents poll watchTree testDirPath
