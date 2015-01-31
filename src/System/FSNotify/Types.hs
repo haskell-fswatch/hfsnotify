@@ -61,11 +61,21 @@ data WatchConfig = WatchConfig
     -- available. This is mostly for testing purposes.
   }
 
--- | This specifies whether events close to each other should be collapsed
--- together, and how close is close enough.
+-- | This specifies whether multiple events from the same file should be
+-- collapsed together, and how close is close enough.
+--
+-- This is performed by ignoring any event that occurs to the same file
+-- until the specified time interval has elapsed.
+--
+-- Note that the current debouncing logic may fail to report certain changes
+-- to a file, potentially leaving your program in a state that is not
+-- consistent with the filesystem.
+--
+-- Make sure that if you are using this feature, all changes you make as a
+-- result of an 'Event' notification are both non-essential and idempotent.
 data Debounce
   = DebounceDefault
-    -- ^ perform debouncing based on the default time interval
+    -- ^ perform debouncing based on the default time interval of 1 millisecond
   | Debounce NominalDiffTime
     -- ^ perform debouncing based on the specified time interval
   | NoDebounce

@@ -4,7 +4,10 @@
 --
 {-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes #-}
 
--- | Minimal example:
+-- | NOTE: This library does not currently report changes made to directories,
+-- only files within watched directories.
+--
+-- Minimal example:
 --
 -- >{-# LANGUAGE OverloadedStrings #-} -- for FilePath literals
 -- >
@@ -92,6 +95,12 @@ data WatchManager
        (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
 
 -- | Default configuration
+--
+-- * Debouncing is enabled with a time interval of 1 millisecond
+--
+-- * Polling is disabled
+--
+-- * The polling interval defaults to 1 second
 defaultConfig :: WatchConfig
 defaultConfig =
   WatchConfig
