@@ -22,8 +22,9 @@ module System.FSNotify.Devel
 import Prelude hiding (FilePath)
 
 import Data.Text
-import Filesystem.Path.CurrentOS
+import System.FilePath
 import System.FSNotify
+import System.FSNotify.Path (hasThisExtension)
 
 -- | In the given directory tree, watch for any 'Added' and 'Modified'
 -- events (but ignore 'Removed' events) for files with the given file
@@ -34,7 +35,7 @@ treeExtExists :: WatchManager
          -> (FilePath -> IO ()) -- ^ action to run on file
          -> IO StopListening
 treeExtExists man dir ext action =
-  watchTree man dir (existsEvents $ flip hasExtension ext) (doAllEvents action)
+  watchTree man dir (existsEvents $ flip hasThisExtension ext) (doAllEvents action)
 
 -- | In the given directory tree, watch for any events for files with the
 -- given file extension
@@ -44,7 +45,7 @@ treeExtAny :: WatchManager
          -> (FilePath -> IO ()) -- ^ action to run on file
          -> IO StopListening
 treeExtAny man dir ext action =
-  watchTree man dir (allEvents $ flip hasExtension ext) (doAllEvents action)
+  watchTree man dir (allEvents $ flip hasThisExtension ext) (doAllEvents action)
 
 -- | Turn a 'FilePath' callback into an 'Event' callback that ignores the
 -- 'Event' type and timestamp

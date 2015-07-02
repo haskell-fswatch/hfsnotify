@@ -16,8 +16,7 @@ import Prelude hiding (FilePath)
 import Data.IORef (newIORef)
 import Data.Time (diffUTCTime, NominalDiffTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Filesystem.Path.CurrentOS
-import System.FSNotify.Path (fp)
+import System.FilePath
 import System.FSNotify.Types
 
 -- | An action that cancels a watching/listening job
@@ -58,7 +57,7 @@ epsilonDefault = 0.001
 
 -- | The default event that provides a basis for comparison.
 eventDefault :: Event
-eventDefault = Added (fp "") (posixSecondsToUTCTime 0)
+eventDefault = Added "" (posixSecondsToUTCTime 0)
 
 -- | A predicate indicating whether two events may be considered "the same
 -- event". This predicate is applied to the most recent dispatched event and

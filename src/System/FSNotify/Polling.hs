@@ -16,8 +16,8 @@ import Data.Map (Map)
 import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
 -- import Debug.Trace (trace)
-import Filesystem hiding (canonicalizePath)
-import Filesystem.Path
+import System.Directory (getModificationTime)
+import System.FilePath
 import System.FSNotify.Listener
 import System.FSNotify.Path (findFiles, canonicalizeDirPath)
 import System.FSNotify.Types
@@ -56,7 +56,7 @@ pathModMap' files = fmap Map.fromList $ mapM pathAndTime files
   where
     pathAndTime :: FilePath -> IO (FilePath, UTCTime)
     pathAndTime path = do
-      modTime <- getModified path
+      modTime <- getModificationTime path
       return (path, modTime)
 
 pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()

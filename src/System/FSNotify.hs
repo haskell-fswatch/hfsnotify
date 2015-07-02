@@ -66,7 +66,7 @@ import Control.Concurrent.Async
 import Control.Exception
 import Control.Applicative
 import Control.Monad
-import Filesystem.Path.CurrentOS
+import System.FilePath
 import System.FSNotify.Polling
 import System.FSNotify.Types
 

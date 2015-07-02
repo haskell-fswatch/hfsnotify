@@ -1,13 +1,15 @@
-{-# LANGUAGE OverloadedStrings, ImplicitParams, ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams, ViewPatterns, BangPatterns #-}
 import Prelude hiding
-  ( FilePath, writeFile, writeFile )
+  ( FilePath )
+import Control.Applicative
 import Test.Tasty
 import Test.Tasty.HUnit
-import Filesystem
-import Filesystem.Path
-import Filesystem.Path.CurrentOS
+import System.Directory
+import System.FilePath
 import System.FSNotify
+import System.IO.Error
 import System.IO.Temp
+import System.PosixCompat.Files
 import Control.Monad
 import Control.Exception
 import Control.Concurrent
@@ -27,8 +29,8 @@ main = do
     putStrLn "WARNING: native manager cannot be used or tested on this platform"
   defaultMain $
     withResource
-      (createTree testDirPath)
-      (const $ removeTree testDirPath) $
+      (createDirectoryIfMissing True testDirPath)
+      (const $ removeDirectoryRecursive testDirPath) $
       const $ tests hasNative
 
 tests :: Bool -> TestTree
@@ -55,22 +57,32 @@ tests hasNative = testGroup "Tests" $ do
         (\f -> when poll (threadDelay $ 10^(6 :: Int)) >> writeFile f "foo")
     , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
     , mkTest "directories are ignored" [] (const $ return ())
-        (\f -> createDirectory False f >> removeDirectory f)
+        (\f -> createDirectory f >> removeDirectory f)
     ]
   return $ t nested recursive poll
   where
     mkTest title evs prepare action nested recursive poll =
       testCase title $
-        withTempDirectory (encodeString testDirPath) "test." $ \(decodeString -> watchedDir) -> do
+        withTempDirectory testDirPath "test." $ \watchedDir -> do
         let baseDir = if nested then watchedDir </> "subdir" else watchedDir
             f = baseDir </> fileName
             expect =
               expectEvents poll
                 (if recursive then watchTree else watchDir)
                 watchedDir
-        createDirectory True baseDir
+        createDirectoryIfMissing True baseDir
         (prepare f >>
          expect (if not nested || recursive then map ($ f) evs else []) (action f))
           `finally` (isFile f >>= \b -> when b (removeFile f))
 
     fileName = "testfile"
+
+
+-------------------------------------------------------------------------------
+isFile :: FilePath -> IO Bool
+isFile p = handleJust h return checkFile
+  where
+    h e = if isDoesNotExistError e
+          then Just False
+          else Nothing
+    checkFile = isRegularFile <$> getFileStatus p
