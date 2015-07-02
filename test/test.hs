@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ImplicitParams, ViewPatterns, BangPatterns #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams #-}
 import Prelude hiding
   ( FilePath )
 import Control.Applicative
