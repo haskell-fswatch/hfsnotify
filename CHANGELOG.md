@@ -1,6 +1,11 @@
 Changes
 =======
 
+Version 0.2
+-----------
+
+Use filepath instead of deprecated system-filepath
+
 Version 0.1.0.3
 ---------------
 
