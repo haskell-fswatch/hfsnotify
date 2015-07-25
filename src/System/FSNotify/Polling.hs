@@ -11,16 +11,19 @@ module System.FSNotify.Polling
 
 import Prelude hiding (FilePath)
 
+import Control.Applicative
 import Control.Concurrent
 import Data.Map (Map)
 import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Clock.POSIX
 -- import Debug.Trace (trace)
-import Filesystem hiding (canonicalizePath)
-import Filesystem.Path
+import System.FilePath
 import System.FSNotify.Listener
 import System.FSNotify.Path (findFiles, canonicalizeDirPath)
 import System.FSNotify.Types
+import System.PosixCompat.Files
+import System.PosixCompat.Types
 import qualified Data.Map as Map
 import Control.Monad (forM_)
 
@@ -56,7 +59,7 @@ pathModMap' files = fmap Map.fromList $ mapM pathAndTime files
   where
     pathAndTime :: FilePath -> IO (FilePath, UTCTime)
     pathAndTime path = do
-      modTime <- getModified path
+      modTime <- getModificationTime path
       return (path, modTime)
 
 pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()
@@ -125,3 +128,11 @@ instance FileListener PollManager where
     return $ killAndUnregister mvarMap wk
 
   usesPolling = const True
+
+
+getModificationTime :: FilePath -> IO UTCTime
+getModificationTime p = fromEpoch . modificationTime <$> getFileStatus p
+
+
+fromEpoch :: EpochTime -> UTCTime
+fromEpoch = posixSecondsToUTCTime . realToFrac

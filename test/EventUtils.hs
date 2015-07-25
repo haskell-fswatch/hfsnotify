@@ -10,8 +10,7 @@ import Control.Monad
 import Data.IORef
 import Data.List (sortBy)
 import Data.Ord (comparing)
-import Filesystem.Path
-import Filesystem.Path.CurrentOS
+import System.FilePath
 import System.FSNotify
 import System.IO.Unsafe
 import System.Directory
@@ -94,7 +93,7 @@ expectEvents poll w path pats action = do
   matchEvents pats $ sortBy (comparing eventTime) evs
 
 testDirPath :: FilePath
-testDirPath = decodeString (unsafePerformIO getCurrentDirectory) </> "testdir"
+testDirPath = (unsafePerformIO getCurrentDirectory) </> "testdir"
 
 expectEventsHere :: (?timeInterval::Int) => Bool -> [EventPattern] -> IO () -> Assertion
 expectEventsHere poll = expectEvents poll watchDir testDirPath

@@ -24,7 +24,7 @@ import Control.Concurrent.Chan
 import Data.IORef (IORef)
 import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
-import Filesystem.Path.CurrentOS
+import System.FilePath
 
 -- | A file event reported by a file watcher. Each event contains the
 -- canonical path for the file and a timestamp guaranteed to be after the
