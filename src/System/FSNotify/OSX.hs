@@ -22,7 +22,7 @@ import Data.Unique
 import Filesystem (isFile)
 import Filesystem.Path hiding (concat)
 import System.FSNotify.Listener
-import System.FSNotify.Path (fp, canonicalizeDirPath)
+import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
@@ -33,6 +33,15 @@ data WatchData = WatchData FSE.EventStream ListenType EventChannel
 type WatchMap = Map Unique WatchData
 data OSXManager = OSXManager (MVar WatchMap)
 type NativeManager = OSXManager
+
+
+class ConvertFilePath a b where
+  fp :: a -> b
+instance ConvertFilePath FilePath String where fp   = encodeString
+instance ConvertFilePath String FilePath where fp   = decodeString
+instance ConvertFilePath String String where fp     = id
+instance ConvertFilePath FilePath FilePath where fp = id
+
 
 nil :: Word64
 nil = 0x00

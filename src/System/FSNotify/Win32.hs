@@ -16,7 +16,7 @@ import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
 import System.FSNotify.Listener
-import System.FSNotify.Path (fp, canonicalizeDirPath)
+import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
 import Filesystem.Path
 import qualified System.Win32.Notify as WNo
@@ -26,6 +26,13 @@ type NativeManager = WNo.WatchManager
 -- | Apparently Win32 gives back relative paths, so we pass around the base
 -- directory to turn them into absolute ones
 type BaseDir = FilePath
+
+class ConvertFilePath a b where
+  fp :: a -> b
+instance ConvertFilePath FilePath String where fp   = encodeString
+instance ConvertFilePath String FilePath where fp   = decodeString
+instance ConvertFilePath String String where fp     = id
+instance ConvertFilePath FilePath FilePath where fp = id
 
 -- NEXT TODO: Need to ensure we use properly canonalized paths as
 -- event paths. In Linux this required passing the base dir to
