@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances #-}
 
 module System.FSNotify.OSX
        ( FileListener(..)
@@ -26,6 +27,8 @@ import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
 import qualified Data.Map as Map
 import qualified System.OSX.FSEvents as FSE
+import Filesystem.Path.CurrentOS hiding (concat)
+import qualified System.IO as SIO
 
 data ListenType = NonRecursive | Recursive
 data WatchData = WatchData FSE.EventStream ListenType EventChannel
@@ -61,12 +64,12 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
   where
     eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
     eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t]
-    addedFn t e = if hasFlag e FSE.eventFlagItemCreated        then return [Added    (path e) t] else return []
+    addedFn t e = if hasFlag e FSE.eventFlagItemCreated        then return [Added    (encodeString $ path e) t] else return []
     modifFn t e = if (hasFlag e FSE.eventFlagItemModified
-                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (path e) t] else return []
-    removFn t e = if hasFlag e FSE.eventFlagItemRemoved        then return [Removed  (path e) t] else return []
+                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (encodeString $ path e) t] else return []
+    removFn t e = if hasFlag e FSE.eventFlagItemRemoved        then return [Removed  (encodeString $ path e) t] else return []
     renamFn t e = if hasFlag e FSE.eventFlagItemRenamed then
-                    isFile (path e) >>= \exists -> if exists   then return [Added    (path e) t] else return [Removed (path e) t]
+                    isFile (path e) >>= \exists -> if exists   then return [Added    (encodeString $ path e) t] else return [Removed (encodeString $ path e) t]
                   else
                     return []
     path = canonicalEventPath
@@ -75,14 +78,14 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
 -- Separate logic is needed for non-recursive events in OSX because the
 -- hfsevents package doesn't support non-recursive event reporting.
 
-handleNonRecursiveFSEEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
+handleNonRecursiveFSEEvent :: ActionPredicate -> EventChannel -> SIO.FilePath -> DebouncePayload -> FSE.Event -> IO ()
 handleNonRecursiveFSEEvent actPred chan dirPath dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleNonRecursiveEvents actPred chan dirPath dbp events
-handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
+handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> SIO.FilePath -> DebouncePayload -> [Event] -> IO ()
 handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
-  | directory dirPath == directory (eventPath event) && actPred event = do
+  | directory (decodeString dirPath) == directory (decodeString $ eventPath event) && actPred event = do
     case dbp of
       (Just (DebounceData epsilon ior)) -> do
         lastEvent <- readIORef ior
@@ -111,10 +114,10 @@ handleEvents actPred chan dbp (event:events) = do
 handleEvents _ _ _ [] = return ()
 
 listenFn
-  :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
+  :: (ActionPredicate -> EventChannel -> SIO.FilePath -> DebouncePayload -> FSE.Event -> IO a)
   -> WatchConfig
   -> OSXManager
-  -> FilePath
+  -> SIO.FilePath
   -> ActionPredicate
   -> EventChannel
   -> IO StopListening
