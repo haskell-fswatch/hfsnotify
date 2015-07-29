@@ -45,12 +45,12 @@ Library
     if os(windows)
       CPP-Options:      -DOS_Win32
       Other-Modules:    System.FSNotify.Win32
-      Build-Depends:    Win32-notify >= 0.3, system-filepath, system-fileio
+      Build-Depends:    Win32-notify >= 0.3
     else
       if os(darwin)
         CPP-Options:    -DOS_Mac
         Other-Modules:  System.FSNotify.OSX
-        Build-Depends:  hfsevents >= 0.1.3, system-filepath, system-fileio
+        Build-Depends:  hfsevents >= 0.1.3
 
 Test-Suite test
   Type:                 exitcode-stdio-1.0
