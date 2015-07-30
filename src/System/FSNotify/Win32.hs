@@ -9,7 +9,7 @@ module System.FSNotify.Win32
        , NativeManager
        ) where
 
-import Prelude hiding (FilePath)
+import Prelude
 
 import Control.Concurrent.Chan
 import Control.Monad (when)
@@ -18,7 +18,7 @@ import Data.Time (getCurrentTime, UTCTime)
 import System.FSNotify.Listener
 import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
-import Filesystem.Path
+import System.FilePath
 import qualified System.Win32.Notify as WNo
 
 type NativeManager = WNo.WatchManager
@@ -26,13 +26,6 @@ type NativeManager = WNo.WatchManager
 -- | Apparently Win32 gives back relative paths, so we pass around the base
 -- directory to turn them into absolute ones
 type BaseDir = FilePath
-
-class ConvertFilePath a b where
-  fp :: a -> b
-instance ConvertFilePath FilePath String where fp   = encodeString
-instance ConvertFilePath String FilePath where fp   = decodeString
-instance ConvertFilePath String String where fp     = id
-instance ConvertFilePath FilePath FilePath where fp = id
 
 -- NEXT TODO: Need to ensure we use properly canonalized paths as
 -- event paths. In Linux this required passing the base dir to
@@ -42,9 +35,9 @@ instance ConvertFilePath FilePath FilePath where fp = id
 fsnEvent :: BaseDir -> UTCTime -> WNo.Event -> Maybe Event
 fsnEvent basedir timestamp ev =
   case ev of
-    WNo.Created  False name -> Just $ Added    (basedir </> fp name) timestamp
-    WNo.Modified False name -> Just $ Modified (basedir </> fp name) timestamp
-    WNo.Deleted  False name -> Just $ Removed  (basedir </> fp name) timestamp
+    WNo.Created  False name -> Just $ Added    (basedir </> name) timestamp
+    WNo.Modified False name -> Just $ Modified (basedir </> name) timestamp
+    WNo.Deleted  False name -> Just $ Removed  (basedir </> name) timestamp
     _                       -> Nothing
 {-
 fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
@@ -80,13 +73,13 @@ instance FileListener WNo.WatchManager where
   listen conf watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload $ confDebounce conf
-    wid <- WNo.watchDirectory watchManager (fp path') False varieties (handleWNoEvent path' actPred chan dbp)
+    wid <- WNo.watchDirectory watchManager path' False varieties (handleWNoEvent path' actPred chan dbp)
     return $ WNo.killWatch wid
 
   listenRecursive conf watchManager path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload $ confDebounce conf
-    wid <- WNo.watchDirectory watchManager (fp path') True varieties (handleWNoEvent path' actPred chan dbp)
+    wid <- WNo.watchDirectory watchManager path' True varieties (handleWNoEvent path' actPred chan dbp)
     return $ WNo.killWatch wid
 
   usesPolling = const False
