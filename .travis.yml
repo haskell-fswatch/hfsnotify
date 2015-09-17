@@ -14,4 +14,4 @@ install:
 script:
  - cabal-1.20 sdist
    # use -j1 to see full build logs. remove when cabal is fixed.
- - cabal-1.20 install -v -j1 --enable-tests "dist/$(cabal-1.20 info . | awk '{print $2 ".tar.gz";exit}')"
+ - cabal-1.20 install -v -j1 --run-tests "dist/$(cabal-1.20 info . | awk '{print $2 ".tar.gz";exit}')"
