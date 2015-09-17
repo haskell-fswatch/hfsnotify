@@ -1,17 +1,20 @@
 # see https://github.com/hvr/multi-ghc-travis
 env:
- - GHCVER=7.4.2
- - GHCVER=7.6.3
- - GHCVER=7.8.2
+ - CABALVER=1.20 GHCVER=7.4.2
+ - CABALVER=1.20 GHCVER=7.6.3
+ - CABALVER=1.20 GHCVER=7.8.2
+ - CABALVER=1.22 GHCVER=7.10.2
 
 install:
  - travis_retry sudo add-apt-repository -y ppa:hvr/ghc
  - travis_retry sudo apt-get update
- - travis_retry sudo apt-get install cabal-install-1.20 ghc-$GHCVER
- - export PATH=/opt/ghc/$GHCVER/bin:$PATH
- - cabal-1.20 update
+ - travis_retry sudo apt-get install cabal-install-$CABALVER ghc-$GHCVER # see note about happy/alex
+ - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$PATH
+ - cabal --version
+ - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+ - travis_retry cabal update
 
 script:
- - cabal-1.20 sdist
+ - cabal sdist
    # use -j1 to see full build logs. remove when cabal is fixed.
- - cabal-1.20 install -v -j1 --run-tests "dist/$(cabal-1.20 info . | awk '{print $2 ".tar.gz";exit}')"
+ - cabal install -v -j1 --run-tests "dist/$(cabal info . | awk '{print $2 ".tar.gz";exit}')"
