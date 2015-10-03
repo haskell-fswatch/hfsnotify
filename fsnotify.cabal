@@ -66,7 +66,7 @@ Test-Suite test
                         , unix-compat
                         , fsnotify
                         , async >= 2
-                        , temporary-rc
+                        , temporary
 
 Source-Repository head
   Type:                 git
