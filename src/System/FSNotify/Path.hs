@@ -25,8 +25,11 @@ import System.PosixCompat.Files as PF
 import System.FilePath
 
 getDirectoryContentsPath :: FilePath -> IO [FilePath]
-getDirectoryContentsPath path = (map (path </>)) . filter (not . dots) <$> D.getDirectoryContents path
+getDirectoryContentsPath path =
+  ((map (path </>)) . filter (not . dots) <$> D.getDirectoryContents path)
+  >>= filterM exists
   where
+    exists x = (||) <$> D.doesFileExist x <*> D.doesDirectoryExist x
     dots "."  = True
     dots ".." = True
     dots _    = False
