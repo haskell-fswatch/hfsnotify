@@ -3,6 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -12,9 +13,10 @@ module System.FSNotify.Linux
 
 import Prelude hiding (FilePath)
 
+
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Exception
+import Control.Exception as E
 import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -66,7 +68,7 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
-  initSession = fmap Just INo.initINotify
+  initSession = E.catch (fmap Just INo.initINotify) (\(_ :: IOException) -> return Nothing)
 
   killSession = INo.killINotify
 
