@@ -3,6 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -66,7 +67,7 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
-  initSession = fmap Just INo.initINotify
+  initSession = catch (fmap Just INo.initINotify) (\(_ :: IOException) -> return Nothing)
 
   killSession = INo.killINotify
 
