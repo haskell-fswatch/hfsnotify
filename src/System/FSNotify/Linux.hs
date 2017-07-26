@@ -4,7 +4,6 @@
 --
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -12,15 +11,12 @@ module System.FSNotify.Linux
        , NativeManager
        ) where
 
-#if __GLASGOW_HASKELL__ >= 706
 import Prelude hiding (FilePath)
-#else
-import Prelude hiding (FilePath, catch)
-#endif
+
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Exception
+import Control.Exception as E
 import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -72,7 +68,7 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
 
 instance FileListener INo.INotify where
-  initSession = catch (fmap Just INo.initINotify) (\(_ :: IOException) -> return Nothing)
+  initSession = E.catch (fmap Just INo.initINotify) (\(_ :: IOException) -> return Nothing)
 
   killSession = INo.killINotify
 
