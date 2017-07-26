@@ -1,6 +1,16 @@
 Changes
 =======
 
+Version 0.2.1.1
+---------------
+
+Catch IO exceptions when initialising inotify on Linux
+
+Version 0.2.1
+-------------
+
+Don't use `system-filepath`
+
 Version 0.2
 -----------
 
