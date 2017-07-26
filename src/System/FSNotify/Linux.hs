@@ -4,6 +4,7 @@
 --
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -11,7 +12,11 @@ module System.FSNotify.Linux
        , NativeManager
        ) where
 
+#if __GLASGOW_HASKELL__ >= 706
 import Prelude hiding (FilePath)
+#else
+import Prelude hiding (FilePath, catch)
+#endif
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
