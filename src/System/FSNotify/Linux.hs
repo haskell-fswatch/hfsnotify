@@ -10,8 +10,6 @@ module System.FSNotify.Linux
        , NativeManager
        ) where
 
-import Prelude hiding (FilePath)
-
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Exception
@@ -19,11 +17,11 @@ import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
--- import Debug.Trace (trace)
-import System.FilePath
+import Prelude hiding (FilePath)
 import System.FSNotify.Listener
 import System.FSNotify.Path (findDirs, canonicalizeDirPath)
 import System.FSNotify.Types
+import System.FilePath
 import qualified System.INotify as INo
 
 type NativeManager = INo.INotify
@@ -33,24 +31,22 @@ instance Exception EventVarietyMismatchException
 
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: FilePath -> UTCTime -> INo.Event -> Maybe Event
-fsnEvent basePath timestamp (INo.Created  False       name   ) = Just (Added    (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.Closed   False (Just name) _) = Just (Modified (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.MovedOut False       name  _) = Just (Removed  (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.MovedIn  False       name  _) = Just (Added    (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.Deleted  False       name   ) = Just (Removed  (basePath </> name) timestamp)
-fsnEvent _        _         _                                  = Nothing
+fsnEvent :: FilePath -> UTCTime -> INo.Event -> Event
+fsnEvent basePath timestamp (INo.Created isDirectory name) = Added    (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp (INo.Closed isDirectory (Just name) True) = Modified (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp (INo.MovedOut isDirectory name _cookie) = Removed  (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp (INo.MovedIn isDirectory name _cookie) = Added    (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp (INo.Deleted isDirectory name ) = Removed  (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp inoEvent = Unknown basePath timestamp (show inoEvent)
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
--- handleInoEvent _       _    basePath _   inoEvent | trace ("Linux: handleInoEvent " ++ show basePath ++ " " ++ show inoEvent) False = undefined
 handleInoEvent actPred chan basePath dbp inoEvent = do
   currentTime <- getCurrentTime
-  let maybeFsnEvent = fsnEvent basePath currentTime inoEvent
-  handleEvent actPred chan dbp maybeFsnEvent
+  let event = fsnEvent basePath currentTime inoEvent
+  handleEvent actPred chan dbp event
 
-handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Maybe Event -> IO ()
--- handleEvent actPred _    _   (Just event) | trace ("Linux: handleEvent " ++ show (actPred event) ++ " " ++ show event) False = undefined
-handleEvent actPred chan dbp (Just event) =
+handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
+handleEvent actPred chan dbp event =
   when (actPred event) $ case dbp of
     (Just (DebounceData epsilon ior)) -> do
       lastEvent <- readIORef ior
@@ -59,8 +55,6 @@ handleEvent actPred chan dbp (Just event) =
     Nothing                           -> writeToChan
   where
     writeToChan = writeChan chan event
--- handleEvent _ _ _ Nothing | trace ("Linux handleEvent Nothing") False = undefined
-handleEvent _ _ _ Nothing = return ()
 
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
@@ -120,9 +114,16 @@ instance FileListener INo.INotify where
               return $ Just (wd:wds)
         where
           handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir _   (INo.Created True dirPath) = do
-            listenRec (baseDir </> dirPath) wdVar
-          handler baseDir dbp event                      =
+          handler baseDir dbp event = do
+            -- When a new directory is created, add recursive inotify watches to it
+            -- TODO: there's a race condition here; if there are files present in the directory before
+            -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
+            -- and trigger Added events for everything we find there
+            case event of
+              (INo.Created True dirPath) -> listenRec (baseDir </> dirPath) wdVar
+              _ -> return ()
+
+            -- Forward all events, including directory create
             handleInoEvent actPred chan baseDir dbp event
 
   usesPolling = const False

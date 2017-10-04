@@ -8,23 +8,22 @@ module System.FSNotify.OSX
        , NativeManager
        ) where
 
-import Prelude hiding (FilePath)
-
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Word
 import Data.Unique
-import System.FilePath
+import Data.Word
+import Prelude hiding (FilePath)
 import System.Directory
 import System.FSNotify.Listener
 import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
-import qualified Data.Map as Map
+import System.FilePath
 import qualified System.OSX.FSEvents as FSE
 
 data ListenType = NonRecursive | Recursive
@@ -50,14 +49,16 @@ canonicalEventPath event =
 fsnEvents :: UTCTime -> FSE.Event -> IO [Event]
 fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) (eventFunctions timestamp)
   where
+    isDirectory = hasFlag fseEvent FSE.eventFlagItemIsDir
+
     eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
     eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t]
-    addedFn t e = if hasFlag e FSE.eventFlagItemCreated        then return [Added    (path e) t] else return []
+    addedFn t e = if hasFlag e FSE.eventFlagItemCreated then return [Added (path e) t isDirectory] else return []
     modifFn t e = if (hasFlag e FSE.eventFlagItemModified
-                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (path e) t] else return []
-    removFn t e = if hasFlag e FSE.eventFlagItemRemoved        then return [Removed  (path e) t] else return []
+                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (path e) t isDirectory] else return []
+    removFn t e = if hasFlag e FSE.eventFlagItemRemoved then return [Removed (path e) t isDirectory] else return []
     renamFn t e = if hasFlag e FSE.eventFlagItemRenamed then
-                    doesFileExist (path e) >>= \exists -> if exists   then return [Added    (path e) t] else return [Removed (path e) t]
+                    doesFileExist (path e) >>= \exists -> if exists then return [Added (path e) t isDirectory] else return [Removed (path e) t isDirectory]
                   else
                     return []
     path = canonicalEventPath

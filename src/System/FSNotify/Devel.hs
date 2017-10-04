@@ -19,12 +19,11 @@ module System.FSNotify.Devel
     allEvents, existsEvents
   ) where
 
-import Prelude hiding (FilePath)
-
 import Data.Text
-import System.FilePath
+import Prelude hiding (FilePath)
 import System.FSNotify
 import System.FSNotify.Path (hasThisExtension)
+import System.FilePath
 
 -- | In the given directory tree, watch for any 'Added' and 'Modified'
 -- events (but ignore 'Removed' events) for files with the given file
@@ -52,24 +51,27 @@ treeExtAny man dir ext action =
 doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
 doAllEvents action event =
   case event of
-    Added    f _ -> action f
-    Modified f _ -> action f
-    Removed  f _ -> action f
+    Added    f _ _ -> action f
+    Modified f _ _ -> action f
+    Removed  f _ _ -> action f
+    Unknown  f _ _ -> action f
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
 -- only 'Added' and 'Modified' event types
 existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
 existsEvents filt event =
   case event of
-    Added    f _ -> filt f
-    Modified f _ -> filt f
-    Removed  _ _ -> False
+    Added    f _ _ -> filt f
+    Modified f _ _ -> filt f
+    Removed  _ _ _ -> False
+    Unknown  _ _ _ -> False
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
 -- any event types
 allEvents :: (FilePath -> Bool) -> (Event -> Bool)
 allEvents filt event =
   case event of
-    Added    f _ -> filt f
-    Modified f _ -> filt f
-    Removed  f _ -> filt f
+    Added    f _ _ -> filt f
+    Modified f _ _ -> filt f
+    Removed  f _ _ -> filt f
+    Unknown  f _ _ -> filt f

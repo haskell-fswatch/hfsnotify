@@ -12,17 +12,12 @@ module System.FSNotify.Path
        , hasThisExtension
        ) where
 
-import Prelude hiding (FilePath)
-
-import Control.Applicative
 import Control.Monad
--- import Filesystem
--- import Filesystem.Path hiding (concat)
-
 import qualified Data.Text as T
+import Prelude hiding (FilePath)
 import qualified System.Directory as D
-import System.PosixCompat.Files as PF
 import System.FilePath
+import System.PosixCompat.Files as PF
 
 getDirectoryContentsPath :: FilePath -> IO [FilePath]
 getDirectoryContentsPath path =

@@ -9,23 +9,20 @@ module System.FSNotify.Polling
   , FileListener(..)
   ) where
 
-import Prelude hiding (FilePath)
-
-import Control.Applicative
 import Control.Concurrent
+import Control.Monad (forM_)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX
--- import Debug.Trace (trace)
-import System.FilePath
+import Prelude hiding (FilePath)
 import System.FSNotify.Listener
 import System.FSNotify.Path (findFiles, canonicalizeDirPath)
 import System.FSNotify.Types
+import System.FilePath
 import System.PosixCompat.Files
 import System.PosixCompat.Types
-import qualified Data.Map as Map
-import Control.Monad (forM_)
 
 data EventType =
     AddedEvent
@@ -38,9 +35,9 @@ type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
 generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
-generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp)
-generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp)
-generateEvent timestamp RemovedEvent  filePath = Just (Removed  filePath timestamp)
+generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp False)
+generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp False)
+generateEvent timestamp RemovedEvent  filePath = Just (Removed  filePath timestamp False)
 
 generateEvents :: UTCTime -> EventType -> [FilePath] -> [Event]
 generateEvents timestamp eventType = mapMaybe (generateEvent timestamp eventType)

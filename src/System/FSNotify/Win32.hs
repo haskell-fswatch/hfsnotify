@@ -9,12 +9,11 @@ module System.FSNotify.Win32
        , NativeManager
        ) where
 
-import Prelude
-
 import Control.Concurrent.Chan
 import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
+import Prelude
 import System.FSNotify.Listener
 import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
@@ -32,25 +31,18 @@ type BaseDir = FilePath
 -- handle[native]Event.
 
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
-fsnEvent :: BaseDir -> UTCTime -> WNo.Event -> Maybe Event
-fsnEvent basedir timestamp ev =
-  case ev of
-    WNo.Created  False name -> Just $ Added    (basedir </> name) timestamp
-    WNo.Modified False name -> Just $ Modified (basedir </> name) timestamp
-    WNo.Deleted  False name -> Just $ Removed  (basedir </> name) timestamp
-    _                       -> Nothing
-{-
-fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
-fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
--}
+fsnEvent :: BaseDir -> UTCTime -> WNo.Event -> Event
+fsnEvent basedir timestamp ev = case ev of
+  WNo.Created  isDirectory name -> Added    (basedir </> name) timestamp isDirectory
+  WNo.Modified isDirectory name -> Modified (basedir </> name) timestamp isDirectory
+  WNo.Deleted  isDirectory name -> Removed  (basedir </> name) timestamp isDirectory
 
 handleWNoEvent :: BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
 handleWNoEvent basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
-  let maybeEvent = fsnEvent basedir currentTime inoEvent
-  case maybeEvent of
-    Just evt -> handleEvent actPred chan dbp evt
-    Nothing  -> return ()
+  let event = fsnEvent basedir currentTime inoEvent
+  handleEvent actPred chan dbp evt
+
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
 handleEvent actPred chan dbp event =
   when (actPred event) $ case dbp of
