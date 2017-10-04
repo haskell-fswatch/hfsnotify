@@ -52,15 +52,54 @@ fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) 
     isDirectory = hasFlag fseEvent FSE.eventFlagItemIsDir
 
     eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
-    eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t]
-    addedFn t e = if hasFlag e FSE.eventFlagItemCreated then return [Added (path e) t isDirectory] else return []
-    modifFn t e = if (hasFlag e FSE.eventFlagItemModified
-                   || hasFlag e FSE.eventFlagItemInodeMetaMod) then return [Modified (path e) t isDirectory] else return []
-    removFn t e = if hasFlag e FSE.eventFlagItemRemoved then return [Removed (path e) t isDirectory] else return []
-    renamFn t e = if hasFlag e FSE.eventFlagItemRenamed then
-                    doesFileExist (path e) >>= \exists -> if exists then return [Added (path e) t isDirectory] else return [Removed (path e) t isDirectory]
-                  else
-                    return []
+    eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t, queryFn]
+
+    queryFn e = do
+      let hasCreatedFlag = hasFlag e FSE.eventFlagItemCreated
+      putStrLn $ "Has created flag? " `mappend` show hasCreatedFlag
+
+      let hasRemovedFlag = hasFlag e FSE.eventFlagItemRemoved
+      putStrLn $ "Has removed flag? " `mappend` show hasRemovedFlag
+
+      let hasModifiedFlag = hasFlag e FSE.eventFlagItemModified
+      putStrLn $ "Has modified flag? " `mappend` show hasModifiedFlag
+
+      let hasMetaModifiedFlag = hasFlag e FSE.eventFlagItemInodeMetaMod
+      putStrLn $ "Has meta modified flag? " `mappend` show hasMetaModifiedFlag
+
+      let hasRenamedFlag = hasFlag e FSE.eventFlagItemRenamed
+      putStrLn $ "Has renamed flag? " `mappend` show hasRenamedFlag
+
+      return []
+
+    addedFn t e | hasFlag e FSE.eventFlagItemCreated && (not $ isModified e) = do
+                    -- We have to check whether the path actually exists, because
+                    -- "really it's an OR of all the changes made since the FSEventsListener is created"
+                    -- See https://stackoverflow.com/questions/18415285/osx-fseventstreameventflags-not-working-correctly
+                    -- We also check that the "modified" flag is not set, because if it is, then we must be seeing an event
+                    -- from after the file was already created
+                    exists <- doesPathExist (path e)
+                    return $ if exists then [Added (path e) t isDirectory] else []
+    addedFn t e | otherwise = return []
+
+    modifFn t e | isModified e = do
+                    exists <- doesPathExist (path e)
+                    return $ if exists then [Modified (path e) t isDirectory] else []
+    modifFn t e | otherwise = return []
+
+    removFn t e | hasFlag e FSE.eventFlagItemRemoved = do
+                    -- See comment in addedFn about FSEventsListener weirdness
+                    exists <- doesPathExist (path e)
+                    return $ if not exists then [Removed (path e) t isDirectory] else []
+    removFn t e | otherwise = return []
+
+    renamFn t e | (hasFlag e FSE.eventFlagItemRenamed) && (not $ isModified e) = do
+                    exists <- doesPathExist (path e)
+                    return $ if exists then [Added (path e) t isDirectory] else [Removed (path e) t isDirectory]
+    renamFn t e | otherwise = return []
+
+    isModified e = hasFlag e FSE.eventFlagItemModified || hasFlag e FSE.eventFlagItemInodeMetaMod
+
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
@@ -72,6 +111,7 @@ handleNonRecursiveFSEEvent actPred chan dirPath dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   handleNonRecursiveEvents actPred chan dirPath dbp events
+
 handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
 handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
   | takeDirectory dirPath == takeDirectory (eventPath event) && actPred event = do
@@ -88,6 +128,7 @@ handleNonRecursiveEvents _ _ _ _ []                                   = return (
 handleFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
 handleFSEEvent actPred chan dbp fseEvent = do
   currentTime <- getCurrentTime
+  putStrLn $ "Event: " `mappend` show fseEvent
   events <- fsnEvents currentTime fseEvent
   handleEvents actPred chan dbp events
 
@@ -102,14 +143,13 @@ handleEvents actPred chan dbp (event:events) = do
   handleEvents actPred chan dbp events
 handleEvents _ _ _ [] = return ()
 
-listenFn
-  :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
-  -> WatchConfig
-  -> OSXManager
-  -> FilePath
-  -> ActionPredicate
-  -> EventChannel
-  -> IO StopListening
+listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
+         -> WatchConfig
+         -> OSXManager
+         -> FilePath
+         -> ActionPredicate
+         -> EventChannel
+         -> IO StopListening
 listenFn handler conf (OSXManager mvarMap) path actPred chan = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload $ confDebounce conf
