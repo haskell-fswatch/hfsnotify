@@ -40,7 +40,9 @@ Library
   if os(linux)
     CPP-Options:        -DOS_Linux
     Other-Modules:      System.FSNotify.Linux
-    Build-Depends:      hinotify >= 0.3.9
+    Build-Depends:      hinotify >= 0.3.9,
+                        shelly >= 1.6.8.3,
+                        unix >= 2.7.2.1
   else
     if os(windows)
       CPP-Options:      -DOS_Win32

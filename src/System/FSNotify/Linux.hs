@@ -13,16 +13,22 @@ module System.FSNotify.Linux
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Exception
+import Control.Monad
 import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
+import Data.String
+import qualified Data.Text as T
 import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Clock.POSIX
 import Data.Typeable
 import Prelude hiding (FilePath)
+import qualified Shelly as S
 import System.FSNotify.Listener
 import System.FSNotify.Path (findDirs, canonicalizeDirPath)
 import System.FSNotify.Types
 import System.FilePath
 import qualified System.INotify as INo
+import System.Posix.Files (getFileStatus, isDirectory, modificationTimeHiRes)
 
 type NativeManager = INo.INotify
 
@@ -32,11 +38,11 @@ instance Exception EventVarietyMismatchException
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
 fsnEvent :: FilePath -> UTCTime -> INo.Event -> Event
-fsnEvent basePath timestamp (INo.Created isDirectory name) = Added    (basePath </> name) timestamp isDirectory
-fsnEvent basePath timestamp (INo.Closed isDirectory (Just name) True) = Modified (basePath </> name) timestamp isDirectory
-fsnEvent basePath timestamp (INo.MovedOut isDirectory name _cookie) = Removed  (basePath </> name) timestamp isDirectory
-fsnEvent basePath timestamp (INo.MovedIn isDirectory name _cookie) = Added    (basePath </> name) timestamp isDirectory
-fsnEvent basePath timestamp (INo.Deleted isDirectory name ) = Removed  (basePath </> name) timestamp isDirectory
+fsnEvent basePath timestamp (INo.Created isDir name) = Added    (basePath </> name) timestamp isDir
+fsnEvent basePath timestamp (INo.Closed isDir (Just name) True) = Modified (basePath </> name) timestamp isDir
+fsnEvent basePath timestamp (INo.MovedOut isDir name _cookie) = Removed  (basePath </> name) timestamp isDir
+fsnEvent basePath timestamp (INo.MovedIn isDir name _cookie) = Added    (basePath </> name) timestamp isDir
+fsnEvent basePath timestamp (INo.Deleted isDir name ) = Removed  (basePath </> name) timestamp isDir
 fsnEvent basePath timestamp inoEvent = Unknown basePath timestamp (show inoEvent)
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
@@ -120,7 +126,22 @@ instance FileListener INo.INotify where
             -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
             -- and trigger Added events for everything we find there
             case event of
-              (INo.Created True dirPath) -> listenRec (baseDir </> dirPath) wdVar
+              (INo.Created True dirPath) -> do
+                let newDir = baseDir </> dirPath
+                timestampBeforeAddingWatch <- getPOSIXTime
+                listenRec newDir wdVar
+
+                -- Find all files/folders that might have been created *after* the timestamp, and hence might have been
+                -- missed by the watch
+                -- TODO: there's a chance of this generating double events, fix
+                files <- S.shelly $ S.find (fromString newDir)
+                forM_ files $ \file -> do
+                  let newPath = T.unpack $ S.toTextIgnore file
+                  fileStatus <- getFileStatus newPath
+                  let modTime = modificationTimeHiRes fileStatus
+                  when (modTime > timestampBeforeAddingWatch) $ do
+                    handleEvent actPred chan dbp (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) (isDirectory fileStatus))
+
               _ -> return ()
 
             -- Forward all events, including directory create
