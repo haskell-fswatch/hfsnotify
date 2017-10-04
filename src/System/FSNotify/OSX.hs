@@ -3,6 +3,8 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
+{-# LANGUAGE MultiWayIf #-}
+
 module System.FSNotify.OSX
        ( FileListener(..)
        , NativeManager
@@ -46,60 +48,30 @@ canonicalEventPath event =
     dirFlag = FSE.eventFlagItemIsDir
     path = FSE.eventPath event
 
+-- We have to be careful about interpreting the flags in a given event, because
+-- "really it's an OR of all the changes made since the FSEventsListener is created"
+-- See https://stackoverflow.com/questions/18415285/osx-fseventstreameventflags-not-working-correctly
+-- Thus, we try to look at whether the path exists or not to determine whether it was created, modified, etc.
+
+-- Note that there's still some bugs possible due to event coalescing, which the docs say is a possibility:
+-- for example, a file could be created and modified within a short time interval, and then we'd only emit one
+-- event (the "modified" one, given the logic below)
+-- See https://developer.apple.com/library/content/documentation/Darwin/Conceptual/FSEvents_ProgGuide/UsingtheFSEventsFramework/UsingtheFSEventsFramework.html
 fsnEvents :: UTCTime -> FSE.Event -> IO [Event]
-fsnEvents timestamp fseEvent = liftM concat . sequence $ map (\f -> f fseEvent) (eventFunctions timestamp)
+fsnEvents timestamp e = do
+  exists <- doesPathExist (path e)
+  return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
+              | exists && hasFlag e FSE.eventFlagItemCreated -> [Added (path e) timestamp isDirectory]
+              | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
+
+              -- Rename stuff
+              | exists && (hasFlag e FSE.eventFlagItemRenamed) -> [Added (path e) timestamp isDirectory]
+              | (not exists) && (hasFlag e FSE.eventFlagItemRenamed) -> [Removed (path e) timestamp isDirectory]
+
+              | otherwise -> []
   where
-    isDirectory = hasFlag fseEvent FSE.eventFlagItemIsDir
-
-    eventFunctions :: UTCTime -> [FSE.Event -> IO [Event]]
-    eventFunctions t = [addedFn t, modifFn t, removFn t, renamFn t, queryFn]
-
-    queryFn e = do
-      let hasCreatedFlag = hasFlag e FSE.eventFlagItemCreated
-      putStrLn $ "Has created flag? " `mappend` show hasCreatedFlag
-
-      let hasRemovedFlag = hasFlag e FSE.eventFlagItemRemoved
-      putStrLn $ "Has removed flag? " `mappend` show hasRemovedFlag
-
-      let hasModifiedFlag = hasFlag e FSE.eventFlagItemModified
-      putStrLn $ "Has modified flag? " `mappend` show hasModifiedFlag
-
-      let hasMetaModifiedFlag = hasFlag e FSE.eventFlagItemInodeMetaMod
-      putStrLn $ "Has meta modified flag? " `mappend` show hasMetaModifiedFlag
-
-      let hasRenamedFlag = hasFlag e FSE.eventFlagItemRenamed
-      putStrLn $ "Has renamed flag? " `mappend` show hasRenamedFlag
-
-      return []
-
-    addedFn t e | hasFlag e FSE.eventFlagItemCreated && (not $ isModified e) = do
-                    -- We have to check whether the path actually exists, because
-                    -- "really it's an OR of all the changes made since the FSEventsListener is created"
-                    -- See https://stackoverflow.com/questions/18415285/osx-fseventstreameventflags-not-working-correctly
-                    -- We also check that the "modified" flag is not set, because if it is, then we must be seeing an event
-                    -- from after the file was already created
-                    exists <- doesPathExist (path e)
-                    return $ if exists then [Added (path e) t isDirectory] else []
-    addedFn t e | otherwise = return []
-
-    modifFn t e | isModified e = do
-                    exists <- doesPathExist (path e)
-                    return $ if exists then [Modified (path e) t isDirectory] else []
-    modifFn t e | otherwise = return []
-
-    removFn t e | hasFlag e FSE.eventFlagItemRemoved = do
-                    -- See comment in addedFn about FSEventsListener weirdness
-                    exists <- doesPathExist (path e)
-                    return $ if not exists then [Removed (path e) t isDirectory] else []
-    removFn t e | otherwise = return []
-
-    renamFn t e | (hasFlag e FSE.eventFlagItemRenamed) && (not $ isModified e) = do
-                    exists <- doesPathExist (path e)
-                    return $ if exists then [Added (path e) t isDirectory] else [Removed (path e) t isDirectory]
-    renamFn t e | otherwise = return []
-
-    isModified e = hasFlag e FSE.eventFlagItemModified || hasFlag e FSE.eventFlagItemInodeMetaMod
-
+    isDirectory = hasFlag e FSE.eventFlagItemIsDir
+    isModified = hasFlag e FSE.eventFlagItemModified || hasFlag e FSE.eventFlagItemInodeMetaMod
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
