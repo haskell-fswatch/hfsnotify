@@ -18,7 +18,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX
 import Prelude hiding (FilePath)
 import System.FSNotify.Listener
-import System.FSNotify.Path (findFiles, canonicalizeDirPath)
+import System.FSNotify.Path (findFilesAndDirs, canonicalizeDirPath)
 import System.FSNotify.Types
 import System.FilePath
 import System.PosixCompat.Files
@@ -48,8 +48,8 @@ handleEvent chan actPred event
   | otherwise     = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath UTCTime)
-pathModMap True  path = findFiles True path >>= pathModMap'
-pathModMap False path = findFiles False path >>= pathModMap'
+pathModMap True  path = findFilesAndDirs True path >>= pathModMap'
+pathModMap False path = findFilesAndDirs False path >>= pathModMap'
 
 pathModMap' :: [FilePath] -> IO (Map FilePath UTCTime)
 pathModMap' files = fmap Map.fromList $ mapM pathAndTime files

@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -37,19 +37,20 @@ instance Exception EventVarietyMismatchException
 
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: FilePath -> UTCTime -> INo.Event -> Event
-fsnEvent basePath timestamp (INo.Created isDir name) = Added    (basePath </> name) timestamp isDir
-fsnEvent basePath timestamp (INo.Closed isDir (Just name) True) = Modified (basePath </> name) timestamp isDir
-fsnEvent basePath timestamp (INo.MovedOut isDir name _cookie) = Removed  (basePath </> name) timestamp isDir
-fsnEvent basePath timestamp (INo.MovedIn isDir name _cookie) = Added    (basePath </> name) timestamp isDir
-fsnEvent basePath timestamp (INo.Deleted isDir name ) = Removed  (basePath </> name) timestamp isDir
-fsnEvent basePath timestamp inoEvent = Unknown basePath timestamp (show inoEvent)
+fsnEvents :: FilePath -> UTCTime -> INo.Event -> [Event]
+fsnEvents basePath timestamp (INo.Created isDir name) = [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Closed isDir (Just name) True) = [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.MovedOut isDir name _cookie) = [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.MovedIn isDir name _cookie) = [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Deleted isDir name ) = [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath _ (INo.Ignored) = []
+fsnEvents basePath timestamp inoEvent = [Unknown basePath timestamp (show inoEvent)]
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
 handleInoEvent actPred chan basePath dbp inoEvent = do
   currentTime <- getCurrentTime
-  let event = fsnEvent basePath currentTime inoEvent
-  handleEvent actPred chan dbp event
+  let events = fsnEvents basePath currentTime inoEvent
+  mapM_ (handleEvent actPred chan dbp) events
 
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
 handleEvent actPred chan dbp event =
@@ -92,7 +93,7 @@ instance FileListener INo.INotify where
     let
       stopListening = do
         modifyMVar_ wdVar $ \mbWds -> do
-          maybe (return ()) (mapM_ INo.removeWatch) mbWds
+          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x) (\(_ :: SomeException) -> putStrLn ("Error removing watch: " `mappend` show x)))) mbWds
           return Nothing
 
     listenRec initialPath wdVar
@@ -142,6 +143,11 @@ instance FileListener INo.INotify where
                   when (modTime > timestampBeforeAddingWatch) $ do
                     handleEvent actPred chan dbp (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) (isDirectory fileStatus))
 
+              _ -> return ()
+
+            case event of
+              (INo.DeletedSelf) -> do
+                putStrLn "Watched file/folder was deleted!"
               _ -> return ()
 
             -- Forward all events, including directory create

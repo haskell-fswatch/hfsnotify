@@ -62,21 +62,23 @@ tests hasNative = testGroup "Tests" $ do
           ]
         return $ t nested recursive poll
 
-  where
-    mkTest title evs prepare action nested recursive poll =
-      testCase title $ withTempDirectory testDirPath "test." $ \watchedDir -> do
-        let baseDir = if nested then watchedDir </> "subdir" else watchedDir
-            f = baseDir </> fileName
-            expect =
-              expectEvents poll
-                (if recursive then watchTree else watchDir)
-                watchedDir
-        createDirectoryIfMissing True baseDir
-        (prepare f >>
-         expect (if not nested || recursive then map ($ f) evs else []) (action f))
-          `finally` (isFile f >>= \b -> when b (removeFile f))
 
-    fileName = "testfile"
+mkTest :: (?timeInterval::Int) => TestName -> [FilePath -> EventPattern] -> (FilePath -> IO a) ->
+          (FilePath -> IO ()) -> Bool -> Bool -> Bool -> TestTree
+mkTest title evs prepare action nested recursive poll =
+  testCase title $ withTempDirectory testDirPath "test." $ \watchedDir -> do
+    let fileName = "testfile"
+    let baseDir = if nested then watchedDir </> "subdir" else watchedDir
+        f = baseDir </> fileName
+        watchFn = if recursive then watchTree else watchDir
+        expect = expectEvents poll watchFn watchedDir
+
+    createDirectoryIfMissing True baseDir
+    (prepare f >>
+     expect (if not nested || recursive then map ($ f) evs else []) (action f))
+      `finally` (isFile f >>= \b -> when b (removeFile f))
+
+
 
 
 -------------------------------------------------------------------------------
