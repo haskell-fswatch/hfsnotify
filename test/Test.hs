@@ -1,18 +1,18 @@
 {-# LANGUAGE OverloadedStrings, ImplicitParams #-}
-import Prelude hiding
-  ( FilePath )
+
 import Control.Applicative
-import Test.Tasty
-import Test.Tasty.HUnit
+import Control.Concurrent
+import Control.Exception
+import Control.Monad
+import Prelude hiding (FilePath)
 import System.Directory
-import System.FilePath
 import System.FSNotify
+import System.FilePath
 import System.IO.Error
 import System.IO.Temp
 import System.PosixCompat.Files
-import Control.Monad
-import Control.Exception
-import Control.Concurrent
+import Test.Tasty
+import Test.Tasty.HUnit
 
 import EventUtils
 
@@ -35,35 +35,36 @@ main = do
 
 tests :: Bool -> TestTree
 tests hasNative = testGroup "Tests" $ do
-  poll <-
-    if hasNative
-      then [False, True]
-      else [True]
-  let ?timeInterval =
-        if poll
-          then 2*10^(6 :: Int)
-          else 5*10^(5 :: Int)
+  poll <- if hasNative then [False, True] else [True]
+  let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
+
   return $ testGroup (if poll then "Polling" else "Native") $ do
-  recursive <- [False, True]
-  return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
-  nested <- [False, True]
-  return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
-  t <-
-    [ mkTest "new file"
-        (if poll then [evAdded] else [evAdded, evModified])
-        (const $ return ())
-        (\f -> writeFile f "foo")
-    , mkTest "modify file" [evModified] (\f -> writeFile f "")
-        (\f -> when poll (threadDelay $ 10^(6 :: Int)) >> writeFile f "foo")
-    , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
-    , mkTest "directories are ignored" [] (const $ return ())
-        (\f -> createDirectory f >> removeDirectory f)
-    ]
-  return $ t nested recursive poll
+    recursive <- [False, True]
+    return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
+      nested <- [False, True]
+
+      let pollDelay = when poll (threadDelay $ 10^(6 :: Int))
+
+      return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
+        t <- [ mkTest "new file" (if poll then [evAdded] else [evAdded, evModified])
+                                 (const $ return ())
+                                 (\f -> writeFile f "foo")
+
+             , mkTest "modify file" [evModified] (\f -> writeFile f "")
+               (\f -> when poll (threadDelay $ 10^(6 :: Int)) >> writeFile f "foo")
+
+             , mkTest "delete file" [evRemoved] (\f -> writeFile f "") (\f -> removeFile f)
+
+             , mkTest "new directory" [evAdded] (const $ return ()) (\f -> createDirectory f)
+
+             , mkTest "delete directory" [evRemoved]
+               (\f -> pollDelay >> createDirectory f) (\f -> removeDirectory f)
+          ]
+        return $ t nested recursive poll
+
   where
     mkTest title evs prepare action nested recursive poll =
-      testCase title $
-        withTempDirectory testDirPath "test." $ \watchedDir -> do
+      testCase title $ withTempDirectory testDirPath "test." $ \watchedDir -> do
         let baseDir = if nested then watchedDir </> "subdir" else watchedDir
             f = baseDir </> fileName
             expect =

@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings, ImplicitParams #-}
 module EventUtils where
 
-import Prelude hiding (FilePath)
-import Test.Tasty.HUnit
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async hiding (poll)
-import Control.Applicative
 import Control.Monad
 import Data.IORef
 import Data.List (sortBy)
 import Data.Ord (comparing)
-import System.FilePath
-import System.FSNotify
-import System.IO.Unsafe
+import Prelude hiding (FilePath)
 import System.Directory
+import System.FSNotify
+import System.FilePath
+import System.IO.Unsafe
+import Test.Tasty.HUnit
 import Text.Printf
 
 delay :: (?timeInterval :: Int) => IO ()
@@ -31,17 +31,17 @@ evAdded path =
   EventPattern
     path
     "Added"
-    (\x -> case x of Added path' _ -> path == path'; _ -> False)
+    (\x -> case x of Added path' _ _ -> path == path'; _ -> False)
 evRemoved path =
   EventPattern
     path
     "Removed"
-    (\x -> case x of Removed path' _ -> path == path'; _ -> False)
+    (\x -> case x of Removed path' _ _ -> path == path'; _ -> False)
 evModified path =
   EventPattern
     path
     "Modified"
-    (\x -> case x of Modified path' _ -> path == path'; _ -> False)
+    (\x -> case x of Modified path' _ _ -> path == path'; _ -> False)
 
 
 matchEvents :: [EventPattern] -> [Event] -> Assertion
