@@ -43,7 +43,7 @@ fsnEvents basePath timestamp (INo.Closed isDir (Just name) True) = [Modified (ba
 fsnEvents basePath timestamp (INo.MovedOut isDir name _cookie) = [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedIn isDir name _cookie) = [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.Deleted isDir name ) = [Removed (basePath </> name) timestamp isDir]
-fsnEvents basePath _ (INo.Ignored) = []
+fsnEvents _ _ (INo.Ignored) = []
 fsnEvents basePath timestamp inoEvent = [Unknown basePath timestamp (show inoEvent)]
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
@@ -145,9 +145,14 @@ instance FileListener INo.INotify where
 
               _ -> return ()
 
+            -- Remove watch when this directory is removed
             case event of
               (INo.DeletedSelf) -> do
-                putStrLn "Watched file/folder was deleted!"
+                -- putStrLn "Watched file/folder was deleted! TODO: remove watch."
+                return ()
+              (INo.Ignored) -> do
+                -- putStrLn "Watched file/folder was ignored, which possibly means it was deleted. TODO: remove watch."
+                return ()
               _ -> return ()
 
             -- Forward all events, including directory create

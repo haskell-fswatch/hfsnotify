@@ -190,8 +190,7 @@ threadChan
       -- (^ this is the type of listen and listenRecursive)
   ->  WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
-  modifyMVar cleanupVar $ \mbCleanup ->
-  case mbCleanup of
+  modifyMVar cleanupVar $ \mbCleanup -> case mbCleanup of
     -- check if we've been stopped
     Nothing -> return (Nothing, return ()) -- or throw an exception?
     Just cleanup -> do
