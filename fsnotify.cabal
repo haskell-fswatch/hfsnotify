@@ -16,7 +16,7 @@ Homepage:               https://github.com/haskell-fswatch/hfsnotify
 Extra-Source-Files:
   README.md
   CHANGELOG.md
-  test/test.hs
+  test/Test.hs
   test/EventUtils.hs
 
 
