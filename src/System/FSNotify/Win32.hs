@@ -41,7 +41,7 @@ handleWNoEvent :: BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload 
 handleWNoEvent basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent basedir currentTime inoEvent
-  handleEvent actPred chan dbp evt
+  handleEvent actPred chan dbp event
 
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
 handleEvent actPred chan dbp event =
