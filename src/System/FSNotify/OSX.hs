@@ -17,6 +17,7 @@ import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Monoid
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Unique
 import Data.Word
@@ -60,17 +61,29 @@ canonicalEventPath event =
 fsnEvents :: UTCTime -> FSE.Event -> IO [Event]
 fsnEvents timestamp e = do
   exists <- doesPathExist (path e)
+
+  -- putStrLn $ "Event: " <> show e
+  -- putStrLn $ "isDirectory: " <> show isDirectory
+  -- putStrLn $ "isFile: " <> show isFile
+  -- putStrLn $ "isModified: " <> show isModified
+  -- putStrLn $ "isCreated: " <> show isCreated
+  -- putStrLn $ "path: " <> show (path e)
+  -- putStrLn $ "exists: " <> show exists
+
   return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
-              | exists && hasFlag e FSE.eventFlagItemCreated -> [Added (path e) timestamp isDirectory]
+              | exists && isCreated -> [Added (path e) timestamp isDirectory]
               | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
 
               -- Rename stuff
-              | exists && (hasFlag e FSE.eventFlagItemRenamed) -> [Added (path e) timestamp isDirectory]
-              | (not exists) && (hasFlag e FSE.eventFlagItemRenamed) -> [Removed (path e) timestamp isDirectory]
+              | exists && isRenamed -> [Added (path e) timestamp isDirectory]
+              | (not exists) && isRenamed -> [Removed (path e) timestamp isDirectory]
 
               | otherwise -> []
   where
     isDirectory = hasFlag e FSE.eventFlagItemIsDir
+    isFile = hasFlag e FSE.eventFlagItemIsFile
+    isCreated = hasFlag e FSE.eventFlagItemCreated
+    isRenamed = hasFlag e FSE.eventFlagItemRenamed
     isModified = hasFlag e FSE.eventFlagItemModified || hasFlag e FSE.eventFlagItemInodeMetaMod
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
@@ -92,28 +105,30 @@ handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
         lastEvent <- readIORef ior
         when (not $ debounce epsilon lastEvent event) (writeChan chan event)
         atomicModifyIORef ior (\_ -> (event, ()))
-      Nothing                           -> writeChan chan event
+      Nothing -> writeChan chan event
+
     handleNonRecursiveEvents actPred chan dirPath dbp events
+
   | otherwise                                                         = handleNonRecursiveEvents actPred chan dirPath dbp events
 handleNonRecursiveEvents _ _ _ _ []                                   = return ()
 
-handleFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
-handleFSEEvent actPred chan dbp fseEvent = do
+handleRecursiveFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
+handleRecursiveFSEEvent actPred chan dbp fseEvent = do
   currentTime <- getCurrentTime
   putStrLn $ "Event: " `mappend` show fseEvent
   events <- fsnEvents currentTime fseEvent
-  handleEvents actPred chan dbp events
+  handleRecursiveEvents actPred chan dbp events
 
-handleEvents :: ActionPredicate -> EventChannel -> DebouncePayload -> [Event] -> IO ()
-handleEvents actPred chan dbp (event:events) = do
+handleRecursiveEvents :: ActionPredicate -> EventChannel -> DebouncePayload -> [Event] -> IO ()
+handleRecursiveEvents actPred chan dbp (event:events) = do
   when (actPred event) $ case dbp of
       (Just (DebounceData epsilon ior)) -> do
         lastEvent <- readIORef ior
         when (not $ debounce epsilon lastEvent event) (writeChan chan event)
         atomicModifyIORef ior (\_ -> (event, ()))
       Nothing                           -> writeChan chan event
-  handleEvents actPred chan dbp events
-handleEvents _ _ _ [] = return ()
+  handleRecursiveEvents actPred chan dbp events
+handleRecursiveEvents _ _ _ [] = return ()
 
 listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
          -> WatchConfig
@@ -147,6 +162,6 @@ instance FileListener OSXManager where
 
   listen = listenFn handleNonRecursiveFSEEvent
 
-  listenRecursive = listenFn $ \actPred chan _ -> handleFSEEvent actPred chan
+  listenRecursive = listenFn $ \actPred chan _ -> handleRecursiveFSEEvent actPred chan
 
   usesPolling = const False

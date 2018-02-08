@@ -26,22 +26,18 @@ data EventPattern = EventPattern
   , patPredicate :: Event -> Bool
   }
 
-evAdded, evRemoved, evModified :: FilePath -> EventPattern
-evAdded path =
-  EventPattern
-    path
-    "Added"
-    (\x -> case x of Added path' _ _ -> path == path'; _ -> False)
-evRemoved path =
-  EventPattern
-    path
-    "Removed"
-    (\x -> case x of Removed path' _ _ -> path == path'; _ -> False)
-evModified path =
-  EventPattern
-    path
-    "Modified"
-    (\x -> case x of Modified path' _ _ -> path == path'; _ -> False)
+evAdded, evRemoved, evModified, evAddedOrModified :: FilePath -> EventPattern
+evAdded path = EventPattern path "Added"
+  (\x -> case x of Added path' _ _ -> path == path'; _ -> False)
+evRemoved path = EventPattern path "Removed"
+  (\x -> case x of Removed path' _ _ -> path == path'; _ -> False)
+evModified path = EventPattern path "Modified"
+  (\x -> case x of Modified path' _ _ -> path == path'; _ -> False)
+evAddedOrModified path = EventPattern path "AddedOrModified"
+  (\x -> case x of
+      Added path' _ _ -> path == path'
+      Modified path' _ _ -> path == path'
+      _ -> False)
 
 
 matchEvents :: [EventPattern] -> [Event] -> Assertion
