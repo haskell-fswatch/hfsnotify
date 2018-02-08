@@ -17,7 +17,6 @@ import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Monoid
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Unique
 import Data.Word
@@ -29,8 +28,8 @@ import System.FSNotify.Types
 import System.FilePath
 import qualified System.OSX.FSEvents as FSE
 
-data ListenType = NonRecursive | Recursive
-data WatchData = WatchData FSE.EventStream ListenType EventChannel
+
+data WatchData = WatchData FSE.EventStream EventChannel
 
 type WatchMap = Map Unique WatchData
 data OSXManager = OSXManager (MVar WatchMap)
@@ -60,15 +59,16 @@ canonicalEventPath event =
 -- See https://developer.apple.com/library/content/documentation/Darwin/Conceptual/FSEvents_ProgGuide/UsingtheFSEventsFramework/UsingtheFSEventsFramework.html
 fsnEvents :: UTCTime -> FSE.Event -> IO [Event]
 fsnEvents timestamp e = do
-  exists <- doesPathExist (path e)
+  -- Note: we *don't* want to use the canonical event path in the existence check, because of the aforementioned crazy event coalescing.
+  -- For example, suppose a directory is created and deleted, and then a file is created with the same name. This means the isDirectory flag might
+  -- still be turned on, which could lead us to construct a canonical event path with a trailing slash, which would then cause the existence
+  -- check to fail and make us think the file was removed.
+  -- The upshot of this is that the canonical event paths in the events we emit can't really be trusted, but hey, that's what the extra flag
+  -- on the event is for :(
+  exists <- doesPathExist $ FSE.eventPath e
 
-  -- putStrLn $ "Event: " <> show e
-  -- putStrLn $ "isDirectory: " <> show isDirectory
-  -- putStrLn $ "isFile: " <> show isFile
-  -- putStrLn $ "isModified: " <> show isModified
-  -- putStrLn $ "isCreated: " <> show isCreated
-  -- putStrLn $ "path: " <> show (path e)
-  -- putStrLn $ "exists: " <> show exists
+  -- Uncomment for an easy way to see flag activity when testing manually
+  -- putStrLn $ show ["Event", show e, "isDirectory", show isDirectory, "isFile", show isFile, "isModified", show isModified, "isCreated", show isCreated, "path", path e, "exists", show exists]
 
   return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
               | exists && isCreated -> [Added (path e) timestamp isDirectory]
@@ -88,47 +88,29 @@ fsnEvents timestamp e = do
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
--- Separate logic is needed for non-recursive events in OSX because the
--- hfsevents package doesn't support non-recursive event reporting.
-
-handleNonRecursiveFSEEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
-handleNonRecursiveFSEEvent actPred chan dirPath dbp fseEvent = do
+handleEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
+handleEvent isRecursive actPred chan dirPath dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  handleNonRecursiveEvents actPred chan dirPath dbp events
+  handleEvents isRecursive actPred chan dirPath dbp events
 
-handleNonRecursiveEvents :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
-handleNonRecursiveEvents actPred chan dirPath dbp (event:events)
-  | takeDirectory dirPath == takeDirectory (eventPath event) && actPred event = do
-    case dbp of
+-- | For non-recursive monitoring, test if an event takes place directly inside the monitored folder
+isDirectlyInside :: FilePath -> Event -> Bool
+isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
+  where
+    isRelevantFileEvent = (not $ eventIsDirectory event) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
+    isRelevantDirEvent = eventIsDirectory event && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
+
+handleEvents :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
+handleEvents isRecursive actPred chan dirPath dbp (event:events) = do
+  when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $ case dbp of
       (Just (DebounceData epsilon ior)) -> do
         lastEvent <- readIORef ior
         when (not $ debounce epsilon lastEvent event) (writeChan chan event)
         atomicModifyIORef ior (\_ -> (event, ()))
       Nothing -> writeChan chan event
-
-    handleNonRecursiveEvents actPred chan dirPath dbp events
-
-  | otherwise                                                         = handleNonRecursiveEvents actPred chan dirPath dbp events
-handleNonRecursiveEvents _ _ _ _ []                                   = return ()
-
-handleRecursiveFSEEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> FSE.Event -> IO ()
-handleRecursiveFSEEvent actPred chan dbp fseEvent = do
-  currentTime <- getCurrentTime
-  putStrLn $ "Event: " `mappend` show fseEvent
-  events <- fsnEvents currentTime fseEvent
-  handleRecursiveEvents actPred chan dbp events
-
-handleRecursiveEvents :: ActionPredicate -> EventChannel -> DebouncePayload -> [Event] -> IO ()
-handleRecursiveEvents actPred chan dbp (event:events) = do
-  when (actPred event) $ case dbp of
-      (Just (DebounceData epsilon ior)) -> do
-        lastEvent <- readIORef ior
-        when (not $ debounce epsilon lastEvent event) (writeChan chan event)
-        atomicModifyIORef ior (\_ -> (event, ()))
-      Nothing                           -> writeChan chan event
-  handleRecursiveEvents actPred chan dbp events
-handleRecursiveEvents _ _ _ [] = return ()
+  handleEvents isRecursive actPred chan dirPath dbp events
+handleEvents _ _ _ _ _ [] = return ()
 
 listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
          -> WatchConfig
@@ -142,7 +124,7 @@ listenFn handler conf (OSXManager mvarMap) path actPred chan = do
   dbp <- newDebouncePayload $ confDebounce conf
   unique <- newUnique
   eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred chan path' dbp)
-  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream NonRecursive chan) watchMap)
+  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream chan) watchMap)
   return $ do
     FSE.eventStreamDestroy eventStream
     modifyMVar_ mvarMap $ \watchMap -> return $ Map.delete unique watchMap
@@ -158,10 +140,9 @@ instance FileListener OSXManager where
     forM_ (Map.elems watchMap) eventStreamDestroy'
     where
       eventStreamDestroy' :: WatchData -> IO ()
-      eventStreamDestroy' (WatchData eventStream _ _) = FSE.eventStreamDestroy eventStream
+      eventStreamDestroy' (WatchData eventStream _) = FSE.eventStreamDestroy eventStream
 
-  listen = listenFn handleNonRecursiveFSEEvent
-
-  listenRecursive = listenFn $ \actPred chan _ -> handleRecursiveFSEEvent actPred chan
+  listen = listenFn $ handleEvent False
+  listenRecursive = listenFn $ handleEvent True
 
   usesPolling = const False

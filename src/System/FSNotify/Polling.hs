@@ -17,6 +17,7 @@ import Data.Maybe
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX
 import Prelude hiding (FilePath)
+import System.Directory (doesDirectoryExist)
 import System.FSNotify.Listener
 import System.FSNotify.Path (findFilesAndDirs, canonicalizeDirPath)
 import System.FSNotify.Types
@@ -34,32 +35,33 @@ data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 data PollManager = PollManager (MVar WatchMap)
 
-generateEvent :: UTCTime -> EventType -> FilePath -> Maybe Event
-generateEvent timestamp AddedEvent    filePath = Just (Added    filePath timestamp False)
-generateEvent timestamp ModifiedEvent filePath = Just (Modified filePath timestamp False)
-generateEvent timestamp RemovedEvent  filePath = Just (Removed  filePath timestamp False)
+generateEvent :: UTCTime -> Bool -> EventType -> FilePath -> Maybe Event
+generateEvent timestamp isDir AddedEvent    filePath = Just (Added    filePath timestamp isDir)
+generateEvent timestamp isDir ModifiedEvent filePath = Just (Modified filePath timestamp isDir)
+generateEvent timestamp isDir RemovedEvent  filePath = Just (Removed  filePath timestamp isDir)
 
-generateEvents :: UTCTime -> EventType -> [FilePath] -> [Event]
-generateEvents timestamp eventType = mapMaybe (generateEvent timestamp eventType)
+generateEvents :: UTCTime -> EventType -> [(FilePath, Bool)] -> [Event]
+generateEvents timestamp eventType = mapMaybe (\(path, isDir) -> generateEvent timestamp isDir eventType path)
 
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
 handleEvent chan actPred event
   | actPred event = writeChan chan event
   | otherwise     = return ()
 
-pathModMap :: Bool -> FilePath -> IO (Map FilePath UTCTime)
+pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, Bool))
 pathModMap True  path = findFilesAndDirs True path >>= pathModMap'
 pathModMap False path = findFilesAndDirs False path >>= pathModMap'
 
-pathModMap' :: [FilePath] -> IO (Map FilePath UTCTime)
-pathModMap' files = fmap Map.fromList $ mapM pathAndTime files
+pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
+pathModMap' files = fmap Map.fromList $ mapM pathAndInfo files
   where
-    pathAndTime :: FilePath -> IO (FilePath, UTCTime)
-    pathAndTime path = do
+    pathAndInfo :: FilePath -> IO (FilePath, (UTCTime, Bool))
+    pathAndInfo path = do
       modTime <- getModificationTime path
-      return (path, modTime)
+      isDir <- doesDirectoryExist path
+      return (path, (modTime, isDir))
 
-pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath UTCTime -> IO ()
+pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, Bool) -> IO ()
 pollPath interval recursive chan filePath actPred oldPathMap = do
   threadDelay interval
   newPathMap  <- pathModMap recursive filePath
@@ -69,20 +71,23 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
       modifiedAndCreatedMap = Map.differenceWith modifiedDifference newPathMap oldPathMap
       modifiedMap = Map.difference modifiedAndCreatedMap createdMap
       generateEvents' = generateEvents currentTime
-  handleEvents $ generateEvents' AddedEvent    $ Map.keys createdMap
-  handleEvents $ generateEvents' ModifiedEvent $ Map.keys modifiedMap
-  handleEvents $ generateEvents' RemovedEvent  $ Map.keys deletedMap
+
+  handleEvents $ generateEvents' AddedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList createdMap]
+  handleEvents $ generateEvents' ModifiedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList modifiedMap]
+  handleEvents $ generateEvents' RemovedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList deletedMap]
+
   pollPath' newPathMap
+
   where
-    modifiedDifference :: UTCTime -> UTCTime -> Maybe UTCTime
-    modifiedDifference newTime oldTime
-      | oldTime /= newTime = Just newTime
-      | otherwise            = Nothing
+    modifiedDifference :: (UTCTime, Bool) -> (UTCTime, Bool) -> Maybe (UTCTime, Bool)
+    modifiedDifference (newTime, isDir1) (oldTime, isDir2)
+      | oldTime /= newTime || isDir1 /= isDir2 = Just (newTime, isDir1)
+      | otherwise = Nothing
 
     handleEvents :: [Event] -> IO ()
     handleEvents = mapM_ (handleEvent chan actPred)
 
-    pollPath' :: Map FilePath UTCTime -> IO ()
+    pollPath' :: Map FilePath (UTCTime, Bool) -> IO ()
     pollPath' = pollPath interval recursive chan filePath actPred
 
 

@@ -69,6 +69,7 @@ Test-Suite test
                         , fsnotify
                         , async >= 2
                         , temporary
+                        , random
 
 Source-Repository head
   Type:                 git

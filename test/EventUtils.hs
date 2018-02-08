@@ -7,6 +7,7 @@ import Control.Concurrent.Async hiding (poll)
 import Control.Monad
 import Data.IORef
 import Data.List (sortBy)
+import Data.Monoid
 import Data.Ord (comparing)
 import Prelude hiding (FilePath)
 import System.Directory
@@ -26,19 +27,32 @@ data EventPattern = EventPattern
   , patPredicate :: Event -> Bool
   }
 
-evAdded, evRemoved, evModified, evAddedOrModified :: FilePath -> EventPattern
-evAdded path = EventPattern path "Added"
-  (\x -> case x of Added path' _ _ -> path == path'; _ -> False)
-evRemoved path = EventPattern path "Removed"
-  (\x -> case x of Removed path' _ _ -> path == path'; _ -> False)
-evModified path = EventPattern path "Modified"
-  (\x -> case x of Modified path' _ _ -> path == path'; _ -> False)
-evAddedOrModified path = EventPattern path "AddedOrModified"
+evAdded, evRemoved, evModified, evAddedOrModified :: Bool -> FilePath -> EventPattern
+evAdded isDirectory path = EventPattern path "Added"
   (\x -> case x of
-      Added path' _ _ -> path == path'
-      Modified path' _ _ -> path == path'
-      _ -> False)
+      Added path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
+      _ -> False
+  )
+evRemoved isDirectory path = EventPattern path "Removed"
+  (\x -> case x of
+      Removed path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
+      _ -> False
+  )
+evModified isDirectory path = EventPattern path "Modified"
+  (\x ->
+     case x of
+       Modified path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
+       _ -> False
+  )
+evAddedOrModified isDirectory path = EventPattern path "AddedOrModified"
+  (\x -> case x of
+      Added path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
+      Modified path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
+      _ -> False
+  )
 
+pathMatches True path path' = path == path' || (path <> [pathSeparator]) == path'
+pathMatches False path path' = path == path'
 
 matchEvents :: [EventPattern] -> [Event] -> Assertion
 matchEvents expected actual = do
@@ -49,7 +63,7 @@ matchEvents expected actual = do
       (show actual)
   sequence_ $ (\f -> zipWith f expected actual) $ \pat ev ->
     assertBool
-      (printf "Unexpected event.\n  Expected :%s\n  Actual: %s\n"
+      (printf "Unexpected event.\n  Expected: %s\n  Actual: %s\n"
         (show expected)
         (show actual))
       (patPredicate pat ev)
