@@ -1,4 +1,4 @@
-hfsnotify
+hfsnotify [![Build Status](https://travis-ci.org/codedownio/hfsnotify.svg)](https://travis-ci.org/codedownio/hfsnotify)
 =========
 
 Unified Haskell interface for basic file system notifications.
