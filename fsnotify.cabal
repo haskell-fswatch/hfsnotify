@@ -60,16 +60,11 @@ Test-Suite test
   Other-modules:        EventUtils
   Hs-Source-Dirs:       test
   GHC-Options:          -Wall -threaded
-  Build-depends:          base >= 4.3.1.0
-                        , tasty >= 0.5
-                        , tasty-hunit
-                        , directory
-                        , filepath
-                        , unix-compat
-                        , fsnotify
-                        , async >= 2
-                        , temporary
-                        , random
+
+  if os(windows)
+    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random, Win32
+  else
+    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random
 
 Source-Repository head
   Type:                 git
