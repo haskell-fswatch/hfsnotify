@@ -8,6 +8,14 @@ before_test:
 - 7z x stack.zip stack.exe
 
 clone_folder: "c:\\hfsnotify"
+
+clone_script:
+- cmd: >-
+    git clone -q --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
+    cd %APPVEYOR_BUILD_FOLDER%
+    git checkout -qf %APPVEYOR_REPO_COMMIT%
+    git submodule update --init --recursive
+
 environment:
   global:
     STACK_ROOT: "c:\\sr"
