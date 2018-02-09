@@ -14,7 +14,6 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
-import Control.Monad (when)
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.String
 import qualified Data.Text as T
@@ -35,11 +34,10 @@ type NativeManager = INo.INotify
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
 
--- Note that INo.Closed in this context is "modified" because we listen to
--- CloseWrite events.
 fsnEvents :: FilePath -> UTCTime -> INo.Event -> [Event]
+fsnEvents basePath timestamp (INo.Attributes isDir (Just name)) = [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Modified isDir (Just name)) = [Modified (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.Created isDir name) = [Added (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Closed isDir (Just name) True) = [Modified (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedOut isDir name _cookie) = [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedIn isDir name _cookie) = [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.Deleted isDir name ) = [Removed (basePath </> name) timestamp isDir]
@@ -57,14 +55,14 @@ handleEvent actPred chan dbp event =
   when (actPred event) $ case dbp of
     (Just (DebounceData epsilon ior)) -> do
       lastEvent <- readIORef ior
-      when (not $ debounce epsilon lastEvent event) writeToChan
-      atomicModifyIORef ior (\_ -> (event, ()))
-    Nothing                           -> writeToChan
+      unless (debounce epsilon lastEvent event) writeToChan
+      atomicModifyIORef ior (const (event, ()))
+    Nothing -> writeToChan
   where
     writeToChan = writeChan chan event
 
 varieties :: [INo.EventVariety]
-varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.CloseWrite]
+varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify]
 
 instance FileListener INo.INotify where
   initSession = fmap Just INo.initINotify

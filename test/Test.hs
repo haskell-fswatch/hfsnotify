@@ -4,7 +4,6 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.Bits
 import Data.Monoid
 import Prelude hiding (FilePath)
 import System.Directory
@@ -21,6 +20,7 @@ import Test.Tasty.HUnit
 import EventUtils
 
 #ifdef mingw32_HOST_OS
+import Data.Bits
 import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
 -- Perturb the file's attributes, to check that a modification event is emitted
 changeFileAttributes :: FilePath -> IO ()
@@ -28,9 +28,8 @@ changeFileAttributes file = do
   attrs <- getFileAttributes file
   setFileAttributes file (attrs `xor` fILE_ATTRIBUTE_TEMPORARY)
 #else
-import System.Posix.Files
 changeFileAttributes :: FilePath -> IO ()
-changeFileAttributes file = touchFile
+changeFileAttributes = touchFile
 #endif
 
 
@@ -40,14 +39,6 @@ isMac = True
 #else
 isMac = False
 #endif
-
-isWindows :: Bool
-#ifdef mingw32_HOST_OS
-isWindows = True
-#else
-isWindows = False
-#endif
-
 
 nativeMgrSupported :: IO Bool
 nativeMgrSupported = do
@@ -82,10 +73,8 @@ tests hasNative = testGroup "Tests" $ do
       let pollDelay = when poll (threadDelay $ 10^(6 :: Int))
 
       return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
-        t <- [ mkTest "new file" (if | poll -> [evAdded False]
-                                     | isWindows -> [evAdded False]
-                                     | isMac -> [evAddedOrModified False]
-                                     | otherwise -> [evAdded False, evModified False])
+        t <- [ mkTest "new file" (if | isMac && not poll -> [evAddedOrModified False]
+                                     | otherwise -> [evAdded False])
                                  (const $ return ())
                                  (\f -> openFile f AppendMode >>= hClose)
 
@@ -101,16 +90,16 @@ tests hasNative = testGroup "Tests" $ do
 
              , mkTest "delete file" [evRemoved False]
                                     (\f -> writeFile f "")
-                                    (\f -> removeFile f)
+                                    removeFile
 
              , mkTest "new directory" (if | isMac -> [evAddedOrModified True]
                                           | otherwise -> [evAdded True])
                                       (const $ return ())
-                                      (\f -> createDirectory f)
+                                      createDirectory
 
              , mkTest "delete directory" [evRemoved True]
                                          (\f -> pollDelay >> createDirectory f)
-                                         (\f -> removeDirectory f)
+                                         removeDirectory
           ]
         return $ t nested recursive poll
 
