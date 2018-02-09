@@ -1,0 +1,3 @@
+[submodule "lib/win32-notify"]
+	path = lib/win32-notify
+	url = git@github.com:codedownio/win32-notify.git

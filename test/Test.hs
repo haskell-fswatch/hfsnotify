@@ -25,6 +25,14 @@ isMac = True
 isMac = False
 #endif
 
+isWindows :: Bool
+#ifdef mingw32_HOST_OS
+isWindows = True
+#else
+isWindows = False
+#endif
+
+
 nativeMgrSupported :: IO Bool
 nativeMgrSupported = do
   mgr <- startManager
@@ -59,6 +67,7 @@ tests hasNative = testGroup "Tests" $ do
 
       return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
         t <- [ mkTest "new file" (if | poll -> [evAdded False]
+                                     | isWindows -> [evAdded False]
                                      | isMac -> [evAddedOrModified False]
                                      | otherwise -> [evAdded False, evModified False])
                                  (const $ return ())
@@ -95,7 +104,7 @@ mkTest title evs prepare action nested recursive poll = do
     withTempDirectory testDirPath ("test." <> randomID) $ \watchedDir -> do
       let fileName = "testfile"
       let baseDir = if nested then watchedDir </> "subdir" else watchedDir
-          f = baseDir </> fileName
+          f = normalise $ baseDir </> fileName
           watchFn = if recursive then watchTree else watchDir
           expect = expectEvents poll watchFn watchedDir
 
@@ -106,7 +115,8 @@ mkTest title evs prepare action nested recursive poll = do
       flip finally (isFile f >>= flip when (removeFile f)) $ do
         _ <- prepare f
         pauseBeforeStartingTest
-        expect (if not nested || recursive then map ($ f) evs else []) (action f)
+        flip expect (action f) (if | nested && (not recursive) -> []
+                                   | otherwise -> map ($ f) evs)
 
 
 
