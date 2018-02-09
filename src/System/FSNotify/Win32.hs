@@ -58,7 +58,7 @@ watchDirectory isRecursive conf watchManager path actPred chan = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload $ confDebounce conf
 
-  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE]
+  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE, WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
   let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
 
   -- Start one watch for file events and one for directory events

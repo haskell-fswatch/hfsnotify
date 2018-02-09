@@ -4,6 +4,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Bits
 import Data.Monoid
 import Prelude hiding (FilePath)
 import System.Directory
@@ -18,6 +19,20 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import EventUtils
+
+#ifdef mingw32_HOST_OS
+import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
+-- Perturb the file's attributes, to check that a modification event is emitted
+changeFileAttributes :: FilePath -> IO ()
+changeFileAttributes file = do
+  attrs <- getFileAttributes file
+  setFileAttributes file (attrs `xor` fILE_ATTRIBUTE_TEMPORARY)
+#else
+import System.Posix.Files
+changeFileAttributes :: FilePath -> IO ()
+changeFileAttributes file = touchFile
+#endif
+
 
 isMac :: Bool
 #ifdef darwin_HOST_OS
@@ -77,6 +92,12 @@ tests hasNative = testGroup "Tests" $ do
              , mkTest "modify file" [evModified False]
                                     (\f -> writeFile f "")
                                     (\f -> pollDelay >> appendFile f "foo")
+
+             -- This test is disabled when polling because the PollManager only keeps track of
+             -- modification time, so it won't catch an unrelated file attribute change
+             , mkTest "modify file attributes" (if poll then [] else [evModified False])
+                                               (\f -> writeFile f "")
+                                               (\f -> if poll then return () else changeFileAttributes f)
 
              , mkTest "delete file" [evRemoved False]
                                     (\f -> writeFile f "")
