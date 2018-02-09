@@ -51,14 +51,14 @@ handleEvent actPred chan dbp event | actPred event = do
       when (not $ debounce epsilon lastEvent event) $ writeChan chan event
       atomicModifyIORef ior (\_ -> (event, ()))
     Nothing -> writeChan chan event
-handleEvent _ _ _ event = return ()
+handleEvent _ _ _ _ = return ()
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
 watchDirectory isRecursive conf watchManager path actPred chan = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload $ confDebounce conf
 
-  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME]
+  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE]
   let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
 
   -- Start one watch for file events and one for directory events

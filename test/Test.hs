@@ -9,6 +9,7 @@ import Prelude hiding (FilePath)
 import System.Directory
 import System.FSNotify
 import System.FilePath
+import System.IO
 import System.IO.Error
 import System.IO.Temp
 import System.PosixCompat.Files
@@ -47,7 +48,7 @@ main = do
                              (const $ removeDirectoryRecursive testDirPath)
                              (const $ tests hasNative)
 
--- | There's some kind of race here in OS X where the creation of the containing directory shows up as an event
+-- | There's some kind of race in OS X where the creation of the containing directory shows up as an event
 -- I explored whether this was due to passing 0 as the sinceWhen argument to FSEventStreamCreate
 -- in the hfsevents package, but changing that didn't seem to help
 pauseBeforeStartingTest :: IO ()
@@ -71,11 +72,11 @@ tests hasNative = testGroup "Tests" $ do
                                      | isMac -> [evAddedOrModified False]
                                      | otherwise -> [evAdded False, evModified False])
                                  (const $ return ())
-                                 (\f -> writeFile f "foo")
+                                 (\f -> openFile f AppendMode >>= hClose)
 
              , mkTest "modify file" [evModified False]
                                     (\f -> writeFile f "")
-                                    (\f -> when poll (threadDelay $ 10^(6 :: Int)) >> appendFile f "foo")
+                                    (\f -> pollDelay >> appendFile f "foo")
 
              , mkTest "delete file" [evRemoved False]
                                     (\f -> writeFile f "")
@@ -116,7 +117,7 @@ mkTest title evs prepare action nested recursive poll = do
         _ <- prepare f
         pauseBeforeStartingTest
         flip expect (action f) (if | nested && (not recursive) -> []
-                                   | otherwise -> map ($ f) evs)
+                                   | otherwise -> [ev f | ev <- evs])
 
 
 
