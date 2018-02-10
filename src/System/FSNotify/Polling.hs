@@ -30,30 +30,35 @@ data EventType =
   | ModifiedEvent
   | RemovedEvent
 
-data WatchKey = WatchKey ThreadId deriving (Eq, Ord)
+newtype WatchKey = WatchKey ThreadId deriving (Eq, Ord)
 data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
-data PollManager = PollManager (MVar WatchMap)
+newtype PollManager = PollManager (MVar WatchMap)
 
 generateEvent :: UTCTime -> Bool -> EventType -> FilePath -> Maybe Event
-generateEvent timestamp isDir AddedEvent    filePath = Just (Added    filePath timestamp isDir)
+generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir)
 generateEvent timestamp isDir ModifiedEvent filePath = Just (Modified filePath timestamp isDir)
-generateEvent timestamp isDir RemovedEvent  filePath = Just (Removed  filePath timestamp isDir)
+generateEvent timestamp isDir RemovedEvent filePath = Just (Removed filePath timestamp isDir)
 
 generateEvents :: UTCTime -> EventType -> [(FilePath, Bool)] -> [Event]
 generateEvents timestamp eventType = mapMaybe (\(path, isDir) -> generateEvent timestamp isDir eventType path)
 
+-- | Do not return modified events for directories.
+-- These can arise when files are created inside subdirectories, resulting in the modification time
+-- of the directory being bumped. However, to increase consistency with the other FileListeners,
+-- we ignore these events.
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
+handleEvent _ _ (Modified _ _ True) = return ()
 handleEvent chan actPred event
   | actPred event = writeChan chan event
-  | otherwise     = return ()
+  | otherwise = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, Bool))
 pathModMap True  path = findFilesAndDirs True path >>= pathModMap'
 pathModMap False path = findFilesAndDirs False path >>= pathModMap'
 
 pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
-pathModMap' files = fmap Map.fromList $ mapM pathAndInfo files
+pathModMap' files = Map.fromList <$> mapM pathAndInfo files
   where
     pathAndInfo :: FilePath -> IO (FilePath, (UTCTime, Bool))
     pathAndInfo path = do
@@ -94,7 +99,7 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
 -- Additional init funciton exported to allow startManager to unconditionally
 -- create a poll manager as a fallback when other managers will not instantiate.
 createPollManager :: IO PollManager
-createPollManager = fmap PollManager $ newMVar Map.empty
+createPollManager = PollManager <$> newMVar Map.empty
 
 killWatchingThread :: WatchKey -> IO ()
 killWatchingThread (WatchKey threadId) = killThread threadId
@@ -106,6 +111,17 @@ killAndUnregister mvarMap wk = do
     return $ Map.delete wk m
   return ()
 
+
+listen' :: Bool -> WatchConfig -> PollManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
+listen' isRecursive conf (PollManager mvarMap) path actPred chan = do
+  path' <- canonicalizeDirPath path
+  pmMap <- pathModMap isRecursive path'
+  threadId <- forkIO $ pollPath (confPollInterval conf) isRecursive chan path' actPred pmMap
+  let wk = WatchKey threadId
+  modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
+  return $ killAndUnregister mvarMap wk
+
+
 instance FileListener PollManager where
   initSession = fmap Just createPollManager
 
@@ -113,28 +129,15 @@ instance FileListener PollManager where
     watchMap <- readMVar mvarMap
     forM_ (Map.keys watchMap) killWatchingThread
 
-  listen conf (PollManager mvarMap) path actPred chan  = do
-    path' <- canonicalizeDirPath path
-    pmMap <- pathModMap False path'
-    threadId <- forkIO $ pollPath (confPollInterval conf) False chan path' actPred pmMap
-    let wk = WatchKey threadId
-    modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
-    return $ killAndUnregister mvarMap wk
+  listen = listen' False
 
-  listenRecursive conf (PollManager mvarMap) path actPred chan = do
-    path' <- canonicalizeDirPath path
-    pmMap <- pathModMap True  path'
-    threadId <- forkIO $ pollPath (confPollInterval conf) True chan path' actPred pmMap
-    let wk = WatchKey threadId
-    modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
-    return $ killAndUnregister mvarMap wk
+  listenRecursive = listen' True
 
   usesPolling = const True
 
 
 getModificationTime :: FilePath -> IO UTCTime
 getModificationTime p = fromEpoch . modificationTime <$> getFileStatus p
-
 
 fromEpoch :: EpochTime -> UTCTime
 fromEpoch = posixSecondsToUTCTime . realToFrac

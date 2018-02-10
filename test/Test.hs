@@ -70,8 +70,6 @@ tests hasNative = testGroup "Tests" $ do
     return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
       nested <- [False, True]
 
-      let pollDelay = when poll (threadDelay $ 10^(6 :: Int))
-
       return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
         t <- [ mkTest "new file" (if | isMac && not poll -> [evAddedOrModified False]
                                      | otherwise -> [evAdded False])
@@ -80,7 +78,7 @@ tests hasNative = testGroup "Tests" $ do
 
              , mkTest "modify file" [evModified False]
                                     (\f -> writeFile f "")
-                                    (\f -> pollDelay >> appendFile f "foo")
+                                    (\f -> appendFile f "foo")
 
              -- This test is disabled when polling because the PollManager only keeps track of
              -- modification time, so it won't catch an unrelated file attribute change
@@ -90,7 +88,7 @@ tests hasNative = testGroup "Tests" $ do
 
              , mkTest "delete file" [evRemoved False]
                                     (\f -> writeFile f "")
-                                    removeFile
+                                    (\f -> removeFile f)
 
              , mkTest "new directory" (if | isMac -> [evAddedOrModified True]
                                           | otherwise -> [evAdded True])
@@ -98,7 +96,7 @@ tests hasNative = testGroup "Tests" $ do
                                       createDirectory
 
              , mkTest "delete directory" [evRemoved True]
-                                         (\f -> pollDelay >> createDirectory f)
+                                         (\f -> createDirectory f)
                                          removeDirectory
           ]
         return $ t nested recursive poll
@@ -111,6 +109,8 @@ mkTest title evs prepare action nested recursive poll = do
     -- Use a random identifier so that every test happens in a different folder
     -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
     randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
+
+    let pollDelay = when poll (threadDelay $ 10^(6 :: Int))
 
     withTempDirectory testDirPath ("test." <> randomID) $ \watchedDir -> do
       let fileName = "testfile"
@@ -126,8 +126,8 @@ mkTest title evs prepare action nested recursive poll = do
       flip finally (isFile f >>= flip when (removeFile f)) $ do
         _ <- prepare f
         pauseBeforeStartingTest
-        flip expect (action f) (if | nested && (not recursive) -> []
-                                   | otherwise -> [ev f | ev <- evs])
+        flip expect (pollDelay >> action f) (if | nested && (not recursive) -> []
+                                                | otherwise -> [ev f | ev <- evs])
 
 
 
