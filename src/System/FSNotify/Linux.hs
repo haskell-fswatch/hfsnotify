@@ -18,10 +18,13 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Exception as E
 import Control.Monad (when)
+import qualified Data.ByteString as BS
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Typeable
 -- import Debug.Trace (trace)
+import qualified GHC.Foreign as F
+import GHC.IO.Encoding (getFileSystemEncoding)
 import System.FilePath
 import System.FSNotify.Listener
 import System.FSNotify.Path (findDirs, canonicalizeDirPath)
@@ -33,21 +36,43 @@ type NativeManager = INo.INotify
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
 
+toRawFilePath :: FilePath -> IO BS.ByteString
+toRawFilePath fp = do
+  enc <- getFileSystemEncoding
+  F.withCString enc fp BS.packCString
+
+fromRawFilePath :: BS.ByteString -> IO FilePath
+fromRawFilePath bs = do
+  enc <- getFileSystemEncoding
+  BS.useAsCString bs (F.peekCString enc)
+
 -- Note that INo.Closed in this context is "modified" because we listen to
 -- CloseWrite events.
-fsnEvent :: FilePath -> UTCTime -> INo.Event -> Maybe Event
-fsnEvent basePath timestamp (INo.Created  False       name   ) = Just (Added    (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.Closed   False (Just name) _) = Just (Modified (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.MovedOut False       name  _) = Just (Removed  (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.MovedIn  False       name  _) = Just (Added    (basePath </> name) timestamp)
-fsnEvent basePath timestamp (INo.Deleted  False       name   ) = Just (Removed  (basePath </> name) timestamp)
-fsnEvent _        _         _                                  = Nothing
+fsnEvent :: FilePath -> UTCTime -> INo.Event -> IO (Maybe Event)
+fsnEvent basePath timestamp event = case event of
+  INo.Created  False       raw    -> do
+    name <- fromRawFilePath raw
+    return $ Just (Added    (basePath </> name) timestamp)
+  INo.Closed   False (Just raw) _ -> do
+    name <- fromRawFilePath raw
+    return $ Just (Modified (basePath </> name) timestamp)
+  INo.MovedOut False       raw  _ -> do
+    name <- fromRawFilePath raw
+    return $ Just (Removed  (basePath </> name) timestamp)
+  INo.MovedIn  False       raw  _ -> do
+    name <- fromRawFilePath raw
+    return $ Just (Added    (basePath </> name) timestamp)
+  INo.Deleted  False       raw    -> do
+    name <- fromRawFilePath raw
+    return $ Just (Removed  (basePath </> name) timestamp)
+  _                               ->
+    return Nothing
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
 -- handleInoEvent _       _    basePath _   inoEvent | trace ("Linux: handleInoEvent " ++ show basePath ++ " " ++ show inoEvent) False = undefined
 handleInoEvent actPred chan basePath dbp inoEvent = do
   currentTime <- getCurrentTime
-  let maybeFsnEvent = fsnEvent basePath currentTime inoEvent
+  maybeFsnEvent <- fsnEvent basePath currentTime inoEvent
   handleEvent actPred chan dbp maybeFsnEvent
 
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Maybe Event -> IO ()
@@ -75,7 +100,8 @@ instance FileListener INo.INotify where
   listen conf iNotify path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload $ confDebounce conf
-    wd <- INo.addWatch iNotify varieties path' (handler path' dbp)
+    rawPath <- toRawFilePath path'
+    wd <- INo.addWatch iNotify varieties rawPath (handler path' dbp)
     return $ INo.removeWatch wd
     where
       handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
@@ -112,17 +138,19 @@ instance FileListener INo.INotify where
       pathHandler :: MVar (Maybe [INo.WatchDescriptor]) -> FilePath -> IO ()
       pathHandler wdVar filePath = do
         dbp <- newDebouncePayload $ confDebounce conf
+        rawFilePath <- toRawFilePath filePath
         modifyMVar_ wdVar $ \mbWds ->
           -- Atomically add a watch and record its descriptor. Also, check
           -- if the listening task is cancelled, in which case do nothing.
           case mbWds of
             Nothing -> return mbWds
             Just wds -> do
-              wd <- INo.addWatch iNotify varieties filePath (handler filePath dbp)
+              wd <- INo.addWatch iNotify varieties rawFilePath (handler filePath dbp)
               return $ Just (wd:wds)
         where
           handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir _   (INo.Created True dirPath) = do
+          handler baseDir _   (INo.Created True rawDirPath) = do
+            dirPath <- fromRawFilePath rawDirPath
             listenRec (baseDir </> dirPath) wdVar
           handler baseDir dbp event                      =
             handleInoEvent actPred chan baseDir dbp event
