@@ -37,7 +37,7 @@ type NativeManager = INo.INotify
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
 
-#if __GLASGOW_HASKELL__ >= 804
+#if MIN_VERSION_hinotify(0, 3, 10)
 toRawFilePath :: FilePath -> IO BS.ByteString
 toRawFilePath fp = do
   enc <- getFileSystemEncoding
