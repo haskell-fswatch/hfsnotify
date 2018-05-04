@@ -1,6 +1,21 @@
 Changes
 =======
 
+Version 0.2.1.2
+---------------
+
+Update to the new hinotify API (v0.3.10)
+
+Version 0.2.1.1
+---------------
+
+Catch IO exceptions when initialising inotify on Linux
+
+Version 0.2.1
+-------------
+
+Don't use `system-filepath`
+
 Version 0.2
 -----------
 
