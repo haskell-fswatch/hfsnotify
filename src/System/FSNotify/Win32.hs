@@ -9,12 +9,12 @@ module System.FSNotify.Win32
        , NativeManager
        ) where
 
-import Prelude
-
 import Control.Concurrent.Chan
 import Control.Monad (when)
+import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Time (getCurrentTime, UTCTime)
+import Prelude
 import System.FSNotify.Listener
 import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
@@ -32,35 +32,41 @@ type BaseDir = FilePath
 -- handle[native]Event.
 
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
-fsnEvent :: BaseDir -> UTCTime -> WNo.Event -> Maybe Event
-fsnEvent basedir timestamp ev =
-  case ev of
-    WNo.Created  False name -> Just $ Added    (basedir </> name) timestamp
-    WNo.Modified False name -> Just $ Modified (basedir </> name) timestamp
-    WNo.Deleted  False name -> Just $ Removed  (basedir </> name) timestamp
-    _                       -> Nothing
-{-
-fsnEvents timestamp (WNo.Renamed  False (Just oldName) newName) = [Removed (fp oldName) timestamp, Added (fp newName) timestamp]
-fsnEvents timestamp (WNo.Renamed  False Nothing newName)        = [Added (fp newName) timestamp]
--}
+fsnEvent :: Bool -> BaseDir -> UTCTime -> WNo.Event -> Event
+fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory
+fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
+fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
 
-handleWNoEvent :: BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
-handleWNoEvent basedir actPred chan dbp inoEvent = do
+handleWNoEvent :: Bool -> BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
+handleWNoEvent isDirectory basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
-  let maybeEvent = fsnEvent basedir currentTime inoEvent
-  case maybeEvent of
-    Just evt -> handleEvent actPred chan dbp evt
-    Nothing  -> return ()
+  let event = fsnEvent isDirectory basedir currentTime inoEvent
+  handleEvent actPred chan dbp event
+
 handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
-handleEvent actPred chan dbp event =
-  when (actPred event) $ case dbp of
+handleEvent actPred chan dbp event | actPred event = do
+  case dbp of
     (Just (DebounceData epsilon ior)) -> do
       lastEvent <- readIORef ior
-      when (not $ debounce epsilon lastEvent event) writeToChan
+      when (not $ debounce epsilon lastEvent event) $ writeChan chan event
       atomicModifyIORef ior (\_ -> (event, ()))
-    Nothing                           -> writeToChan
-  where
-    writeToChan = writeChan chan event
+    Nothing -> writeChan chan event
+handleEvent _ _ _ _ = return ()
+
+watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
+watchDirectory isRecursive conf watchManager path actPred chan = do
+  path' <- canonicalizeDirPath path
+  dbp <- newDebouncePayload $ confDebounce conf
+
+  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE, WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
+  let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
+
+  -- Start one watch for file events and one for directory events
+  -- (There seems to be no other way to provide isDirectory information)
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent False path' actPred chan dbp)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent True path' actPred chan dbp)
+
+  return $ WNo.killWatch wid1 >> WNo.killWatch wid2
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
@@ -70,19 +76,7 @@ instance FileListener WNo.WatchManager where
 
   killSession = WNo.killWatchManager
 
-  listen conf watchManager path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload $ confDebounce conf
-    wid <- WNo.watchDirectory watchManager path' False varieties (handleWNoEvent path' actPred chan dbp)
-    return $ WNo.killWatch wid
-
-  listenRecursive conf watchManager path actPred chan = do
-    path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload $ confDebounce conf
-    wid <- WNo.watchDirectory watchManager path' True varieties (handleWNoEvent path' actPred chan dbp)
-    return $ WNo.killWatch wid
+  listen = watchDirectory False
+  listenRecursive = watchDirectory True
 
   usesPolling = const False
-
-varieties :: [WNo.EventVariety]
-varieties = [WNo.Create, WNo.Delete, WNo.Move, WNo.Modify]

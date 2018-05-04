@@ -1,0 +1,7 @@
+resolver: nightly-2018-05-04
+
+packages:
+- '.'
+- './lib/win32-notify'
+
+extra-deps: []

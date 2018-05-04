@@ -33,6 +33,7 @@ module System.FSNotify
        -- * Events
          Event(..)
        , EventChannel
+       , eventIsDirectory
        , eventTime
        , eventPath
        , Action
@@ -60,15 +61,14 @@ module System.FSNotify
 
 import Prelude hiding (FilePath)
 
-import Data.Maybe
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
-import Control.Applicative
 import Control.Monad
-import System.FilePath
+import Data.Maybe
 import System.FSNotify.Polling
 import System.FSNotify.Types
+import System.FilePath
 
 import System.FSNotify.Listener (StopListening)
 
@@ -190,8 +190,7 @@ threadChan
       -- (^ this is the type of listen and listenRecursive)
   ->  WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
-  modifyMVar cleanupVar $ \mbCleanup ->
-  case mbCleanup of
+  modifyMVar cleanupVar $ \mbCleanup -> case mbCleanup of
     -- check if we've been stopped
     Nothing -> return (Nothing, return ()) -- or throw an exception?
     Just cleanup -> do

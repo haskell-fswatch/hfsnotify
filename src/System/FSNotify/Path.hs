@@ -7,26 +7,24 @@
 module System.FSNotify.Path
        ( findFiles
        , findDirs
+       , findFilesAndDirs
        , canonicalizeDirPath
        , canonicalizePath
        , hasThisExtension
        ) where
 
-import Prelude hiding (FilePath)
-
-import Control.Applicative
 import Control.Monad
--- import Filesystem
--- import Filesystem.Path hiding (concat)
-
 import qualified Data.Text as T
+import Prelude hiding (FilePath)
 import qualified System.Directory as D
-import System.PosixCompat.Files as PF
 import System.FilePath
+import System.PosixCompat.Files as PF
 
 getDirectoryContentsPath :: FilePath -> IO [FilePath]
-getDirectoryContentsPath path = (map (path </>)) . filter (not . dots) <$> D.getDirectoryContents path
+getDirectoryContentsPath path =
+  ((map (path </>)) . filter (not . dots) <$> D.getDirectoryContents path) >>= filterM exists
   where
+    exists x = (||) <$> D.doesFileExist x <*> D.doesDirectoryExist x
     dots "."  = True
     dots ".." = True
     dots _    = False
@@ -56,6 +54,8 @@ findAllDirs path = do
   nestedDirs <- mapM findAllDirs dirs
   return (dirs ++ concat nestedDirs)
 
+-- * Exported functions below this point
+
 findFiles :: Bool -> FilePath -> IO [FilePath]
 findFiles True path  = findAllFiles       =<< canonicalizeDirPath path
 findFiles False path = findImmediateFiles =<<  canonicalizeDirPath path
@@ -63,6 +63,13 @@ findFiles False path = findImmediateFiles =<<  canonicalizeDirPath path
 findDirs :: Bool -> FilePath -> IO [FilePath]
 findDirs True path  = findAllDirs       =<< canonicalizeDirPath path
 findDirs False path = findImmediateDirs =<< canonicalizeDirPath path
+
+findFilesAndDirs :: Bool -> FilePath -> IO [FilePath]
+findFilesAndDirs False path = getDirectoryContentsPath =<< canonicalizeDirPath path
+findFilesAndDirs True path = do
+  (files, dirs) <- fileDirContents path
+  nestedFilesAndDirs <- concat <$> (mapM (findFilesAndDirs False) dirs)
+  return (files ++ dirs ++ nestedFilesAndDirs)
 
 -- | add a trailing slash to ensure the path indicates a directory
 addTrailingSlash :: FilePath -> FilePath

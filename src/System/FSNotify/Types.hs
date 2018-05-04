@@ -15,15 +15,15 @@ module System.FSNotify.Types
        , EventChannel
        , eventPath
        , eventTime
+       , eventIsDirectory
        , IOEvent
        ) where
-
-import Prelude hiding (FilePath)
 
 import Control.Concurrent.Chan
 import Data.IORef (IORef)
 import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
+import Prelude hiding (FilePath)
 import System.FilePath
 
 -- | A file event reported by a file watcher. Each event contains the
@@ -31,22 +31,32 @@ import System.FilePath
 -- event occurred (timestamps represent current time when FSEvents receives
 -- it from the OS and/or platform-specific Haskell modules).
 data Event =
-    Added    FilePath UTCTime
-  | Modified FilePath UTCTime
-  | Removed  FilePath UTCTime
+    Added    FilePath UTCTime Bool
+  | Modified FilePath UTCTime Bool
+  | Removed  FilePath UTCTime Bool
+  | Unknown  FilePath UTCTime String
   deriving (Eq, Show)
 
 -- | Helper for extracting the path associated with an event.
 eventPath :: Event -> FilePath
-eventPath (Added    path _) = path
-eventPath (Modified path _) = path
-eventPath (Removed  path _) = path
+eventPath (Added    path _ _) = path
+eventPath (Modified path _ _) = path
+eventPath (Removed  path _ _) = path
+eventPath (Unknown  path _ _) = path
 
 -- | Helper for extracting the time associated with an event.
 eventTime :: Event -> UTCTime
-eventTime (Added    _ timestamp) = timestamp
-eventTime (Modified _ timestamp) = timestamp
-eventTime (Removed  _ timestamp) = timestamp
+eventTime (Added    _ timestamp _) = timestamp
+eventTime (Modified _ timestamp _) = timestamp
+eventTime (Removed  _ timestamp _) = timestamp
+eventTime (Unknown  _ timestamp _) = timestamp
+
+eventIsDirectory :: Event -> Bool
+eventIsDirectory (Added    _ _ isDir) = isDir
+eventIsDirectory (Modified _ _ isDir) = isDir
+eventIsDirectory (Removed  _ _ isDir) = isDir
+eventIsDirectory (Unknown  _ _ _) = False
+
 
 type EventChannel = Chan Event
 

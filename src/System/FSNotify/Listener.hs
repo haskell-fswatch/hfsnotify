@@ -11,13 +11,12 @@ module System.FSNotify.Listener
        , newDebouncePayload
        ) where
 
-import Prelude hiding (FilePath)
-
 import Data.IORef (newIORef)
 import Data.Time (diffUTCTime, NominalDiffTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import System.FilePath
+import Prelude hiding (FilePath)
 import System.FSNotify.Types
+import System.FilePath
 
 -- | An action that cancels a watching/listening job
 type StopListening = IO ()
@@ -57,7 +56,7 @@ epsilonDefault = 0.001
 
 -- | The default event that provides a basis for comparison.
 eventDefault :: Event
-eventDefault = Added "" (posixSecondsToUTCTime 0)
+eventDefault = Added "" (posixSecondsToUTCTime 0) False
 
 -- | A predicate indicating whether two events may be considered "the same
 -- event". This predicate is applied to the most recent dispatched event and
