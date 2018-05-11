@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf #-}
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
@@ -10,7 +9,6 @@ import System.Directory
 import System.FSNotify
 import System.FilePath
 import System.IO
-import System.IO.Error
 import System.IO.Temp
 import System.PosixCompat.Files
 import System.Random as R

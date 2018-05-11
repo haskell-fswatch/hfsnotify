@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 --
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
@@ -10,6 +11,7 @@ module System.FSNotify.Polling
   ) where
 
 import Control.Concurrent
+import Control.Exception
 import Control.Monad (forM_)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -53,17 +55,16 @@ handleEvent chan actPred event
   | otherwise = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, Bool))
-pathModMap True path = findFilesAndDirs True path >>= pathModMap'
-pathModMap False path = findFilesAndDirs False path >>= pathModMap'
-
-pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
-pathModMap' files = Map.fromList <$> mapM pathAndInfo files
+pathModMap recursive path = findFilesAndDirs recursive path >>= pathModMap'
   where
-    pathAndInfo :: FilePath -> IO (FilePath, (UTCTime, Bool))
-    pathAndInfo path = do
+    pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
+    pathModMap' files = (Map.fromList . catMaybes) <$> mapM pathAndInfo files
+
+    pathAndInfo :: FilePath -> IO (Maybe (FilePath, (UTCTime, Bool)))
+    pathAndInfo path = handle (\(_ :: IOException) -> return Nothing) $ do
       modTime <- getModificationTime path
       isDir <- doesDirectoryExist path
-      return (path, (modTime, isDir))
+      return $ Just (path, (modTime, isDir))
 
 pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, Bool) -> IO ()
 pollPath interval recursive chan filePath actPred oldPathMap = do
@@ -80,7 +81,7 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
   handleEvents $ generateEvents' ModifiedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList modifiedMap]
   handleEvents $ generateEvents' RemovedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList deletedMap]
 
-  pollPath' newPathMap
+  pollPath interval recursive chan filePath actPred newPathMap
 
   where
     modifiedDifference :: (UTCTime, Bool) -> (UTCTime, Bool) -> Maybe (UTCTime, Bool)
@@ -90,9 +91,6 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
 
     handleEvents :: [Event] -> IO ()
     handleEvents = mapM_ (handleEvent chan actPred)
-
-    pollPath' :: Map FilePath (UTCTime, Bool) -> IO ()
-    pollPath' = pollPath interval recursive chan filePath actPred
 
 
 -- Additional init function exported to allow startManager to unconditionally
