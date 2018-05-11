@@ -1,7 +1,7 @@
 Name:                   fsnotify
-Version:                0.2.1.2
+Version:                0.3.0.0
 Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>
-Maintainer:             Greg Weber <greg@gregweber.info>, Roman Cheplyaka <roma@ro-che.info>
+Maintainer:             Tom McLaughlin <tom@codedown.io>
 License:                BSD3
 License-File:           LICENSE
 Synopsis:               Cross platform library for file change notification.
