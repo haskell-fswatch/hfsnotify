@@ -69,19 +69,24 @@ pathModMap recursive path = findFilesAndDirs recursive path >>= pathModMap'
 pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, Bool) -> IO ()
 pollPath interval recursive chan filePath actPred oldPathMap = do
   threadDelay interval
-  newPathMap  <- pathModMap recursive filePath
-  currentTime <- getCurrentTime
-  let deletedMap = Map.difference oldPathMap newPathMap
-      createdMap = Map.difference newPathMap oldPathMap
-      modifiedAndCreatedMap = Map.differenceWith modifiedDifference newPathMap oldPathMap
-      modifiedMap = Map.difference modifiedAndCreatedMap createdMap
-      generateEvents' = generateEvents currentTime
+  maybeNewPathMap <- handle (\(_ :: IOException) -> return Nothing) (Just <$> pathModMap recursive filePath)
+  case maybeNewPathMap of
+    -- Something went wrong while listing directories; we'll try again on the next poll
+    Nothing -> pollPath interval recursive chan filePath actPred oldPathMap
 
-  handleEvents $ generateEvents' AddedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList createdMap]
-  handleEvents $ generateEvents' ModifiedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList modifiedMap]
-  handleEvents $ generateEvents' RemovedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList deletedMap]
+    Just newPathMap -> do
+      currentTime <- getCurrentTime
+      let deletedMap = Map.difference oldPathMap newPathMap
+          createdMap = Map.difference newPathMap oldPathMap
+          modifiedAndCreatedMap = Map.differenceWith modifiedDifference newPathMap oldPathMap
+          modifiedMap = Map.difference modifiedAndCreatedMap createdMap
+          generateEvents' = generateEvents currentTime
 
-  pollPath interval recursive chan filePath actPred newPathMap
+      handleEvents $ generateEvents' AddedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList createdMap]
+      handleEvents $ generateEvents' ModifiedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList modifiedMap]
+      handleEvents $ generateEvents' RemovedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList deletedMap]
+
+      pollPath interval recursive chan filePath actPred newPathMap
 
   where
     modifiedDifference :: (UTCTime, Bool) -> (UTCTime, Bool) -> Maybe (UTCTime, Bool)

@@ -29,7 +29,7 @@ getDirectoryContentsPath path =
     dots ".." = True
     dots _    = False
 
-fileDirContents :: FilePath -> IO ([FilePath],[FilePath])
+fileDirContents :: FilePath -> IO ([FilePath], [FilePath])
 fileDirContents path = do
   contents <- getDirectoryContentsPath path
   stats <- mapM getFileStatus contents
