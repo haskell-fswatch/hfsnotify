@@ -123,20 +123,8 @@ mkTest title evs prepare action nested recursive poll = do
 
       pauseBeforeStartingTest
 
-      flip finally (isFile f >>= flip when (removeFile f)) $ do
+      flip finally (doesFileExist f >>= flip when (removeFile f)) $ do
         _ <- prepare f
         pauseBeforeStartingTest
         flip expect (pollDelay >> action f) (if | nested && (not recursive) -> []
                                                 | otherwise -> [ev f | ev <- evs])
-
-
-
-
--------------------------------------------------------------------------------
-isFile :: FilePath -> IO Bool
-isFile p = handleJust h return checkFile
-  where
-    h e = if isDoesNotExistError e
-          then Just False
-          else Nothing
-    checkFile = isRegularFile <$> getFileStatus p

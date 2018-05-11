@@ -79,11 +79,9 @@ gatherEvents
   -> FilePath
   -> IO (Async [Event])
 gatherEvents poll watch path = do
-  mgr <- startManagerConf defaultConfig
-    { confDebounce = NoDebounce
-    , confUsePolling = poll
-    , confPollInterval = 2 * 10^(5 :: Int)
-    }
+  mgr <- startManagerConf defaultConfig { confDebounce = NoDebounce
+                                        , confUsePolling = poll
+                                        , confPollInterval = 2 * 10^(5 :: Int) }
   eventsVar <- newIORef []
   stop <- watch mgr path (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
   async $ do

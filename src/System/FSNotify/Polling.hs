@@ -25,10 +25,9 @@ import System.FilePath
 import System.PosixCompat.Files
 import System.PosixCompat.Types
 
-data EventType =
-    AddedEvent
-  | ModifiedEvent
-  | RemovedEvent
+data EventType = AddedEvent
+               | ModifiedEvent
+               | RemovedEvent
 
 newtype WatchKey = WatchKey ThreadId deriving (Eq, Ord)
 data WatchData = WatchData FilePath EventChannel
@@ -54,7 +53,7 @@ handleEvent chan actPred event
   | otherwise = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, Bool))
-pathModMap True  path = findFilesAndDirs True path >>= pathModMap'
+pathModMap True path = findFilesAndDirs True path >>= pathModMap'
 pathModMap False path = findFilesAndDirs False path >>= pathModMap'
 
 pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
@@ -96,7 +95,7 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
     pollPath' = pollPath interval recursive chan filePath actPred
 
 
--- Additional init funciton exported to allow startManager to unconditionally
+-- Additional init function exported to allow startManager to unconditionally
 -- create a poll manager as a fallback when other managers will not instantiate.
 createPollManager :: IO PollManager
 createPollManager = PollManager <$> newMVar Map.empty
@@ -110,7 +109,6 @@ killAndUnregister mvarMap wk = do
     killWatchingThread wk
     return $ Map.delete wk m
   return ()
-
 
 listen' :: Bool -> WatchConfig -> PollManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
 listen' isRecursive conf (PollManager mvarMap) path actPred chan = do
