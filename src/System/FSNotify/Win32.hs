@@ -9,10 +9,11 @@ module System.FSNotify.Win32
        , NativeManager
        ) where
 
-import Control.Concurrent.Chan
+import Control.Concurrent
 import Control.Monad (when)
 import Data.Bits
 import Data.IORef (atomicModifyIORef, readIORef)
+import qualified Data.Map as Map
 import Data.Time (getCurrentTime, UTCTime)
 import Prelude
 import System.FSNotify.Listener
@@ -54,7 +55,7 @@ handleEvent actPred chan dbp event | actPred event = do
 handleEvent _ _ _ _ = return ()
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
-watchDirectory isRecursive conf watchManager path actPred chan = do
+watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred chan = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload $ confDebounce conf
 
@@ -66,7 +67,14 @@ watchDirectory isRecursive conf watchManager path actPred chan = do
   wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent False path' actPred chan dbp)
   wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent True path' actPred chan dbp)
 
-  return $ WNo.killWatch wid1 >> WNo.killWatch wid2
+  -- The StopListening action should make sure to remove the watches from the manager after they're killed.
+  -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.
+  return $ do
+    WNo.killWatch wid1
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.delete wid1 watchMap)
+
+    WNo.killWatch wid2
+    modifyMVar_ mvarMap $ \watchMap -> return (Map.delete wid2 watchMap)
 
 instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
