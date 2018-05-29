@@ -172,15 +172,13 @@ watchTreeChan (WatchManager db wm _) = listenRecursive db wm
 -- | Watch the immediate contents of a directory by committing an Action for each event.
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
--- within its subdirectories. No two events pertaining to the same FilePath will
--- be executed concurrently.
+-- within its subdirectories.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 watchDir wm = threadChan listen wm
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
--- files within the specified directory and its subdirectories. No two events
--- pertaining to the same FilePath will be executed concurrently.
+-- files within the specified directory and its subdirectories.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 watchTree wm = threadChan listenRecursive wm
 
