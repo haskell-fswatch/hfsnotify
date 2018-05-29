@@ -1,6 +1,21 @@
 Changes
 =======
 
+Version 0.3.0.0
+---------------
+
+API breaking update with a number of bugfixes and improvements.
+
+* Now we can detect directory creation/deletion. A boolean flag has been added
+  to `Event` to indicate if the event pertains to a directory or not. This is the
+  only API change.
+* Test stability improvements + CI test suites now passing on Windows, Linux, and Mac.
+* Interpreting OSX hfsevents flags is more sane now (see comments in OSX.hs for details).
+* Improve a race condition when adding watches on Linux.
+* Improve robustness of the PollManager.
+* Fix double call to `closeHandle` on Windows.
+* Remove comments about locking from the documentation.
+
 Version 0.2.1.2
 ---------------
 
