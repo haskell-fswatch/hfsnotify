@@ -2,6 +2,5 @@ resolver: lts-11.7
 
 packages:
 - '.'
-- './lib/win32-notify'
 
 extra-deps: []
