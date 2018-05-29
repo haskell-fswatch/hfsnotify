@@ -48,6 +48,7 @@ Library
     if os(windows)
       CPP-Options:      -DOS_Win32
       Other-Modules:    System.FSNotify.Win32
+                      , System.Win32.FileNotify
                       , System.Win32.Notify
       Build-Depends:    Win32
       Hs-Source-Dirs:   win-src
