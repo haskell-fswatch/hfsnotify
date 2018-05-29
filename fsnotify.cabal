@@ -1,6 +1,6 @@
 Name:                   fsnotify
-Version:                0.3.0.0
-Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>
+Version:                0.3.0.1
+Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>, Niklas Broberg
 Maintainer:             Tom McLaughlin <tom@codedown.io>
 License:                BSD3
 License-File:           LICENSE
@@ -48,7 +48,10 @@ Library
     if os(windows)
       CPP-Options:      -DOS_Win32
       Other-Modules:    System.FSNotify.Win32
-      Build-Depends:    Win32-notify >= 0.3
+                      , System.Win32.FileNotify
+                      , System.Win32.Notify
+      Build-Depends:    Win32
+      Hs-Source-Dirs:   win-src
     else
       if os(darwin)
         CPP-Options:    -DOS_Mac
