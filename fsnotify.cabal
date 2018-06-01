@@ -21,7 +21,7 @@ Extra-Source-Files:
 
 
 Library
-  Build-Depends:          base >= 4.3.1 && < 5
+  Build-Depends:          base >= 4.8 && < 5
                         , bytestring >= 0.10.2
                         , containers >= 0.4
                         , directory >= 1.1.0.0
