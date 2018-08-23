@@ -1,0 +1,75 @@
+Name:                   fsnotify
+Version:                0.3.0.1
+Author:                 Mark Dittmer <mark.s.dittmer@gmail.com>, Niklas Broberg
+Maintainer:             Tom McLaughlin <tom@codedown.io>
+License:                BSD3
+License-File:           LICENSE
+Synopsis:               Cross platform library for file change notification.
+Description:            Cross platform library for file creation, modification,
+                        and deletion notification. This library builds upon
+                        existing libraries for platform-specific Windows, Mac,
+                        and Linux filesystem event notification.
+Category:               Filesystem
+Cabal-Version:          >= 1.8
+Build-Type:             Simple
+Homepage:               https://github.com/haskell-fswatch/hfsnotify
+Extra-Source-Files:
+  README.md
+  CHANGELOG.md
+  test/Test.hs
+  test/EventUtils.hs
+
+
+Library
+  Build-Depends:          base >= 4.8 && < 5
+                        , bytestring >= 0.10.2
+                        , containers >= 0.4
+                        , directory >= 1.1.0.0
+                        , filepath >= 1.3.0.0
+                        , text >= 0.11.0
+                        , time >= 1.1
+                        , async >= 2.0.1
+                        , unix-compat >= 0.2
+  Exposed-Modules:        System.FSNotify
+                        , System.FSNotify.Devel
+  Other-Modules:          System.FSNotify.Listener
+                        , System.FSNotify.Path
+                        , System.FSNotify.Polling
+                        , System.FSNotify.Types
+  Hs-Source-Dirs:       src
+  GHC-Options:          -Wall
+  if os(linux)
+    CPP-Options:        -DOS_Linux
+    Other-Modules:      System.FSNotify.Linux
+    Build-Depends:      hinotify >= 0.3.0,
+                        shelly >= 1.6.5,
+                        unix >= 2.7.1.0
+  else
+    if os(windows)
+      CPP-Options:      -DOS_Win32
+      Other-Modules:    System.FSNotify.Win32
+                      , System.Win32.FileNotify
+                      , System.Win32.Notify
+      Build-Depends:    Win32
+      Hs-Source-Dirs:   win-src
+    else
+      if os(darwin)
+        CPP-Options:    -DOS_Mac
+        Other-Modules:  System.FSNotify.OSX
+        Build-Depends:  hfsevents >= 0.1.3
+
+Test-Suite test
+  Type:                 exitcode-stdio-1.0
+  Main-Is:              Test.hs
+  Other-modules:        EventUtils
+  Hs-Source-Dirs:       test
+  GHC-Options:          -Wall -threaded
+
+  if os(windows)
+    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random, Win32
+  else
+    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random
+
+Source-Repository head
+  Type:                 git
+  Location:             git://github.com/haskell-fswatch/hfsnotify

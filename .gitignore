@@ -4,4 +4,3 @@ cabal.sandbox.config
 .cabal-sandbox/
 .stack-work
 *~
-fsnotify.cabal
