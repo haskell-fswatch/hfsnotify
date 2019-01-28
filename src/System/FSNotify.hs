@@ -115,7 +115,7 @@ withManager :: (WatchManager -> IO a) -> IO a
 withManager  = withManagerConf defaultConfig
 
 -- | Start a file watch manager.
--- Directories can only be watched when they are managed by a started watch
+-- Directories can only be watched when they are managed by a started
 -- watch manager.
 -- When finished watching. you must release resources via 'stopManager'.
 -- It is preferrable if possible to use 'withManager' to handle this
