@@ -107,6 +107,7 @@ defaultConfig =
     { confDebounce = DebounceDefault
     , confPollInterval = 10^(6 :: Int) -- 1 second
     , confUsePolling = False
+    , confThreadPerEvent = True
     }
 
 -- | Perform an IO action with a WatchManager in place.
@@ -193,7 +194,7 @@ threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
     Nothing -> return (Nothing, return ()) -- or throw an exception?
     Just cleanup -> do
       chan <- newChan
-      asy <- async $ readEvents chan action
+      asy <- async $ readEvents db chan action
       -- Ideally, the the asy thread should be linked to the current one
       -- (@link asy@), so that it doesn't die quietly.
       -- However, if we do that, then cancelling asy will also kill
@@ -207,8 +208,8 @@ threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
         , stopListener >> cleanThisUp
         )
 
-readEvents :: EventChannel -> Action -> IO ()
-readEvents chan action = forever $ do
+readEvents :: WatchConfig -> EventChannel -> Action -> IO ()
+readEvents (WatchConfig _ _ _ True) chan action = forever $ do
   event <- readChan chan
   us <- myThreadId
   -- Execute the event handler in a separate thread, but throw any
@@ -219,6 +220,8 @@ readEvents chan action = forever $ do
   -- thread is dead). How bad is that? The alternative is to kill the
   -- handler anyway when we're cancelling.
   forkFinally (action event) $ either (throwTo us) (const $ return ())
+readEvents (WatchConfig _ _ _ False) chan action =
+  forever $ action =<< readChan chan
 
 #if !MIN_VERSION_base(4,6,0)
 forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
