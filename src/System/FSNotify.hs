@@ -209,7 +209,7 @@ threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
         )
 
 readEvents :: WatchConfig -> EventChannel -> Action -> IO ()
-readEvents (WatchConfig _ _ _ True) chan action = forever $ do
+readEvents WatchConfig {confThreadPerEvent=True} chan action = forever $ do
   event <- readChan chan
   us <- myThreadId
   -- Execute the event handler in a separate thread, but throw any
@@ -220,7 +220,7 @@ readEvents (WatchConfig _ _ _ True) chan action = forever $ do
   -- thread is dead). How bad is that? The alternative is to kill the
   -- handler anyway when we're cancelling.
   forkFinally (action event) $ either (throwTo us) (const $ return ())
-readEvents (WatchConfig _ _ _ False) chan action =
+readEvents WatchConfig {confThreadPerEvent=False} chan action =
   forever $ action =<< readChan chan
 
 #if !MIN_VERSION_base(4,6,0)
