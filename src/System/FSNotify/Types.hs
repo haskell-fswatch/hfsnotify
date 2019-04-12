@@ -69,6 +69,9 @@ data WatchConfig = WatchConfig
   , confUsePolling :: Bool
     -- ^ Force use of polling, even if a more effective method may be
     -- available. This is mostly for testing purposes.
+  , confThreadPerEvent :: Bool
+    -- ^ Fork a separate thread for each event when executing the
+    -- user supplied event handler
   }
 
 -- | This specifies whether multiple events from the same file should be
