@@ -80,7 +80,7 @@ fsnEvents timestamp e = do
 
               | otherwise -> []
   where
-    isDirectory = hasFlag e FSE.eventFlagItemIsDir
+    isDirectory = if hasFlag e FSE.eventFlagItemIsDir then IsDirectory else IsFile
     isFile = hasFlag e FSE.eventFlagItemIsFile
     isCreated = hasFlag e FSE.eventFlagItemCreated
     isRenamed = hasFlag e FSE.eventFlagItemRenamed

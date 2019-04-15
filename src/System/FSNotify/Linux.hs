@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables, ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -54,14 +54,19 @@ fromRawFilePath = return . id
 #endif
 
 fsnEvents :: FilePath -> UTCTime -> INo.Event -> IO [Event]
-fsnEvents basePath timestamp (INo.Attributes isDir (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Modified isDir (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Created isDir raw) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.MovedOut isDir raw _cookie) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.MovedIn isDir raw _cookie) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Deleted isDir raw) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
-fsnEvents _ _ (INo.Ignored) = return []
-fsnEvents basePath timestamp inoEvent = return [Unknown basePath timestamp (show inoEvent)]
+fsnEvents basePath timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.DeletedSelf) = return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
+fsnEvents _ _ INo.Ignored = return []
+fsnEvents basePath timestamp inoEvent = return [Unknown basePath timestamp IsFile (show inoEvent)]
+
+boolToIsDirectory :: Bool -> EventIsDirectory
+boolToIsDirectory False = IsFile
+boolToIsDirectory True = IsDirectory
 
 handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
 handleInoEvent actPred chan basePath dbp inoEvent = do
@@ -161,7 +166,8 @@ instance FileListener INo.INotify where
                   fileStatus <- getFileStatus newPath
                   let modTime = modificationTimeHiRes fileStatus
                   when (modTime > timestampBeforeAddingWatch) $ do
-                    handleEvent actPred chan dbp (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) (isDirectory fileStatus))
+                    let isDir = if isDirectory fileStatus then IsDirectory else IsFile
+                    handleEvent actPred chan dbp (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
 
               _ -> return ()
 

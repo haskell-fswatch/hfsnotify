@@ -69,33 +69,37 @@ tests hasNative = testGroup "Tests" $ do
       nested <- [False, True]
 
       return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
-        t <- [ mkTest "new file" (if | isMac && not poll -> [evAddedOrModified False]
-                                     | otherwise -> [evAdded False])
+        t <- [ mkTest "new file" (if | isMac && not poll -> [evAddedOrModified IsFile]
+                                     | otherwise -> [evAdded IsFile])
                                  (const $ return ())
                                  (\f -> openFile f AppendMode >>= hClose)
 
-             , mkTest "modify file" [evModified False]
+             , mkTest "modify file" [evModified IsFile]
                                     (\f -> writeFile f "")
                                     (\f -> appendFile f "foo")
 
              -- This test is disabled when polling because the PollManager only keeps track of
              -- modification time, so it won't catch an unrelated file attribute change
-             , mkTest "modify file attributes" (if poll then [] else [evModified False])
+             , mkTest "modify file attributes" (if poll then [] else [evModified IsFile])
                                                (\f -> writeFile f "")
                                                (\f -> if poll then return () else changeFileAttributes f)
 
-             , mkTest "delete file" [evRemoved False]
+             , mkTest "delete file" [evRemoved IsFile]
                                     (\f -> writeFile f "")
                                     (\f -> removeFile f)
 
-             , mkTest "new directory" (if | isMac -> [evAddedOrModified True]
-                                          | otherwise -> [evAdded True])
+             , mkTest "new directory" (if | isMac -> [evAddedOrModified IsDirectory]
+                                          | otherwise -> [evAdded IsDirectory])
                                       (const $ return ())
                                       createDirectory
 
-             , mkTest "delete directory" [evRemoved True]
+             , mkTest "delete directory" [evRemoved IsDirectory]
                                          (\f -> createDirectory f)
                                          removeDirectory
+
+             , mkTest "delete watched directory" [evWatchedDirectoryRemoved IsDirectory]
+                                                 (\f -> createDirectory f)
+                                                 removeDirectory
           ]
         return $ t nested recursive poll
 

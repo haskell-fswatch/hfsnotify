@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings, ImplicitParams, NamedFieldPuns #-}
 module EventUtils where
 
 import Control.Applicative
@@ -27,7 +27,7 @@ data EventPattern = EventPattern
   , patPredicate :: Event -> Bool
   }
 
-evAdded, evRemoved, evModified, evAddedOrModified :: Bool -> FilePath -> EventPattern
+evAdded, evRemoved, evModified, evAddedOrModified :: EventIsDirectory -> FilePath -> EventPattern
 evAdded isDirectory path = EventPattern path "Added"
   (\x -> case x of
       Added path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
@@ -50,9 +50,14 @@ evAddedOrModified isDirectory path = EventPattern path "AddedOrModified"
       Modified path' _ isDir | isDirectory == isDir -> pathMatches isDirectory path path'
       _ -> False
   )
+evWatchedDirectoryRemoved isDirectory path = EventPattern path "WatchedDirectoryRemoved"
+  (\x -> case x of
+      WatchedDirectoryRemoved {eventPath, eventIsDirectory} -> pathMatches eventIsDirectory path eventPath
+      _ -> False
+  )
 
-pathMatches True path path' = path == path' || (path <> [pathSeparator]) == path'
-pathMatches False path path' = path == path'
+pathMatches IsDirectory path path' = path == path' || (path <> [pathSeparator]) == path'
+pathMatches IsFile path path' = path == path'
 
 matchEvents :: [EventPattern] -> [Event] -> Assertion
 matchEvents expected actual = do

@@ -56,7 +56,7 @@ epsilonDefault = 0.001
 
 -- | The default event that provides a basis for comparison.
 eventDefault :: Event
-eventDefault = Added "" (posixSecondsToUTCTime 0) False
+eventDefault = Added "" (posixSecondsToUTCTime 0) IsFile
 
 -- | A predicate indicating whether two events may be considered "the same
 -- event". This predicate is applied to the most recent dispatched event and
@@ -68,9 +68,8 @@ debounce epsilon e1 e2 =
   where
     timeDiff = diffUTCTime (eventTime e2) (eventTime e1)
 
--- | Produces a fresh data payload used for debouncing events in a
--- handler.
+-- | Produces a fresh data payload used for debouncing events in a handler.
 newDebouncePayload :: Debounce -> IO DebouncePayload
-newDebouncePayload DebounceDefault    = newIORef eventDefault >>= return . Just . DebounceData epsilonDefault
-newDebouncePayload (Debounce epsilon) = newIORef eventDefault >>= return . Just . DebounceData epsilon
-newDebouncePayload NoDebounce         = return Nothing
+newDebouncePayload DebounceDefault = (Just . DebounceData epsilonDefault) <$> newIORef eventDefault
+newDebouncePayload (Debounce epsilon) = (Just . DebounceData epsilon) <$> newIORef eventDefault
+newDebouncePayload NoDebounce = return Nothing

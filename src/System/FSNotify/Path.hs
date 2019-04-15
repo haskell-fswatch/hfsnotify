@@ -68,7 +68,7 @@ findFilesAndDirs :: Bool -> FilePath -> IO [FilePath]
 findFilesAndDirs False path = getDirectoryContentsPath =<< canonicalizeDirPath path
 findFilesAndDirs True path = do
   (files, dirs) <- fileDirContents path
-  nestedFilesAndDirs <- concat <$> (mapM (findFilesAndDirs False) dirs)
+  nestedFilesAndDirs <- concat <$> mapM (findFilesAndDirs False) dirs
   return (files ++ dirs ++ nestedFilesAndDirs)
 
 -- | add a trailing slash to ensure the path indicates a directory

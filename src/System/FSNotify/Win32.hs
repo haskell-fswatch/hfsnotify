@@ -33,12 +33,12 @@ type BaseDir = FilePath
 -- handle[native]Event.
 
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
-fsnEvent :: Bool -> BaseDir -> UTCTime -> WNo.Event -> Event
+fsnEvent :: EventIsDirectory -> BaseDir -> UTCTime -> WNo.Event -> Event
 fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
 
-handleWNoEvent :: Bool -> BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
+handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
 handleWNoEvent isDirectory basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent isDirectory basedir currentTime inoEvent
@@ -64,8 +64,8 @@ watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path act
 
   -- Start one watch for file events and one for directory events
   -- (There seems to be no other way to provide isDirectory information)
-  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent False path' actPred chan dbp)
-  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent True path' actPred chan dbp)
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred chan dbp)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred chan dbp)
 
   -- The StopListening action should make sure to remove the watches from the manager after they're killed.
   -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.

@@ -36,12 +36,12 @@ data WatchData = WatchData FilePath EventChannel
 type WatchMap = Map WatchKey WatchData
 newtype PollManager = PollManager (MVar WatchMap)
 
-generateEvent :: UTCTime -> Bool -> EventType -> FilePath -> Maybe Event
+generateEvent :: UTCTime -> EventIsDirectory -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir)
 generateEvent timestamp isDir ModifiedEvent filePath = Just (Modified filePath timestamp isDir)
 generateEvent timestamp isDir RemovedEvent filePath = Just (Removed filePath timestamp isDir)
 
-generateEvents :: UTCTime -> EventType -> [(FilePath, Bool)] -> [Event]
+generateEvents :: UTCTime -> EventType -> [(FilePath, EventIsDirectory)] -> [Event]
 generateEvents timestamp eventType = mapMaybe (\(path, isDir) -> generateEvent timestamp isDir eventType path)
 
 -- | Do not return modified events for directories.
@@ -49,24 +49,24 @@ generateEvents timestamp eventType = mapMaybe (\(path, isDir) -> generateEvent t
 -- of the directory being bumped. However, to increase consistency with the other FileListeners,
 -- we ignore these events.
 handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
-handleEvent _ _ (Modified _ _ True) = return ()
+handleEvent _ _ (Modified _ _ IsDirectory) = return ()
 handleEvent chan actPred event
   | actPred event = writeChan chan event
   | otherwise = return ()
 
-pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, Bool))
+pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, EventIsDirectory))
 pathModMap recursive path = findFilesAndDirs recursive path >>= pathModMap'
   where
-    pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, Bool))
+    pathModMap' :: [FilePath] -> IO (Map FilePath (UTCTime, EventIsDirectory))
     pathModMap' files = (Map.fromList . catMaybes) <$> mapM pathAndInfo files
 
-    pathAndInfo :: FilePath -> IO (Maybe (FilePath, (UTCTime, Bool)))
+    pathAndInfo :: FilePath -> IO (Maybe (FilePath, (UTCTime, EventIsDirectory)))
     pathAndInfo path = handle (\(_ :: IOException) -> return Nothing) $ do
       modTime <- getModificationTime path
       isDir <- doesDirectoryExist path
-      return $ Just (path, (modTime, isDir))
+      return $ Just (path, (modTime, if isDir then IsDirectory else IsFile))
 
-pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, Bool) -> IO ()
+pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, EventIsDirectory) -> IO ()
 pollPath interval recursive chan filePath actPred oldPathMap = do
   threadDelay interval
   maybeNewPathMap <- handle (\(_ :: IOException) -> return Nothing) (Just <$> pathModMap recursive filePath)
@@ -89,7 +89,7 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
       pollPath interval recursive chan filePath actPred newPathMap
 
   where
-    modifiedDifference :: (UTCTime, Bool) -> (UTCTime, Bool) -> Maybe (UTCTime, Bool)
+    modifiedDifference :: (UTCTime, EventIsDirectory) -> (UTCTime, EventIsDirectory) -> Maybe (UTCTime, EventIsDirectory)
     modifiedDifference (newTime, isDir1) (oldTime, isDir2)
       | oldTime /= newTime || isDir1 /= isDir2 = Just (newTime, isDir1)
       | otherwise = Nothing

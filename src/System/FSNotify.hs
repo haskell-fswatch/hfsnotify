@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase #-}
 
 -- | NOTE: This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -32,10 +32,8 @@ module System.FSNotify
 
        -- * Events
          Event(..)
+       , EventIsDirectory(..)
        , EventChannel
-       , eventIsDirectory
-       , eventTime
-       , eventPath
        , Action
        , ActionPredicate
 
@@ -175,13 +173,13 @@ watchTreeChan (WatchManager db wm _) = listenRecursive db wm
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchDir wm = threadChan listen wm
+watchDir = threadChan listen
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchTree wm = threadChan listenRecursive wm
+watchTree = threadChan listenRecursive
 
 threadChan
   :: (forall sessionType . FileListener sessionType =>
@@ -189,7 +187,7 @@ threadChan
       -- (^ this is the type of listen and listenRecursive)
   ->  WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
-  modifyMVar cleanupVar $ \mbCleanup -> case mbCleanup of
+  modifyMVar cleanupVar $ \case
     -- check if we've been stopped
     Nothing -> return (Nothing, return ()) -- or throw an exception?
     Just cleanup -> do

@@ -12,10 +12,8 @@ module System.FSNotify.Types
        , DebounceData(..)
        , DebouncePayload
        , Event(..)
+       , EventIsDirectory(..)
        , EventChannel
-       , eventPath
-       , eventTime
-       , eventIsDirectory
        , IOEvent
        ) where
 
@@ -26,37 +24,21 @@ import Data.Time.Clock (UTCTime)
 import Prelude hiding (FilePath)
 import System.FilePath
 
+data EventIsDirectory = IsFile | IsDirectory
+  deriving (Show, Eq)
+
 -- | A file event reported by a file watcher. Each event contains the
 -- canonical path for the file and a timestamp guaranteed to be after the
 -- event occurred (timestamps represent current time when FSEvents receives
 -- it from the OS and/or platform-specific Haskell modules).
 data Event =
-    Added    FilePath UTCTime Bool
-  | Modified FilePath UTCTime Bool
-  | Removed  FilePath UTCTime Bool
-  | Unknown  FilePath UTCTime String
+    Added { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+  | Modified { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+  | Removed { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+  | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+    -- ^ Note: currently only emitted on Linux
+  | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
   deriving (Eq, Show)
-
--- | Helper for extracting the path associated with an event.
-eventPath :: Event -> FilePath
-eventPath (Added    path _ _) = path
-eventPath (Modified path _ _) = path
-eventPath (Removed  path _ _) = path
-eventPath (Unknown  path _ _) = path
-
--- | Helper for extracting the time associated with an event.
-eventTime :: Event -> UTCTime
-eventTime (Added    _ timestamp _) = timestamp
-eventTime (Modified _ timestamp _) = timestamp
-eventTime (Removed  _ timestamp _) = timestamp
-eventTime (Unknown  _ timestamp _) = timestamp
-
-eventIsDirectory :: Event -> Bool
-eventIsDirectory (Added    _ _ isDir) = isDir
-eventIsDirectory (Modified _ _ isDir) = isDir
-eventIsDirectory (Removed  _ _ isDir) = isDir
-eventIsDirectory (Unknown  _ _ _) = False
-
 
 type EventChannel = Chan Event
 

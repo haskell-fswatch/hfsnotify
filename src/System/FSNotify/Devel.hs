@@ -13,6 +13,8 @@
 --  return ()
 -- @
 
+{-# LANGUAGE NamedFieldPuns #-}
+
 module System.FSNotify.Devel
   ( treeExtAny, treeExtExists,
     doAllEvents,
@@ -49,29 +51,20 @@ treeExtAny man dir ext action =
 -- | Turn a 'FilePath' callback into an 'Event' callback that ignores the
 -- 'Event' type and timestamp
 doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
-doAllEvents action event =
-  case event of
-    Added    f _ _ -> action f
-    Modified f _ _ -> action f
-    Removed  f _ _ -> action f
-    Unknown  f _ _ -> action f
+doAllEvents action = action . eventPath
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
 -- only 'Added' and 'Modified' event types
 existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
 existsEvents filt event =
   case event of
-    Added    f _ _ -> filt f
-    Modified f _ _ -> filt f
-    Removed  _ _ _ -> False
-    Unknown  _ _ _ -> False
+    Added {eventPath} -> filt eventPath
+    Modified {eventPath} -> filt eventPath
+    WatchedDirectoryRemoved {} -> False
+    Removed {} -> False
+    Unknown {} -> False
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
 -- any event types
 allEvents :: (FilePath -> Bool) -> (Event -> Bool)
-allEvents filt event =
-  case event of
-    Added    f _ _ -> filt f
-    Modified f _ _ -> filt f
-    Removed  f _ _ -> filt f
-    Unknown  f _ _ -> filt f
+allEvents filt = filt . eventPath
