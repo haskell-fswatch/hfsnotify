@@ -80,7 +80,7 @@ instance FileListener WNo.WatchManager where
   -- TODO: This should actually lookup a Windows API version and possibly return
   -- Nothing the calls we need are not available. This will require that API
   -- version information be exposed by Win32-notify.
-  initSession = fmap Just WNo.initWatchManager
+  initSession = Right <$> WNo.initWatchManager
 
   killSession = WNo.killWatchManager
 

@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings #-}
 
 -- | NOTE: This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -64,6 +64,8 @@ import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.Maybe
+import Data.Monoid
+import Data.Text as T
 import System.FSNotify.Polling
 import System.FSNotify.Types
 import System.FilePath
@@ -141,10 +143,11 @@ startManagerConf conf
   | confUsePolling conf = pollingManager
   | otherwise = initSession >>= createManager
   where
-    createManager :: Maybe NativeManager -> IO WatchManager
-    createManager (Just nativeManager) =
-      WatchManager conf nativeManager <$> cleanupVar
-    createManager Nothing = pollingManager
+    createManager :: Either Text NativeManager -> IO WatchManager
+    createManager (Right nativeManager) = WatchManager conf nativeManager <$> cleanupVar
+    createManager (Left err) = do
+      putStrLn $ T.unpack $ "Error: couldn't start native file manager: " <> err
+      pollingManager
 
     pollingManager =
       WatchManager conf <$> createPollManager <*> cleanupVar

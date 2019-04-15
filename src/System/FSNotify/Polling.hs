@@ -124,7 +124,7 @@ listen' isRecursive conf (PollManager mvarMap) path actPred chan = do
 
 
 instance FileListener PollManager where
-  initSession = fmap Just createPollManager
+  initSession = Right <$> createPollManager
 
   killSession (PollManager mvarMap) = do
     watchMap <- readMVar mvarMap

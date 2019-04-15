@@ -89,7 +89,7 @@ varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify]
 
 instance FileListener INo.INotify where
-  initSession = E.catch (fmap Just INo.initINotify) (\(_ :: IOException) -> return Nothing)
+  initSession = E.catch (Right <$> INo.initINotify) (\(e :: IOException) -> return $ Left $ fromString $ show e)
 
   killSession = INo.killINotify
 

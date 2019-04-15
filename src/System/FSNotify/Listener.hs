@@ -12,6 +12,7 @@ module System.FSNotify.Listener
        ) where
 
 import Data.IORef (newIORef)
+import Data.Text
 import Data.Time (diffUTCTime, NominalDiffTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Prelude hiding (FilePath)
@@ -25,9 +26,8 @@ type StopListening = IO ()
 -- for events, or simulated listening for events.
 class FileListener sessionType where
   -- | Initialize a file listener instance.
-  initSession :: IO (Maybe sessionType) -- ^ Just an initialized file listener,
-                                        --   or Nothing if this file listener
-                                        --   cannot be supported.
+  initSession :: IO (Either Text sessionType)
+  -- ^ An initialized file listener, or a reason why one wasn't able to start.
 
   -- | Kill a file listener instance.
   -- This will immediately stop acting on events for all directories being
