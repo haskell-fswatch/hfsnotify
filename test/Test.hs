@@ -80,7 +80,7 @@ tests hasNative = describe "Tests" $
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
               if | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Added {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a new directory" $ \(f, getEvents, clearEvents) -> do
@@ -89,7 +89,7 @@ tests hasNative = describe "Tests" $
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
               if | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Added {..}] | eventPath == f && eventIsDirectory == IsDirectory -> return ()
+                     [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a deleted file" $ \(f, getEvents, clearEvents) -> do
@@ -101,7 +101,7 @@ tests hasNative = describe "Tests" $
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
               if | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Removed {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a deleted directory" $ \(f, getEvents, clearEvents) -> do
@@ -113,7 +113,7 @@ tests hasNative = describe "Tests" $
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
               if | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Removed {..}] | eventPath == f && eventIsDirectory == IsDirectory -> return ()
+                     [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with modified file attributes" $ \(f, getEvents, clearEvents) -> do
@@ -128,7 +128,7 @@ tests hasNative = describe "Tests" $
               if | poll -> return ()
                  | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Modified {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a modified file" $ \(f, getEvents, clearEvents) -> do
@@ -140,7 +140,7 @@ tests hasNative = describe "Tests" $
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
               if | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
-                     [Modified {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
 
