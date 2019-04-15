@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MultiWayIf, OverloadedStrings #-}
 
 module System.FSNotify.OSX
        ( FileListener(..)
@@ -98,8 +98,8 @@ handleEvent isRecursive actPred chan dirPath dbp fseEvent = do
 isDirectlyInside :: FilePath -> Event -> Bool
 isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
   where
-    isRelevantFileEvent = (not $ eventIsDirectory event) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
-    isRelevantDirEvent = eventIsDirectory event && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
+    isRelevantFileEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
+    isRelevantDirEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
 
 handleEvents :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
 handleEvents isRecursive actPred chan dirPath dbp (event:events) = do
