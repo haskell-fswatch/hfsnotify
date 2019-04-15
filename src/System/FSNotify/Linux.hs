@@ -60,7 +60,7 @@ fsnEvents basePath timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = fr
 fsnEvents basePath timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.DeletedSelf) = return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
+fsnEvents basePath timestamp INo.DeletedSelf = return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
 fsnEvents _ _ INo.Ignored = return []
 fsnEvents basePath timestamp inoEvent = return [Unknown basePath timestamp IsFile (show inoEvent)]
 
