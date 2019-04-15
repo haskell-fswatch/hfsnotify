@@ -16,6 +16,7 @@ import Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.IORef (atomicModifyIORef, readIORef)
+import Data.Monoid
 import Data.String
 import qualified Data.Text as T
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -110,7 +111,7 @@ instance FileListener INo.INotify where
     let
       stopListening = do
         modifyMVar_ wdVar $ \mbWds -> do
-          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x) (\(_ :: SomeException) -> putStrLn ("Error removing watch: " `mappend` show x)))) mbWds
+          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x) (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show x <> " (" <> show e <> ")")))) mbWds
           return Nothing
 
     listenRec initialPath wdVar
