@@ -17,7 +17,6 @@ Extra-Source-Files:
   README.md
   CHANGELOG.md
   test/Test.hs
-  test/EventUtils.hs
 
 
 Library
@@ -61,14 +60,13 @@ Library
 Test-Suite test
   Type:                 exitcode-stdio-1.0
   Main-Is:              Test.hs
-  Other-modules:        EventUtils
   Hs-Source-Dirs:       test
   GHC-Options:          -Wall -threaded
 
   if os(windows)
-    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random, Win32
+    Build-Depends:      base >= 4.3.1.0, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random, retry, Win32
   else
-    Build-Depends:      base >= 4.3.1.0, tasty >= 0.5, tasty-hunit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random
+    Build-Depends:      base >= 4.3.1.0, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, temporary, random, retry
 
 Source-Repository head
   Type:                 git

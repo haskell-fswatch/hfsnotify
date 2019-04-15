@@ -1,8 +1,11 @@
-{-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf #-}
+{-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
 
 import Control.Concurrent
-import Control.Exception
+import Control.Exception hiding (Handler)
 import Control.Monad
+import Control.Monad.Catch
+import Control.Retry
+import Data.IORef
 import Data.Monoid
 import Prelude hiding (FilePath)
 import System.Directory
@@ -12,10 +15,9 @@ import System.IO
 import System.IO.Temp
 import System.PosixCompat.Files
 import System.Random as R
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.HUnit.Lang
+import Test.Hspec
 
-import EventUtils
 
 #ifdef mingw32_HOST_OS
 import Data.Bits
@@ -48,9 +50,7 @@ main :: IO ()
 main = do
   hasNative <- nativeMgrSupported
   unless hasNative $ putStrLn "WARNING: native manager cannot be used or tested on this platform"
-  defaultMain $ withResource (createDirectoryIfMissing True testDirPath)
-                             (const $ removeDirectoryRecursive testDirPath)
-                             (const $ tests hasNative)
+  hspec $ tests hasNative
 
 -- | There's some kind of race in OS X where the creation of the containing directory shows up as an event
 -- I explored whether this was due to passing 0 as the sinceWhen argument to FSEventStreamCreate
@@ -58,75 +58,124 @@ main = do
 pauseBeforeStartingTest :: IO ()
 pauseBeforeStartingTest = threadDelay 10000
 
-tests :: Bool -> TestTree
-tests hasNative = testGroup "Tests" $ do
-  poll <- if hasNative then [False, True] else [True]
-  let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
+tests :: Bool -> Spec
+tests hasNative = describe "Tests" $
+  forM_ (if hasNative then [False, True] else [True]) $ \poll -> describe (if poll then "Polling" else "Native") $ do
+    let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
+    forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
+      forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
+        makeTestFolder poll recursive nested $ do
+          -- it "deletes the watched directory" $ \(f, getEvents, clearEvents) -> do
+          --   let watchedDir = takeDirectory f
+          --   putStrLn $ "Deleting directory: " <> watchedDir
+          --   removeDirectory (takeDirectory f)
 
-  return $ testGroup (if poll then "Polling" else "Native") $ do
-    recursive <- [False, True]
-    return $ testGroup (if recursive then "Recursive" else "Non-recursive") $ do
-      nested <- [False, True]
+          --   pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
+          --     [WatchedDirectoryRemoved {..}] | eventPath == watchedDir && eventIsDirectory == IsDirectory -> return ()
+          --     events -> expectationFailure $ "Got wrong events: " <> show events
 
-      return $ testGroup (if nested then "In a subdirectory" else "Right here") $ do
-        t <- [ mkTest "new file" (if | isMac && not poll -> [evAddedOrModified IsFile]
-                                     | otherwise -> [evAdded IsFile])
-                                 (const $ return ())
-                                 (\f -> openFile f AppendMode >>= hClose)
+          it "works with a new file" $ \(f, getEvents, clearEvents) -> do
+            openFile f AppendMode >>= hClose
 
-             , mkTest "modify file" [evModified IsFile]
-                                    (\f -> writeFile f "")
-                                    (\f -> appendFile f "foo")
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Added {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
 
-             -- This test is disabled when polling because the PollManager only keeps track of
-             -- modification time, so it won't catch an unrelated file attribute change
-             , mkTest "modify file attributes" (if poll then [] else [evModified IsFile])
-                                               (\f -> writeFile f "")
-                                               (\f -> if poll then return () else changeFileAttributes f)
+          it "works with a new directory" $ \(f, getEvents, clearEvents) -> do
+            createDirectory f
 
-             , mkTest "delete file" [evRemoved IsFile]
-                                    (\f -> writeFile f "")
-                                    (\f -> removeFile f)
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Added {..}] | eventPath == f && eventIsDirectory == IsDirectory -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
 
-             , mkTest "new directory" (if | isMac -> [evAddedOrModified IsDirectory]
-                                          | otherwise -> [evAdded IsDirectory])
-                                      (const $ return ())
-                                      createDirectory
+          it "works with a deleted file" $ \(f, getEvents, clearEvents) -> do
+            writeFile f ""
+            clearEvents
 
-             , mkTest "delete directory" [evRemoved IsDirectory]
-                                         (\f -> createDirectory f)
-                                         removeDirectory
+            removeFile f
 
-             , mkTest "delete watched directory" [evWatchedDirectoryRemoved IsDirectory]
-                                                 (\f -> createDirectory f)
-                                                 removeDirectory
-          ]
-        return $ t nested recursive poll
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Removed {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
+
+          it "works with a deleted directory" $ \(f, getEvents, clearEvents) -> do
+            createDirectory f
+            clearEvents
+
+            removeDirectory f
+
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Removed {..}] | eventPath == f && eventIsDirectory == IsDirectory -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
+
+          it "works with modified file attributes" $ \(f, getEvents, clearEvents) -> do
+            writeFile f ""
+            clearEvents
+
+            changeFileAttributes f
+
+            -- This test is disabled when polling because the PollManager only keeps track of
+            -- modification time, so it won't catch an unrelated file attribute change
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | poll -> return ()
+                 | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Modified {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
+
+          it "works with a modified file" $ \(f, getEvents, clearEvents) -> do
+            writeFile f ""
+            clearEvents
+
+            appendFile f "foo"
+
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+              if | nested && not recursive -> events `shouldBe` []
+                 | otherwise -> case events of
+                     [Modified {..}] | eventPath == f && eventIsDirectory == IsFile -> return ()
+                     _ -> expectationFailure $ "Got wrong events: " <> show events
 
 
-mkTest :: (?timeInterval::Int) => TestName -> [FilePath -> EventPattern] -> (FilePath -> IO a) ->
-          (FilePath -> IO ()) -> Bool -> Bool -> Bool -> TestTree
-mkTest title evs prepare action nested recursive poll = do
-  testCase title $ do
-    -- Use a random identifier so that every test happens in a different folder
-    -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
-    randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
 
-    let pollDelay = when poll (threadDelay $ 10^(6 :: Int))
+pauseAndRetryOnExpectationFailure :: (?timeInterval :: Int) => Int -> IO a -> IO a
+pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
 
-    withTempDirectory testDirPath ("test." <> randomID) $ \watchedDir -> do
-      let fileName = "testfile"
-      let baseDir = if nested then watchedDir </> "subdir" else watchedDir
-          f = normalise $ baseDir </> fileName
-          watchFn = if recursive then watchTree else watchDir
-          expect = expectEvents poll watchFn watchedDir
+retryOnExpectationFailure :: Int -> IO a -> IO a
+retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [shouldRetry] (\_ -> action)
+  where shouldRetry :: RetryStatus -> Handler IO Bool
+        shouldRetry _ = Handler handleFn
 
-      createDirectoryIfMissing True baseDir
+        handleFn :: SomeException -> IO Bool
+        handleFn (fromException -> Just (HUnitFailure {})) = return True
+        handleFn _ = return False
 
-      pauseBeforeStartingTest
+makeTestFolder :: (?timeInterval :: Int) => Bool -> Bool -> Bool -> SpecWith (FilePath, IO [Event], IO ()) -> Spec
+makeTestFolder poll recursive nested = around withTestDir
+  where withTestDir action = do
+        -- Use a random identifier so that every test happens in a different folder
+        -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
+        randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
 
-      flip finally (doesFileExist f >>= flip when (removeFile f)) $ do
-        _ <- prepare f
-        pauseBeforeStartingTest
-        flip expect (pollDelay >> action f) (if | nested && (not recursive) -> []
-                                                | otherwise -> [ev f | ev <- evs])
+        withSystemTempDirectory ("test." <> randomID) $ \watchedDir -> do
+          let fileName = "testfile"
+          let baseDir = if nested then watchedDir </> "subdir" else watchedDir
+          let watchFn = if recursive then watchTree else watchDir
+
+          createDirectoryIfMissing True baseDir
+
+          mgr <- startManagerConf defaultConfig { confDebounce = NoDebounce
+                                                , confUsePolling = poll
+                                                , confPollInterval = 2 * 10^(5 :: Int) }
+          eventsVar <- newIORef []
+          stop <- watchFn mgr watchedDir (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
+          let clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
+          _ <- action (normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
+          stop
