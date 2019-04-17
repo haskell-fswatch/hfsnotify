@@ -10,8 +10,7 @@ module System.FSNotify.OSX
        , NativeManager
        ) where
 
-import Control.Concurrent.Chan
-import Control.Concurrent.MVar
+import Control.Concurrent
 import Control.Monad
 import Data.Bits
 import Data.Map (Map)
@@ -87,8 +86,8 @@ fsnEvents timestamp e = do
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
-handleFSEEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
-handleFSEEvent isRecursive actPred chan dirPath dbp fseEvent = do
+handleFSEEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> FSE.Event -> IO ()
+handleFSEEvent isRecursive actPred chan dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   forM_ events $ \event ->
@@ -99,10 +98,10 @@ handleFSEEvent isRecursive actPred chan dirPath dbp fseEvent = do
 isDirectlyInside :: FilePath -> Event -> Bool
 isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
   where
-    isRelevantFileEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
-    isRelevantDirEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
+    isRelevantFileEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
+    isRelevantDirEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
 
-listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
+listenFn :: (ActionPredicate -> EventChannel -> FilePath -> FSE.Event -> IO a)
          -> WatchConfig
          -> OSXManager
          -> FilePath
@@ -111,9 +110,8 @@ listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> F
          -> IO StopListening
 listenFn handler conf (OSXManager mvarMap) path actPred chan = do
   path' <- canonicalizeDirPath path
-  dbp <- newDebouncePayload $ confDebounce conf
   unique <- newUnique
-  eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred chan path' dbp)
+  eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred chan path')
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream chan) watchMap)
   return $ do
     FSE.eventStreamDestroy eventStream

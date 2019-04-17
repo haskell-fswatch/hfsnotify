@@ -65,7 +65,7 @@ tests hasNative = describe "Tests" $
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
-          unless (nested || poll) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          unless (nested || poll || isMac) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
             removeDirectory watchedDir
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
@@ -166,6 +166,10 @@ makeTestFolder poll recursive nested = around withTestDir
           let watchFn = if recursive then watchTree else watchDir
 
           createDirectoryIfMissing True baseDir
+
+          -- On Mac, delay before starting the watcher because otherwise creation of "subdir"
+          -- can get picked up.
+          when isMac $ threadDelay 2000000
 
           mgr <- startManagerConf defaultConfig { confDebounce = NoDebounce
                                                 , confUsePolling = poll
