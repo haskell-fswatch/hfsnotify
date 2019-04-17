@@ -65,7 +65,7 @@ tests hasNative = describe "Tests" $
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
-          unless (nested || polling) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          unless (nested || poll) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
             if nested then removePathForcibly watchedDir else removeDirectory watchedDir
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
