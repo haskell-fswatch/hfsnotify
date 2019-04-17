@@ -40,6 +40,13 @@ isMac = True
 isMac = False
 #endif
 
+isWin :: Bool
+#ifdef mingw32_HOST_OS
+isWin = True
+#else
+isWin = False
+#endif
+
 nativeMgrSupported :: IO Bool
 nativeMgrSupported = do
   mgr <- startManager
@@ -65,7 +72,7 @@ tests hasNative = describe "Tests" $
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
-          unless (nested || poll || isMac) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
             removeDirectory watchedDir
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
