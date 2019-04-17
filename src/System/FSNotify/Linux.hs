@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables, ViewPatterns, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -33,7 +33,9 @@ import System.FilePath
 import qualified System.INotify as INo
 import System.Posix.Files (getFileStatus, isDirectory, modificationTimeHiRes)
 
-type NativeManager = INo.INotify
+data INotifyListener = INotifyListener { listenerINotify :: INo.INotify }
+
+type NativeManager = INotifyListener
 
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
@@ -68,8 +70,10 @@ boolToIsDirectory :: Bool -> EventIsDirectory
 boolToIsDirectory False = IsFile
 boolToIsDirectory True = IsDirectory
 
-handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> INo.Event -> IO ()
-handleInoEvent actPred chan basePath dbp inoEvent = do
+handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> MVar Bool -> INo.Event -> IO ()
+handleInoEvent actPred chan basePath dbp watchStillExistsVar inoEvent = do
+  when (INo.DeletedSelf == inoEvent) $ modifyMVar_ watchStillExistsVar $ const $ return False
+
   currentTime <- getCurrentTime
   events <- fsnEvents basePath currentTime inoEvent
   mapM_ (handleEvent actPred chan dbp) events
@@ -86,24 +90,26 @@ handleEvent actPred chan dbp event =
     writeToChan = writeChan chan event
 
 varieties :: [INo.EventVariety]
-varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify]
+varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.DeleteSelf]
 
-instance FileListener INo.INotify where
-  initSession = E.catch (Right <$> INo.initINotify) (\(e :: IOException) -> return $ Left $ fromString $ show e)
+instance FileListener INotifyListener where
+  initSession = E.handle (\(e :: IOException) -> return $ Left $ fromString $ show e) $ do
+    inotify <- INo.initINotify
+    return $ Right $ INotifyListener inotify
 
-  killSession = INo.killINotify
+  killSession (INotifyListener {listenerINotify}) = INo.killINotify listenerINotify
 
-  listen conf iNotify path actPred chan = do
+  listen conf (INotifyListener {listenerINotify}) path actPred chan = do
     path' <- canonicalizeDirPath path
     dbp <- newDebouncePayload $ confDebounce conf
     rawPath <- toRawFilePath path'
-    wd <- INo.addWatch iNotify varieties rawPath (handler path' dbp)
-    return $ INo.removeWatch wd
-    where
-      handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-      handler = handleInoEvent actPred chan
+    watchStillExistsVar <- newMVar True
+    wd <- INo.addWatch listenerINotify varieties rawPath (handleInoEvent actPred chan path' dbp watchStillExistsVar)
+    return $ do
+      watchStillExists <- readMVar watchStillExistsVar
+      when watchStillExists $ INo.removeWatch wd
 
-  listenRecursive conf iNotify initialPath actPred chan = do
+  listenRecursive conf (INotifyListener {listenerINotify}) initialPath actPred chan = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -116,7 +122,8 @@ instance FileListener INo.INotify where
     let
       stopListening = do
         modifyMVar_ wdVar $ \mbWds -> do
-          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x) (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show x <> " (" <> show e <> ")")))) mbWds
+          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x)
+                                                (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show x <> " (" <> show e <> ")")))) mbWds
           return Nothing
 
     listenRec initialPath wdVar
@@ -141,11 +148,12 @@ instance FileListener INo.INotify where
           case mbWds of
             Nothing -> return mbWds
             Just wds -> do
-              wd <- INo.addWatch iNotify varieties rawFilePath (handler filePath dbp)
+              watchStillExistsVar <- newMVar True
+              wd <- INo.addWatch listenerINotify varieties rawFilePath (handler filePath dbp watchStillExistsVar)
               return $ Just (wd:wds)
         where
-          handler :: FilePath -> DebouncePayload -> INo.Event -> IO ()
-          handler baseDir dbp event = do
+          handler :: FilePath -> DebouncePayload -> MVar Bool -> INo.Event -> IO ()
+          handler baseDir dbp watchStillExistsVar event = do
             -- When a new directory is created, add recursive inotify watches to it
             -- TODO: there's a race condition here; if there are files present in the directory before
             -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
@@ -173,15 +181,10 @@ instance FileListener INo.INotify where
 
             -- Remove watch when this directory is removed
             case event of
-              (INo.DeletedSelf) -> do
-                -- putStrLn "Watched file/folder was deleted! TODO: remove watch."
-                return ()
-              (INo.Ignored) -> do
-                -- putStrLn "Watched file/folder was ignored, which possibly means it was deleted. TODO: remove watch."
-                return ()
+              INo.DeletedSelf -> modifyMVar_ watchStillExistsVar $ const $ return False
               _ -> return ()
 
             -- Forward all events, including directory create
-            handleInoEvent actPred chan baseDir dbp event
+            handleInoEvent actPred chan baseDir dbp watchStillExistsVar event
 
   usesPolling = const False

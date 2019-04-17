@@ -65,16 +65,14 @@ tests hasNative = describe "Tests" $
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
-          -- it "deletes the watched directory" $ \(f, getEvents, clearEvents) -> do
-          --   let watchedDir = takeDirectory f
-          --   putStrLn $ "Deleting directory: " <> watchedDir
-          --   removeDirectory (takeDirectory f)
+          unless (nested || polling) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+            if nested then removePathForcibly watchedDir else removeDirectory watchedDir
 
-          --   pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
-          --     [WatchedDirectoryRemoved {..}] | eventPath == watchedDir && eventIsDirectory == IsDirectory -> return ()
-          --     events -> expectationFailure $ "Got wrong events: " <> show events
+            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
+              [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
+              events -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a new file" $ \(f, getEvents, clearEvents) -> do
+          it "works with a new file" $ \(watchedDir, f, getEvents, clearEvents) -> do
             openFile f AppendMode >>= hClose
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
@@ -83,7 +81,7 @@ tests hasNative = describe "Tests" $
                      [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a new directory" $ \(f, getEvents, clearEvents) -> do
+          it "works with a new directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
             createDirectory f
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
@@ -92,9 +90,8 @@ tests hasNative = describe "Tests" $
                      [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a deleted file" $ \(f, getEvents, clearEvents) -> do
-            writeFile f ""
-            clearEvents
+          it "works with a deleted file" $ \(watchedDir, f, getEvents, clearEvents) -> do
+            writeFile f "" >> clearEvents
 
             removeFile f
 
@@ -104,9 +101,8 @@ tests hasNative = describe "Tests" $
                      [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a deleted directory" $ \(f, getEvents, clearEvents) -> do
-            createDirectory f
-            clearEvents
+          it "works with a deleted directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+            createDirectory f >> clearEvents
 
             removeDirectory f
 
@@ -116,9 +112,8 @@ tests hasNative = describe "Tests" $
                      [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with modified file attributes" $ \(f, getEvents, clearEvents) -> do
-            writeFile f ""
-            clearEvents
+          it "works with modified file attributes" $ \(watchedDir, f, getEvents, clearEvents) -> do
+            writeFile f "" >> clearEvents
 
             changeFileAttributes f
 
@@ -131,9 +126,8 @@ tests hasNative = describe "Tests" $
                      [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a modified file" $ \(f, getEvents, clearEvents) -> do
-            writeFile f ""
-            clearEvents
+          it "works with a modified file" $ \(watchedDir, f, getEvents, clearEvents) -> do
+            writeFile f "" >> clearEvents
 
             appendFile f "foo"
 
@@ -157,7 +151,7 @@ retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> li
         handleFn (fromException -> Just (HUnitFailure {})) = return True
         handleFn _ = return False
 
-makeTestFolder :: (?timeInterval :: Int) => Bool -> Bool -> Bool -> SpecWith (FilePath, IO [Event], IO ()) -> Spec
+makeTestFolder :: (?timeInterval :: Int) => Bool -> Bool -> Bool -> SpecWith (FilePath, FilePath, IO [Event], IO ()) -> Spec
 makeTestFolder poll recursive nested = around withTestDir
   where withTestDir action = do
         -- Use a random identifier so that every test happens in a different folder
@@ -177,5 +171,5 @@ makeTestFolder poll recursive nested = around withTestDir
           eventsVar <- newIORef []
           stop <- watchFn mgr watchedDir (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
           let clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
-          _ <- action (normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
+          _ <- action (watchedDir, normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
           stop
