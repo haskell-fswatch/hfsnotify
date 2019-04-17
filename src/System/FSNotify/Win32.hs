@@ -12,7 +12,6 @@ module System.FSNotify.Win32
 import Control.Concurrent
 import Control.Monad (when)
 import Data.Bits
-import Data.IORef (atomicModifyIORef, readIORef)
 import qualified Data.Map as Map
 import Data.Time (getCurrentTime, UTCTime)
 import Prelude
@@ -42,17 +41,7 @@ handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventChannel
 handleWNoEvent isDirectory basedir actPred chan dbp inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent isDirectory basedir currentTime inoEvent
-  handleEvent actPred chan dbp event
-
-handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
-handleEvent actPred chan dbp event | actPred event = do
-  case dbp of
-    (Just (DebounceData epsilon ior)) -> do
-      lastEvent <- readIORef ior
-      when (not $ debounce epsilon lastEvent event) $ writeChan chan event
-      atomicModifyIORef ior (\_ -> (event, ()))
-    Nothing -> writeChan chan event
-handleEvent _ _ _ _ = return ()
+  when (actPred event) $ writeChan chan event
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
 watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred chan = do

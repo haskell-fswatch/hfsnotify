@@ -14,7 +14,6 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.Bits
-import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -88,11 +87,13 @@ fsnEvents timestamp e = do
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
-handleEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
-handleEvent isRecursive actPred chan dirPath dbp fseEvent = do
+handleFSEEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO ()
+handleFSEEvent isRecursive actPred chan dirPath dbp fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  handleEvents isRecursive actPred chan dirPath dbp events
+  forM_ events $ \event ->
+    when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $
+      writeChan chan event
 
 -- | For non-recursive monitoring, test if an event takes place directly inside the monitored folder
 isDirectlyInside :: FilePath -> Event -> Bool
@@ -100,17 +101,6 @@ isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
   where
     isRelevantFileEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
     isRelevantDirEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
-
-handleEvents :: Bool -> ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> [Event] -> IO ()
-handleEvents isRecursive actPred chan dirPath dbp (event:events) = do
-  when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $ case dbp of
-      (Just (DebounceData epsilon ior)) -> do
-        lastEvent <- readIORef ior
-        when (not $ debounce epsilon lastEvent event) (writeChan chan event)
-        atomicModifyIORef ior (\_ -> (event, ()))
-      Nothing -> writeChan chan event
-  handleEvents isRecursive actPred chan dirPath dbp events
-handleEvents _ _ _ _ _ [] = return ()
 
 listenFn :: (ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> FSE.Event -> IO a)
          -> WatchConfig
@@ -142,7 +132,7 @@ instance FileListener OSXManager where
       eventStreamDestroy' :: WatchData -> IO ()
       eventStreamDestroy' (WatchData eventStream _) = FSE.eventStreamDestroy eventStream
 
-  listen = listenFn $ handleEvent False
-  listenRecursive = listenFn $ handleEvent True
+  listen = listenFn $ handleFSEEvent False
+  listenRecursive = listenFn $ handleFSEEvent True
 
   usesPolling = const False

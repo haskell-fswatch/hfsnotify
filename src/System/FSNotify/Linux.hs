@@ -15,7 +15,6 @@ import Control.Concurrent.MVar
 import Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
-import Data.IORef (atomicModifyIORef, readIORef)
 import Data.Monoid
 import Data.String
 import qualified Data.Text as T
@@ -70,24 +69,13 @@ boolToIsDirectory :: Bool -> EventIsDirectory
 boolToIsDirectory False = IsFile
 boolToIsDirectory True = IsDirectory
 
-handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> DebouncePayload -> MVar Bool -> INo.Event -> IO ()
-handleInoEvent actPred chan basePath dbp watchStillExistsVar inoEvent = do
+handleInoEvent :: ActionPredicate -> EventChannel -> FilePath -> MVar Bool -> INo.Event -> IO ()
+handleInoEvent actPred chan basePath watchStillExistsVar inoEvent = do
   when (INo.DeletedSelf == inoEvent) $ modifyMVar_ watchStillExistsVar $ const $ return False
 
   currentTime <- getCurrentTime
   events <- fsnEvents basePath currentTime inoEvent
-  mapM_ (handleEvent actPred chan dbp) events
-
-handleEvent :: ActionPredicate -> EventChannel -> DebouncePayload -> Event -> IO ()
-handleEvent actPred chan dbp event =
-  when (actPred event) $ case dbp of
-    (Just (DebounceData epsilon ior)) -> do
-      lastEvent <- readIORef ior
-      unless (debounce epsilon lastEvent event) writeToChan
-      atomicModifyIORef ior (const (event, ()))
-    Nothing -> writeToChan
-  where
-    writeToChan = writeChan chan event
+  forM_ events $ \event -> when (actPred event) $ writeChan chan event
 
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.DeleteSelf]
@@ -99,12 +87,11 @@ instance FileListener INotifyListener where
 
   killSession (INotifyListener {listenerINotify}) = INo.killINotify listenerINotify
 
-  listen conf (INotifyListener {listenerINotify}) path actPred chan = do
+  listen _conf (INotifyListener {listenerINotify}) path actPred chan = do
     path' <- canonicalizeDirPath path
-    dbp <- newDebouncePayload $ confDebounce conf
     rawPath <- toRawFilePath path'
     watchStillExistsVar <- newMVar True
-    wd <- INo.addWatch listenerINotify varieties rawPath (handleInoEvent actPred chan path' dbp watchStillExistsVar)
+    wd <- INo.addWatch listenerINotify varieties rawPath (handleInoEvent actPred chan path' watchStillExistsVar)
     return $ do
       watchStillExists <- readMVar watchStillExistsVar
       when watchStillExists $ INo.removeWatch wd
@@ -140,7 +127,6 @@ instance FileListener INotifyListener where
 
       pathHandler :: MVar (Maybe [INo.WatchDescriptor]) -> FilePath -> IO ()
       pathHandler wdVar filePath = do
-        dbp <- newDebouncePayload $ confDebounce conf
         rawFilePath <- toRawFilePath filePath
         modifyMVar_ wdVar $ \mbWds ->
           -- Atomically add a watch and record its descriptor. Also, check
@@ -149,11 +135,11 @@ instance FileListener INotifyListener where
             Nothing -> return mbWds
             Just wds -> do
               watchStillExistsVar <- newMVar True
-              wd <- INo.addWatch listenerINotify varieties rawFilePath (handler filePath dbp watchStillExistsVar)
+              wd <- INo.addWatch listenerINotify varieties rawFilePath (handler filePath watchStillExistsVar)
               return $ Just (wd:wds)
         where
-          handler :: FilePath -> DebouncePayload -> MVar Bool -> INo.Event -> IO ()
-          handler baseDir dbp watchStillExistsVar event = do
+          handler :: FilePath -> MVar Bool -> INo.Event -> IO ()
+          handler baseDir watchStillExistsVar event = do
             -- When a new directory is created, add recursive inotify watches to it
             -- TODO: there's a race condition here; if there are files present in the directory before
             -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
@@ -175,7 +161,8 @@ instance FileListener INotifyListener where
                   let modTime = modificationTimeHiRes fileStatus
                   when (modTime > timestampBeforeAddingWatch) $ do
                     let isDir = if isDirectory fileStatus then IsDirectory else IsFile
-                    handleEvent actPred chan dbp (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
+                    let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
+                    when (actPred addedEvent) $ writeChan chan addedEvent
 
               _ -> return ()
 
@@ -185,6 +172,6 @@ instance FileListener INotifyListener where
               _ -> return ()
 
             -- Forward all events, including directory create
-            handleInoEvent actPred chan baseDir dbp watchStillExistsVar event
+            handleInoEvent actPred chan baseDir watchStillExistsVar event
 
   usesPolling = const False
