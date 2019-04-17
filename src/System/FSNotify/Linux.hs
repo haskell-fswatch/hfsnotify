@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables, ViewPatterns, NamedFieldPuns #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, ScopedTypeVariables, ViewPatterns, NamedFieldPuns, LambdaCase #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -96,7 +96,7 @@ instance FileListener INotifyListener where
       watchStillExists <- readMVar watchStillExistsVar
       when watchStillExists $ INo.removeWatch wd
 
-  listenRecursive conf (INotifyListener {listenerINotify}) initialPath actPred chan = do
+  listenRecursive conf listener initialPath actPred chan = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -107,71 +107,77 @@ instance FileListener INotifyListener where
     wdVar <- newMVar (Just [])
 
     let
-      stopListening = do
-        modifyMVar_ wdVar $ \mbWds -> do
-          maybe (return ()) (mapM_ (\x -> catch (INo.removeWatch x)
-                                                (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show x <> " (" <> show e <> ")")))) mbWds
-          return Nothing
+      stopListening =
+        modifyMVar_ wdVar $ \case
+          Nothing -> return Nothing
+          Just wds -> do
+            forM_ wds $ \(wd, watchStillExistsVar) ->
+              handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
+                     (do
+                         watchStillExists <- readMVar watchStillExistsVar
+                         when watchStillExists $ INo.removeWatch wd)
+            return Nothing
 
-    listenRec initialPath wdVar
+    path' <- canonicalizeDirPath initialPath
+    paths <- findDirs True path'
+
+    -- Add watches to this directory plus every sub-directory
+    watchDirectoryRecursively listener wdVar actPred chan True path'
+    forM_ paths $ watchDirectoryRecursively listener wdVar actPred chan False
 
     return stopListening
 
-    where
-      listenRec :: FilePath -> MVar (Maybe [INo.WatchDescriptor]) -> IO ()
-      listenRec path wdVar = do
-        path' <- canonicalizeDirPath path
-        paths <- findDirs True path'
-
-        mapM_ (pathHandler wdVar) (path':paths)
-
-      pathHandler :: MVar (Maybe [INo.WatchDescriptor]) -> FilePath -> IO ()
-      pathHandler wdVar filePath = do
-        rawFilePath <- toRawFilePath filePath
-        modifyMVar_ wdVar $ \mbWds ->
-          -- Atomically add a watch and record its descriptor. Also, check
-          -- if the listening task is cancelled, in which case do nothing.
-          case mbWds of
-            Nothing -> return mbWds
-            Just wds -> do
-              watchStillExistsVar <- newMVar True
-              wd <- INo.addWatch listenerINotify varieties rawFilePath (handler filePath watchStillExistsVar)
-              return $ Just (wd:wds)
-        where
-          handler :: FilePath -> MVar Bool -> INo.Event -> IO ()
-          handler baseDir watchStillExistsVar event = do
-            -- When a new directory is created, add recursive inotify watches to it
-            -- TODO: there's a race condition here; if there are files present in the directory before
-            -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
-            -- and trigger Added events for everything we find there
-            case event of
-              (INo.Created True rawDirPath) -> do
-                dirPath <- fromRawFilePath rawDirPath
-                let newDir = baseDir </> dirPath
-                timestampBeforeAddingWatch <- getPOSIXTime
-                listenRec newDir wdVar
-
-                -- Find all files/folders that might have been created *after* the timestamp, and hence might have been
-                -- missed by the watch
-                -- TODO: there's a chance of this generating double events, fix
-                files <- S.shelly $ S.find (fromString newDir)
-                forM_ files $ \file -> do
-                  let newPath = T.unpack $ S.toTextIgnore file
-                  fileStatus <- getFileStatus newPath
-                  let modTime = modificationTimeHiRes fileStatus
-                  when (modTime > timestampBeforeAddingWatch) $ do
-                    let isDir = if isDirectory fileStatus then IsDirectory else IsFile
-                    let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
-                    when (actPred addedEvent) $ writeChan chan addedEvent
-
-              _ -> return ()
-
-            -- Remove watch when this directory is removed
-            case event of
-              INo.DeletedSelf -> modifyMVar_ watchStillExistsVar $ const $ return False
-              _ -> return ()
-
-            -- Forward all events, including directory create
-            handleInoEvent actPred chan baseDir watchStillExistsVar event
-
   usesPolling = const False
+
+
+type RecursiveWatches = MVar (Maybe [(INo.WatchDescriptor, MVar Bool)])
+
+watchDirectoryRecursively :: INotifyListener -> RecursiveWatches -> ActionPredicate -> EventChannel -> Bool -> FilePath -> IO ()
+watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar actPred chan isRootWatchedDir filePath = do
+  rawFilePath <- toRawFilePath filePath
+  modifyMVar_ wdVar $ \case
+    Nothing -> return Nothing
+    Just wds -> do
+      watchStillExistsVar <- newMVar True
+      wd <- INo.addWatch listenerINotify varieties rawFilePath (handleRecursiveEvent filePath actPred chan watchStillExistsVar isRootWatchedDir listener wdVar)
+      return $ Just ((wd, watchStillExistsVar):wds)
+
+
+handleRecursiveEvent :: FilePath -> ActionPredicate -> EventChannel -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
+handleRecursiveEvent baseDir actPred chan watchStillExistsVar isRootWatchedDir listener wdVar event = do
+  -- When a new directory is created, add recursive inotify watches to it
+  -- TODO: there's a race condition here; if there are files present in the directory before
+  -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
+  -- and trigger Added events for everything we find there
+  case event of
+    (INo.Created True rawDirPath) -> do
+      dirPath <- fromRawFilePath rawDirPath
+      let newDir = baseDir </> dirPath
+      timestampBeforeAddingWatch <- getPOSIXTime
+      watchDirectoryRecursively listener wdVar actPred chan False newDir
+
+      -- Find all files/folders that might have been created *after* the timestamp, and hence might have been
+      -- missed by the watch
+      -- TODO: there's a chance of this generating double events, fix
+      files <- S.shelly $ S.find (fromString newDir)
+      forM_ files $ \file -> do
+        let newPath = T.unpack $ S.toTextIgnore file
+        fileStatus <- getFileStatus newPath
+        let modTime = modificationTimeHiRes fileStatus
+        when (modTime > timestampBeforeAddingWatch) $ do
+          let isDir = if isDirectory fileStatus then IsDirectory else IsFile
+          let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
+          when (actPred addedEvent) $ writeChan chan addedEvent
+
+    _ -> return ()
+
+  -- If the watched directory was removed, mark the watch as already removed
+  case event of
+    INo.DeletedSelf -> modifyMVar_ watchStillExistsVar $ const $ return False
+    _ -> return ()
+
+  -- Forward the event. Ignore a DeletedSelf if we're not on the root directory,
+  -- since the watch above us will pick up the delete of that directory.
+  case event of
+    INo.DeletedSelf | not isRootWatchedDir -> return ()
+    _ -> handleInoEvent actPred chan baseDir watchStillExistsVar event
