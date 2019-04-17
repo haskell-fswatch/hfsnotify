@@ -107,16 +107,11 @@ instance FileListener INotifyListener where
     wdVar <- newMVar (Just [])
 
     let
-      stopListening =
-        modifyMVar_ wdVar $ \case
-          Nothing -> return Nothing
-          Just wds -> do
-            forM_ wds $ \(wd, watchStillExistsVar) ->
-              handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
-                     (do
-                         watchStillExists <- readMVar watchStillExistsVar
-                         when watchStillExists $ INo.removeWatch wd)
-            return Nothing
+      removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
+        handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
+        (readMVar watchStillExistsVar >>= flip when (INo.removeWatch wd))
+
+      stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
     path' <- canonicalizeDirPath initialPath
     paths <- findDirs True path'
