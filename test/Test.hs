@@ -66,7 +66,7 @@ tests hasNative = describe "Tests" $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
           unless (nested || poll) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
-            if nested then removePathForcibly watchedDir else removeDirectory watchedDir
+            removeDirectory watchedDir
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
               [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
@@ -143,13 +143,15 @@ pauseAndRetryOnExpectationFailure :: (?timeInterval :: Int) => Int -> IO a -> IO
 pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
 
 retryOnExpectationFailure :: Int -> IO a -> IO a
-retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [shouldRetry] (\_ -> action)
-  where shouldRetry :: RetryStatus -> Handler IO Bool
-        shouldRetry _ = Handler handleFn
-
-        handleFn :: SomeException -> IO Bool
-        handleFn (fromException -> Just (HUnitFailure {})) = return True
-        handleFn _ = return False
+#if MIN_VERSION_retry(0, 7, 0)
+retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (\_ -> action)
+#else
+retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (action)
+#endif
+  where
+    handleFn :: SomeException -> IO Bool
+    handleFn (fromException -> Just (HUnitFailure {})) = return True
+    handleFn _ = return False
 
 makeTestFolder :: (?timeInterval :: Int) => Bool -> Bool -> Bool -> SpecWith (FilePath, FilePath, IO [Event], IO ()) -> Spec
 makeTestFolder poll recursive nested = around withTestDir
