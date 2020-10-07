@@ -18,7 +18,7 @@ import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.String
 import qualified Data.Text as T
-import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX
 import Data.Typeable
 import qualified GHC.Foreign as F
@@ -96,7 +96,7 @@ instance FileListener INotifyListener where
       watchStillExists <- readMVar watchStillExistsVar
       when watchStillExists $ INo.removeWatch wd
 
-  listenRecursive conf listener initialPath actPred chan = do
+  listenRecursive _conf listener initialPath actPred chan = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --

@@ -64,13 +64,16 @@ import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.Maybe
-import Data.Monoid
 import Data.Text as T
 import System.FSNotify.Polling
 import System.FSNotify.Types
 import System.FilePath
 
 import System.FSNotify.Listener (StopListening)
+
+#if !MIN_VERSION_base(4,9,0)
+import Data.Monoid
+#endif
 
 #ifdef OS_Linux
 import System.FSNotify.Linux

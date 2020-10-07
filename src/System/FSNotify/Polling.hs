@@ -16,7 +16,7 @@ import Control.Monad (forM_)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX
 import Prelude hiding (FilePath)
 import System.Directory (doesDirectoryExist)
@@ -61,10 +61,10 @@ pathModMap recursive path = findFilesAndDirs recursive path >>= pathModMap'
     pathModMap' files = (Map.fromList . catMaybes) <$> mapM pathAndInfo files
 
     pathAndInfo :: FilePath -> IO (Maybe (FilePath, (UTCTime, EventIsDirectory)))
-    pathAndInfo path = handle (\(_ :: IOException) -> return Nothing) $ do
-      modTime <- getModificationTime path
-      isDir <- doesDirectoryExist path
-      return $ Just (path, (modTime, if isDir then IsDirectory else IsFile))
+    pathAndInfo p = handle (\(_ :: IOException) -> return Nothing) $ do
+      modTime <- getModificationTime p
+      isDir <- doesDirectoryExist p
+      return $ Just (p, (modTime, if isDir then IsDirectory else IsFile))
 
 pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, EventIsDirectory) -> IO ()
 pollPath interval recursive chan filePath actPred oldPathMap = do

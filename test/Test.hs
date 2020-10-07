@@ -59,12 +59,6 @@ main = do
   unless hasNative $ putStrLn "WARNING: native manager cannot be used or tested on this platform"
   hspec $ tests hasNative
 
--- | There's some kind of race in OS X where the creation of the containing directory shows up as an event
--- I explored whether this was due to passing 0 as the sinceWhen argument to FSEventStreamCreate
--- in the hfsevents package, but changing that didn't seem to help
-pauseBeforeStartingTest :: IO ()
-pauseBeforeStartingTest = threadDelay 10000
-
 tests :: Bool -> Spec
 tests hasNative = describe "Tests" $
   forM_ (if hasNative then [False, True] else [True]) $ \poll -> describe (if poll then "Polling" else "Native") $ do
@@ -72,14 +66,14 @@ tests hasNative = describe "Tests" $
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
         makeTestFolder poll recursive nested $ do
-          unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ \(watchedDir, _f, getEvents, _clearEvents) -> do
             removeDirectory watchedDir
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \case
               [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
               events -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a new file" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with a new file" $ \(_watchedDir, f, getEvents, _clearEvents) -> do
             openFile f AppendMode >>= hClose
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
@@ -88,7 +82,7 @@ tests hasNative = describe "Tests" $
                      [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a new directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with a new directory" $ \(_watchedDir, f, getEvents, _clearEvents) -> do
             createDirectory f
 
             pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
@@ -97,7 +91,7 @@ tests hasNative = describe "Tests" $
                      [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a deleted file" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with a deleted file" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             writeFile f "" >> clearEvents
 
             removeFile f
@@ -108,7 +102,7 @@ tests hasNative = describe "Tests" $
                      [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a deleted directory" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with a deleted directory" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             createDirectory f >> clearEvents
 
             removeDirectory f
@@ -119,7 +113,7 @@ tests hasNative = describe "Tests" $
                      [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with modified file attributes" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with modified file attributes" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             writeFile f "" >> clearEvents
 
             changeFileAttributes f
@@ -133,7 +127,7 @@ tests hasNative = describe "Tests" $
                      [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
-          it "works with a modified file" $ \(watchedDir, f, getEvents, clearEvents) -> do
+          it "works with a modified file" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             writeFile f "" >> clearEvents
 
             appendFile f "foo"
