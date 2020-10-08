@@ -1,6 +1,13 @@
 Changes
 =======
 
+Version 0.4.0.0
+---------------
+
+API breaking update.
+
+* New `confThreadPerEvent` option in `WatchConfig`
+
 Version 0.3.0.0
 ---------------
 
