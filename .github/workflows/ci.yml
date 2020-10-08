@@ -83,7 +83,7 @@ jobs:
     - uses: actions/setup-haskell@v1.1
       name: Setup Haskell Stack
       with:
-        ghc-version: ghc: 8.8.3 # TODO: match resolver?
+        ghc-version: 8.8.3 # TODO: match resolver?
         stack-version: ${{ matrix.stack }}
 
     - uses: actions/cache@v1
