@@ -71,7 +71,7 @@ import System.FilePath
 
 import System.FSNotify.Listener (StopListening)
 
-#if !MIN_VERSION_base(4,9,0)
+#if !MIN_VERSION_base(4,9,0,0)
 import Data.Monoid
 #endif
 
