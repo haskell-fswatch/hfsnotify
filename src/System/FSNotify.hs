@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf #-}
 
 -- | NOTE: This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -142,9 +142,15 @@ withManagerConf conf = bracket (startManagerConf conf) stopManager
 
 -- | Like 'startManager', but configurable
 startManagerConf :: WatchConfig -> IO WatchManager
-startManagerConf conf
-  | confUsePolling conf = pollingManager
-  | otherwise = initSession >>= createManager
+startManagerConf conf = do
+# ifdef OS_Win32
+  -- See https://github.com/haskell-fswatch/hfsnotify/issues/50
+  unless rtsSupportsBoundThreads $ throwIO $ userError "startManagerConf must be called with -threaded on Windows"
+# endif
+
+  if | confUsePolling conf -> pollingManager
+     | otherwise -> initSession >>= createManager
+
   where
     createManager :: Either Text NativeManager -> IO WatchManager
     createManager (Right nativeManager) = WatchManager conf nativeManager <$> cleanupVar
