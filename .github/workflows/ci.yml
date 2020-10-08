@@ -61,10 +61,11 @@ jobs:
 
   stack:
     name: stack / resolver ${{ matrix.resolver }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
         stack: ["2.3.1"]
         resolver:
           - lts-7
