@@ -5,9 +5,8 @@ module System.FSNotify.Find where
 
 import Control.Monad
 import Control.Monad.IO.Class
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (doesDirectoryExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath
-import System.Posix.Files
 
 find :: Bool -> FilePath -> IO [FilePath]
 find followSymlinks = find' followSymlinks  []
@@ -19,7 +18,7 @@ find' followSymlinks startValue dir = do
   where
     visit acc (relativePath, absolutePath) = do
       isDir <- liftIO $ doesDirectoryExist absolutePath
-      sym <- liftIO $ (isSymbolicLink <$> getSymbolicLinkStatus absolutePath)
+      sym <- liftIO $ pathIsSymbolicLink absolutePath
       let newAcc = relativePath : acc
       if isDir && (followSymlinks || not sym)
         then find' followSymlinks newAcc relativePath

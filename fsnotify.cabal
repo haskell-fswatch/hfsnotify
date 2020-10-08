@@ -23,7 +23,7 @@ Library
   Build-Depends:          base >= 4.8 && < 5
                         , bytestring >= 0.10.2
                         , containers >= 0.4
-                        , directory >= 1.2.7.0
+                        , directory >= 1.3.0.0
                         , filepath >= 1.3.0.0
                         , lifted-async >= 0.10.0
                         , lifted-base >= 0.2
