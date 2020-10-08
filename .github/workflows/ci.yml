@@ -11,6 +11,7 @@ jobs:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         cabal: ["3.2"]
@@ -59,12 +60,21 @@ jobs:
         cabal test all
 
   stack:
-    name: stack / ghc ${{ matrix.ghc }}
+    name: stack / resolver ${{ matrix.resolver }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         stack: ["2.3.1"]
-        ghc: ["8.8.3"]
+        resolver:
+          - lts-7
+          - lts-9
+          - lts-11
+          - lts-12
+          - lts-13
+          - lts-14
+          - lts-15
+          - lts-16
 
     steps:
     - uses: actions/checkout@v2
@@ -73,19 +83,19 @@ jobs:
     - uses: actions/setup-haskell@v1.1
       name: Setup Haskell Stack
       with:
-        ghc-version: ${{ matrix.ghc }}
+        ghc-version: ghc: 8.8.3 # TODO: match resolver?
         stack-version: ${{ matrix.stack }}
 
     - uses: actions/cache@v1
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+        key: ${{ runner.os }}-${{ matrix.resolver }}-stack
 
     - name: Build
       run: |
-        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+        stack build --resolver ${{matrix.resolver}} --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
       run: |
-        stack test --system-ghc
+        stack test --resolver ${{matrix.resolver}}
