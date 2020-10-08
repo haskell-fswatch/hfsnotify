@@ -3,10 +3,9 @@
 
 module System.FSNotify.Find where
 
-import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
-import System.Directory (doesDirectoryExist, getCurrentDirectory, listDirectory)
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath
 import System.Posix.Files
 
@@ -20,24 +19,15 @@ find' followSymlinks startValue dir = do
   where
     visit acc (relativePath, absolutePath) = do
       isDir <- liftIO $ doesDirectoryExist absolutePath
-      sym <- liftIO $ fmap isSymbolicLink $ getSymbolicLinkStatus absolutePath
+      sym <- liftIO $ (isSymbolicLink <$> getSymbolicLinkStatus absolutePath)
       let newAcc = relativePath : acc
       if isDir && (followSymlinks || not sym)
         then find' followSymlinks newAcc relativePath
         else return newAcc
 
--- * Util
-
-absPath :: FilePath -> IO FilePath
-absPath p | null p = liftIO $ throwIO $ userError "Empty path"
-          | isRelative p = do
-            cwd <- getCurrentDirectory
-            return (cwd </> p)
-          | otherwise = return p
-
 lsRelAbs :: FilePath -> IO ([FilePath], [FilePath])
-lsRelAbs f = absPath f >>= \fp -> do
+lsRelAbs fp = do
   files <- liftIO $ listDirectory fp
   let absolute = map (fp </>) files
-  let relativized = map (\p -> joinPath [f, p]) files
+  let relativized = map (\p -> joinPath [fp, p]) files
   return (relativized, absolute)
