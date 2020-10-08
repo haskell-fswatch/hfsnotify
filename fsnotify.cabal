@@ -31,7 +31,8 @@ Library
                         , unix-compat >= 0.2
   Exposed-Modules:        System.FSNotify
                         , System.FSNotify.Devel
-  Other-Modules:          System.FSNotify.Listener
+  Other-Modules:          System.FSNotify.Find
+                        , System.FSNotify.Listener
                         , System.FSNotify.Path
                         , System.FSNotify.Polling
                         , System.FSNotify.Types
@@ -41,7 +42,6 @@ Library
     CPP-Options:        -DOS_Linux
     Other-Modules:      System.FSNotify.Linux
     Build-Depends:      hinotify >= 0.3.0,
-                        shelly >= 1.6.5,
                         unix >= 2.7.1.0
   else
     if os(windows)

@@ -17,14 +17,13 @@ import Control.Monad
 import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.String
-import qualified Data.Text as T
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX
 import Data.Typeable
 import qualified GHC.Foreign as F
 import GHC.IO.Encoding (getFileSystemEncoding)
 import Prelude hiding (FilePath)
-import qualified Shelly as S
+import System.FSNotify.Find
 import System.FSNotify.Listener
 import System.FSNotify.Path (findDirs, canonicalizeDirPath)
 import System.FSNotify.Types
@@ -154,9 +153,8 @@ handleRecursiveEvent baseDir actPred chan watchStillExistsVar isRootWatchedDir l
       -- Find all files/folders that might have been created *after* the timestamp, and hence might have been
       -- missed by the watch
       -- TODO: there's a chance of this generating double events, fix
-      files <- S.shelly $ S.find (fromString newDir)
-      forM_ files $ \file -> do
-        let newPath = T.unpack $ S.toTextIgnore file
+      files <- find False newDir -- TODO: expose the ability to set followSymlinks to True?
+      forM_ files $ \newPath -> do
         fileStatus <- getFileStatus newPath
         let modTime = modificationTimeHiRes fileStatus
         when (modTime > timestampBeforeAddingWatch) $ do
