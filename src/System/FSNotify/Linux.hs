@@ -12,14 +12,13 @@ module System.FSNotify.Linux
 
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
-import Control.Exception as E
+import Control.Exception.Safe as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.String
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX
-import Data.Typeable
 import qualified GHC.Foreign as F
 import GHC.IO.Encoding (getFileSystemEncoding)
 import Prelude hiding (FilePath)

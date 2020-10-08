@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf, FlexibleContexts #-}
 
 -- | NOTE: This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -59,10 +59,12 @@ module System.FSNotify
 
 import Prelude hiding (FilePath)
 
-import Control.Concurrent
-import Control.Concurrent.Async
-import Control.Exception
+import Control.Concurrent.Async.Lifted
+import Control.Concurrent.Lifted
+import Control.Exception.Safe as E
 import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Maybe
 import Data.Text as T
 import System.FSNotify.Polling
@@ -184,20 +186,21 @@ watchTreeChan (WatchManager db wm _) = listenRecursive db wm
 -- Watching the immediate contents of a directory will only report events
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
-watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+watchDir :: (MonadIO m, MonadBaseControl IO m) => WatchManager -> FilePath -> ActionPredicate -> Action m -> m StopListening
 watchDir = threadChan listen
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
-watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+watchTree :: (MonadIO m, MonadBaseControl IO m) => WatchManager -> FilePath -> ActionPredicate -> Action m -> m StopListening
 watchTree = threadChan listenRecursive
 
 threadChan
-  :: (forall sessionType . FileListener sessionType =>
+  :: (MonadIO m, MonadBaseControl IO m) =>
+     (forall sessionType . FileListener sessionType =>
       WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening)
       -- (^ this is the type of listen and listenRecursive)
-  ->  WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+  ->  WatchManager -> FilePath -> ActionPredicate -> Action m -> m StopListening
 threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
   modifyMVar cleanupVar $ \case
     -- check if we've been stopped
@@ -211,17 +214,17 @@ threadChan listenFn (WatchManager db listener cleanupVar) path actPred action =
       -- ourselves. I haven't figured out how to do this (probably we
       -- should just abandon async and use lower-level primitives). For now
       -- we don't link the thread.
-      stopListener <- listenFn db listener path actPred chan
+      stopListener <- liftIO $ listenFn db listener path actPred chan
       let cleanThisUp = cancel asy
       return
         ( Just $ cleanup >> cleanThisUp
         , stopListener >> cleanThisUp
         )
 
-readEvents :: WatchConfig -> EventChannel -> Action -> IO ()
+readEvents :: (MonadIO m, MonadBaseControl IO m) => WatchConfig -> EventChannel -> Action m -> m ()
 readEvents (WatchConfig {confThreadPerEvent=True}) chan action = forever $ do
-  event <- readChan chan
-  us <- myThreadId
+  event <- liftIO $ readChan chan
+  us <- liftIO myThreadId
   -- Execute the event handler in a separate thread, but throw any
   -- exceptions back to us.
   --
@@ -229,13 +232,6 @@ readEvents (WatchConfig {confThreadPerEvent=True}) chan action = forever $ do
   -- an event handler finishes after the listen is cancelled (and so this
   -- thread is dead). How bad is that? The alternative is to kill the
   -- handler anyway when we're cancelling.
-  forkFinally (action event) $ either (throwTo us) (const $ return ())
+  forkFinally (action event) $ either (E.throwTo us) (const $ return ())
 readEvents (WatchConfig {confThreadPerEvent=False}) chan action =
   forever $ action =<< readChan chan
-
-#if !MIN_VERSION_base(4,6,0)
-forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
-forkFinally action and_then =
-  mask $ \restore ->
-    forkIO $ try (restore action) >>= and_then
-#endif

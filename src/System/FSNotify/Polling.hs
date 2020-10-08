@@ -11,7 +11,7 @@ module System.FSNotify.Polling
   ) where
 
 import Control.Concurrent
-import Control.Exception
+import Control.Exception.Safe
 import Control.Monad (forM_)
 import Data.Map (Map)
 import qualified Data.Map as Map

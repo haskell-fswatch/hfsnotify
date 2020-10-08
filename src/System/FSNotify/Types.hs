@@ -93,7 +93,7 @@ type DebouncePayload = Maybe DebounceData
 type ActionPredicate = Event -> Bool
 
 -- | An action to be performed in response to an event.
-type Action = Event -> IO ()
+type Action m = Event -> m ()
 
 -- | Predicate to always act.
 act :: ActionPredicate
