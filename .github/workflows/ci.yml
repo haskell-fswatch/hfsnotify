@@ -60,7 +60,7 @@ jobs:
         cabal test all
 
   stack:
-    name: stack / resolver ${{ matrix.resolver }}
+    name: stack / ${{ matrix.os }} / resolver ${{ matrix.resolver }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
