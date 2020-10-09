@@ -1,4 +1,4 @@
-hfsnotify [![Linux and Mac build Status](https://travis-ci.org/haskell-fswatch/hfsnotify.svg)](https://travis-ci.org/haskell-fswatch/hfsnotify) [![Windows build status](https://ci.appveyor.com/api/projects/status/7h1msaokgpqo0q42?svg=true)](https://ci.appveyor.com/project/thomasjm/hfsnotify-v2smx)
+![CI](https://github.com/haskell-fswatch/hfsnotify/workflows/CI/badge.svg)
 =========
 
 Unified Haskell interface for basic file system notifications.
