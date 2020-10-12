@@ -22,6 +22,7 @@ module System.FSNotify.Types
        ) where
 
 import Control.Concurrent.Chan
+import Control.Exception.Safe
 import Data.IORef (IORef)
 import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
@@ -76,6 +77,8 @@ data WatchConfig = WatchConfig
     -- ^ Watch mode to use
   , confThreadingMode :: ThreadingMode
     -- ^ Threading mode to use
+  , confOnHandlerException :: SomeException -> IO ()
+    -- ^ Called when a handler throws an exception
   }
 
 -- | This specifies whether multiple events from the same file should be

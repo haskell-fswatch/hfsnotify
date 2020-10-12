@@ -2,7 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf, FlexibleContexts, RecordWildCards #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf, FlexibleContexts, RecordWildCards, NamedFieldPuns #-}
 
 -- | NOTE: This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -44,7 +44,12 @@ module System.FSNotify
        , stopManager
        , defaultConfig
        , defaultPollingConfig
-       , WatchConfig(..)
+
+       , confDebounce
+       , confWatchMode
+       , confThreadingMode
+       , confOnHandlerException
+
        , Debounce(..)
        , WatchMode(..)
        , ThreadingMode(..)
@@ -109,6 +114,7 @@ defaultConfig =
     { confDebounce = DebounceDefault
     , confWatchMode = WatchModeOS
     , confThreadingMode = SingleThread
+    , confOnHandlerException = defaultOnHandlerException
     }
 
 -- | Default polling configuration
@@ -120,7 +126,11 @@ defaultPollingConfig =
     { confDebounce = DebounceDefault
     , confWatchMode = WatchModePoll (10^(6 :: Int)) -- 1 second
     , confThreadingMode = SingleThread
+    , confOnHandlerException = defaultOnHandlerException
     }
+
+defaultOnHandlerException :: SomeException -> IO ()
+defaultOnHandlerException e = putStrLn ("fsnotify: handler threw exception: " <> show e)
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.
@@ -133,7 +143,7 @@ withManager  = withManagerConf defaultConfig
 -- When finished watching. you must release resources via 'stopManager'.
 -- It is preferrable if possible to use 'withManager' to handle this
 -- automatically.
-startManager :: IO (WatchManager)
+startManager :: IO WatchManager
 startManager = startManagerConf defaultConfig
 
 -- | Stop a file watch manager.
@@ -204,13 +214,15 @@ watchTreeChan (WatchManager {..}) path actionPredicate chan = listenRecursive wa
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDir :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchDir = threadChan listen
+watchDir wm@(WatchManager {watchManagerConfig}) fp actionPredicate action = threadChan listen wm fp actionPredicate wrappedAction
+  where wrappedAction x = handle (confOnHandlerException watchManagerConfig) (action x)
 
 -- | Watch all the contents of a directory by committing an Action for each event.
 -- Watching all the contents of a directory will report events associated with
 -- files within the specified directory and its subdirectories.
 watchTree :: WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
-watchTree = threadChan listenRecursive
+watchTree wm@(WatchManager {watchManagerConfig}) fp actionPredicate action = threadChan listenRecursive wm fp actionPredicate wrappedAction
+  where wrappedAction x = handle (confOnHandlerException watchManagerConfig) (action x)
 
 -- * Main threading logic
 
