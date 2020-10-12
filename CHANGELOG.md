@@ -12,6 +12,7 @@ API breaking update.
 * Don't silently fall back to polling on failure of native watcher.
   Instead, throw an exception which the user can recover from by switching to polling.
 * Add ModifiedAttributes event type + Linux support
+* Add confOnHandlerException to be able to control what happens when a handler throws an exception.
 
 Version 0.3.0.0
 ---------------
