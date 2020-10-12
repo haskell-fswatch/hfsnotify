@@ -69,6 +69,7 @@ fsnEvents timestamp e = do
   -- putStrLn $ show ["Event", show e, "isDirectory", show isDirectory, "isFile", show isFile, "isModified", show isModified, "isCreated", show isCreated, "path", path e, "exists", show exists]
 
   return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
+              | exists && isModifiedAttributes -> [ModifiedAttributes (path e) timestamp isDirectory]
               | exists && isCreated -> [Added (path e) timestamp isDirectory]
               | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
 
@@ -82,7 +83,8 @@ fsnEvents timestamp e = do
     isFile = hasFlag e FSE.eventFlagItemIsFile
     isCreated = hasFlag e FSE.eventFlagItemCreated
     isRenamed = hasFlag e FSE.eventFlagItemRenamed
-    isModified = hasFlag e FSE.eventFlagItemModified || hasFlag e FSE.eventFlagItemInodeMetaMod
+    isModified = hasFlag e FSE.eventFlagItemModified
+    isModifiedAttributes = hasFlag e FSE.eventFlagItemInodeMetaMod
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
