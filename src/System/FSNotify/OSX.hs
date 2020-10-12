@@ -27,7 +27,7 @@ import System.FilePath
 import qualified System.OSX.FSEvents as FSE
 
 
-data WatchData = WatchData FSE.EventStream EventChannel
+data WatchData = WatchData FSE.EventStream EventCallback
 
 type WatchMap = Map Unique WatchData
 data OSXManager = OSXManager (MVar WatchMap)
@@ -86,13 +86,13 @@ fsnEvents timestamp e = do
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
 
-handleFSEEvent :: Bool -> ActionPredicate -> EventChannel -> FilePath -> FSE.Event -> IO ()
-handleFSEEvent isRecursive actPred chan dirPath fseEvent = do
+handleFSEEvent :: Bool -> ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO ()
+handleFSEEvent isRecursive actPred callback dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   forM_ events $ \event ->
     when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $
-      writeChan chan event
+      callback event
 
 -- | For non-recursive monitoring, test if an event takes place directly inside the monitored folder
 isDirectlyInside :: FilePath -> Event -> Bool
@@ -101,18 +101,18 @@ isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
     isRelevantFileEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
     isRelevantDirEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
 
-listenFn :: (ActionPredicate -> EventChannel -> FilePath -> FSE.Event -> IO a)
+listenFn :: (ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO a)
          -> WatchConfig
          -> OSXManager
          -> FilePath
          -> ActionPredicate
-         -> EventChannel
+         -> EventCallback
          -> IO StopListening
-listenFn handler conf (OSXManager mvarMap) path actPred chan = do
+listenFn handler conf (OSXManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
   unique <- newUnique
-  eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred chan path')
-  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream chan) watchMap)
+  eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred callback path')
+  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream callback) watchMap)
   return $ do
     FSE.eventStreamDestroy eventStream
     modifyMVar_ mvarMap $ \watchMap -> return $ Map.delete unique watchMap

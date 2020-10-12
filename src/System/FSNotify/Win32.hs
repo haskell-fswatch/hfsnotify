@@ -37,14 +37,14 @@ fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (ba
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
 
-handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventChannel -> DebouncePayload -> WNo.Event -> IO ()
-handleWNoEvent isDirectory basedir actPred chan dbp inoEvent = do
+handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventCallback -> DebouncePayload -> WNo.Event -> IO ()
+handleWNoEvent isDirectory basedir actPred callback dbp inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent isDirectory basedir currentTime inoEvent
-  when (actPred event) $ writeChan chan event
+  when (actPred event) $ callback event
 
-watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
-watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred chan = do
+watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
+watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
   dbp <- newDebouncePayload $ confDebounce conf
 
@@ -53,8 +53,8 @@ watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path act
 
   -- Start one watch for file events and one for directory events
   -- (There seems to be no other way to provide isDirectory information)
-  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred chan dbp)
-  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred chan dbp)
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred callback dbp)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred callback dbp)
 
   -- The StopListening action should make sure to remove the watches from the manager after they're killed.
   -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.
