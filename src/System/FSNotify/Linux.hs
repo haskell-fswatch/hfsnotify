@@ -58,8 +58,8 @@ fromRawFilePath = return . id
 #endif
 
 fsnEvents :: FilePath -> UTCTime -> INo.Event -> IO [Event]
-fsnEvents basePath timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
+fsnEvents basePath timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
