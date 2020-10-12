@@ -1,69 +1,31 @@
 {-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
 
-import Control.Concurrent
-import Control.Exception hiding (Handler)
+module Main where
+
 import Control.Monad
-import Control.Monad.Catch
-import Control.Retry
-import Data.IORef
 import Data.Monoid
 import Prelude hiding (FilePath)
 import System.Directory
 import System.FSNotify
 import System.FilePath
 import System.IO
-import System.IO.Temp
-import System.PosixCompat.Files
-import System.Random as R
-import Test.HUnit.Lang
 import Test.Hspec
+import Util
 
-
-#ifdef mingw32_HOST_OS
-import Data.Bits
-import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
--- Perturb the file's attributes, to check that a modification event is emitted
-changeFileAttributes :: FilePath -> IO ()
-changeFileAttributes file = do
-  attrs <- getFileAttributes file
-  setFileAttributes file (attrs `xor` fILE_ATTRIBUTE_TEMPORARY)
-#else
-changeFileAttributes :: FilePath -> IO ()
-changeFileAttributes = touchFile
-#endif
-
-
-isMac :: Bool
-#ifdef darwin_HOST_OS
-isMac = True
-#else
-isMac = False
-#endif
-
-isWin :: Bool
-#ifdef mingw32_HOST_OS
-isWin = True
-#else
-isWin = False
-#endif
-
-nativeMgrSupported :: IO Bool
-nativeMgrSupported = do
-  mgr <- startManager
-  stopManager mgr
-  return $ not $ isPollingManager mgr
 
 main :: IO ()
 main = do
   hasNative <- nativeMgrSupported
   unless hasNative $ putStrLn "WARNING: native manager cannot be used or tested on this platform"
   hspec $ do
-    describe "SingleThread" $ tests SingleThread hasNative
-    describe "ThreadPerWatch" $ tests ThreadPerWatch hasNative
-    describe "ThreadPerEvent" $ tests ThreadPerEvent hasNative
+    describe "SingleThread" $ eventTests SingleThread hasNative
+    describe "ThreadPerWatch" $ eventTests ThreadPerWatch hasNative
+    describe "ThreadPerEvent" $ eventTests ThreadPerEvent hasNative
 
-tests :: ThreadingMode -> Bool -> Spec
-tests threadingMode hasNative = describe "Tests" $
+    it "respects the confOnHandlerException option" $ pending
+
+eventTests :: ThreadingMode -> Bool -> Spec
+eventTests threadingMode hasNative = describe "Tests" $
   forM_ (if hasNative then [False, True] else [True]) $ \poll -> describe (if poll then "Polling" else "Native") $ do
     let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
@@ -144,47 +106,3 @@ tests threadingMode hasNative = describe "Tests" $
                  | otherwise -> case events of
                      [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                      _ -> expectationFailure $ "Got wrong events: " <> show events
-
-
-
-pauseAndRetryOnExpectationFailure :: (?timeInterval :: Int) => Int -> IO a -> IO a
-pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
-
-retryOnExpectationFailure :: Int -> IO a -> IO a
-#if MIN_VERSION_retry(0, 7, 0)
-retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (\_ -> action)
-#else
-retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (action)
-#endif
-  where
-    handleFn :: SomeException -> IO Bool
-    handleFn (fromException -> Just (HUnitFailure {})) = return True
-    handleFn _ = return False
-
-makeTestFolder :: (?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecWith (FilePath, FilePath, IO [Event], IO ()) -> Spec
-makeTestFolder threadingMode poll recursive nested = around $ \action -> do
-  -- Use a random identifier so that every test happens in a different folder
-  -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
-  randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
-
-  withSystemTempDirectory ("test." <> randomID) $ \watchedDir -> do
-    let fileName = "testfile"
-    let baseDir = if nested then watchedDir </> "subdir" else watchedDir
-    let watchFn = if recursive then watchTree else watchDir
-
-    createDirectoryIfMissing True baseDir
-
-    -- On Mac, delay before starting the watcher because otherwise creation of "subdir"
-    -- can get picked up.
-    when isMac $ threadDelay 2000000
-
-    mgr <- startManagerConf defaultConfig {
-      confDebounce = NoDebounce
-      , confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
-      , confThreadingMode = threadingMode
-      }
-    eventsVar <- newIORef []
-    stop <- watchFn mgr watchedDir (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
-    let clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
-    _ <- action (watchedDir, normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
-    stop
