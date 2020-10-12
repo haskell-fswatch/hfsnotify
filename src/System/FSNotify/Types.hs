@@ -8,12 +8,16 @@ module System.FSNotify.Types
        , ActionPredicate
        , Action
        , WatchConfig(..)
+       , WatchMode(..)
+       , ThreadingMode(..)
        , Debounce(..)
        , DebounceData(..)
        , DebouncePayload
        , Event(..)
        , EventIsDirectory(..)
+       , EventCallback
        , EventChannel
+       , EventAndActionChannel
        , IOEvent
        ) where
 
@@ -36,24 +40,41 @@ data Event =
   | Modified { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | Removed { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-    -- ^ Note: currently only emitted on Linux
   | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
+  -- ^ Note: currently only emitted on Linux
   deriving (Eq, Show)
 
 type EventChannel = Chan Event
+
+type EventCallback = Event -> IO ()
+
+type EventAndActionChannel = Chan (Event, Action)
+
+-- | Method of watching for changes.
+data WatchMode =
+  WatchModeOS
+  -- ^ Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.)
+  | WatchModePoll { watchModePollInterval :: Int }
+  -- ^ Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
+  -- unless you're experiencing problems with 'WatchModeOS'.
+
+data ThreadingMode =
+  SingleThread
+  -- ^ Use a single thread for the entire 'Manager'. Event handler callbacks will run sequentially.
+  | ThreadPerWatch
+  -- ^ Use a single thread for each watch (i.e. each call to 'watchDir', 'watchTree', etc.).
+  -- Callbacks within a watch will run sequentially but callbacks from different watches may be interleaved.
+  | ThreadPerEvent
+  -- ^ Launch a separate thread for every event handler.
 
 -- | Watch configuration
 data WatchConfig = WatchConfig
   { confDebounce :: Debounce
     -- ^ Debounce configuration
-  , confPollInterval :: Int
-    -- ^ Polling interval if polling is used (microseconds)
-  , confUsePolling :: Bool
-    -- ^ Force use of polling, even if a more effective method may be
-    -- available. This is mostly for testing purposes.
-  , confThreadPerEvent :: Bool
-    -- ^ Fork a separate thread for each event when executing the
-    -- user supplied event handler
+  , confWatchMode :: WatchMode
+    -- ^ Watch mode to use
+  , confThreadingMode :: ThreadingMode
+    -- ^ Threading mode to use
   }
 
 -- | This specifies whether multiple events from the same file should be
@@ -93,7 +114,7 @@ type DebouncePayload = Maybe DebounceData
 type ActionPredicate = Event -> Bool
 
 -- | An action to be performed in response to an event.
-type Action m = Event -> m ()
+type Action = Event -> IO ()
 
 -- | Predicate to always act.
 act :: ActionPredicate

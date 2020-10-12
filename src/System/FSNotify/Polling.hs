@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 --
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
@@ -32,9 +33,10 @@ data EventType = AddedEvent
                | RemovedEvent
 
 newtype WatchKey = WatchKey ThreadId deriving (Eq, Ord)
-data WatchData = WatchData FilePath EventChannel
+data WatchData = WatchData FilePath EventCallback
 type WatchMap = Map WatchKey WatchData
-newtype PollManager = PollManager (MVar WatchMap)
+data PollManager = PollManager { pollManagerWatchMap :: MVar WatchMap
+                               , pollManagerInterval :: Int }
 
 generateEvent :: UTCTime -> EventIsDirectory -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir)
@@ -48,10 +50,10 @@ generateEvents timestamp eventType = mapMaybe (\(path, isDir) -> generateEvent t
 -- These can arise when files are created inside subdirectories, resulting in the modification time
 -- of the directory being bumped. However, to increase consistency with the other FileListeners,
 -- we ignore these events.
-handleEvent :: EventChannel -> ActionPredicate -> Event -> IO ()
+handleEvent :: EventCallback -> ActionPredicate -> Event -> IO ()
 handleEvent _ _ (Modified _ _ IsDirectory) = return ()
-handleEvent chan actPred event
-  | actPred event = writeChan chan event
+handleEvent callback actPred event
+  | actPred event = callback event
   | otherwise = return ()
 
 pathModMap :: Bool -> FilePath -> IO (Map FilePath (UTCTime, EventIsDirectory))
@@ -66,13 +68,13 @@ pathModMap recursive path = findFilesAndDirs recursive path >>= pathModMap'
       isDir <- doesDirectoryExist p
       return $ Just (p, (modTime, if isDir then IsDirectory else IsFile))
 
-pollPath :: Int -> Bool -> EventChannel -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, EventIsDirectory) -> IO ()
-pollPath interval recursive chan filePath actPred oldPathMap = do
+pollPath :: Int -> Bool -> EventCallback -> FilePath -> ActionPredicate -> Map FilePath (UTCTime, EventIsDirectory) -> IO ()
+pollPath interval recursive callback filePath actPred oldPathMap = do
   threadDelay interval
   maybeNewPathMap <- handle (\(_ :: IOException) -> return Nothing) (Just <$> pathModMap recursive filePath)
   case maybeNewPathMap of
     -- Something went wrong while listing directories; we'll try again on the next poll
-    Nothing -> pollPath interval recursive chan filePath actPred oldPathMap
+    Nothing -> pollPath interval recursive callback filePath actPred oldPathMap
 
     Just newPathMap -> do
       currentTime <- getCurrentTime
@@ -86,7 +88,7 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
       handleEvents $ generateEvents' ModifiedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList modifiedMap]
       handleEvents $ generateEvents' RemovedEvent [(path, isDir) | (path, (_, isDir)) <- Map.toList deletedMap]
 
-      pollPath interval recursive chan filePath actPred newPathMap
+      pollPath interval recursive callback filePath actPred newPathMap
 
   where
     modifiedDifference :: (UTCTime, EventIsDirectory) -> (UTCTime, EventIsDirectory) -> Maybe (UTCTime, EventIsDirectory)
@@ -95,13 +97,13 @@ pollPath interval recursive chan filePath actPred oldPathMap = do
       | otherwise = Nothing
 
     handleEvents :: [Event] -> IO ()
-    handleEvents = mapM_ (handleEvent chan actPred)
+    handleEvents = mapM_ (handleEvent callback actPred)
 
 
 -- Additional init function exported to allow startManager to unconditionally
 -- create a poll manager as a fallback when other managers will not instantiate.
-createPollManager :: IO PollManager
-createPollManager = PollManager <$> newMVar Map.empty
+createPollManager :: Int -> IO PollManager
+createPollManager interval  = PollManager <$> newMVar Map.empty <*> pure interval
 
 killWatchingThread :: WatchKey -> IO ()
 killWatchingThread (WatchKey threadId) = killThread threadId
@@ -113,20 +115,20 @@ killAndUnregister mvarMap wk = do
     return $ Map.delete wk m
   return ()
 
-listen' :: Bool -> WatchConfig -> PollManager -> FilePath -> ActionPredicate -> EventChannel -> IO (IO ())
-listen' isRecursive conf (PollManager mvarMap) path actPred chan = do
+listen' :: Bool -> WatchConfig -> PollManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
+listen' isRecursive _conf (PollManager mvarMap interval) path actPred callback = do
   path' <- canonicalizeDirPath path
   pmMap <- pathModMap isRecursive path'
-  threadId <- forkIO $ pollPath (confPollInterval conf) isRecursive chan path' actPred pmMap
+  threadId <- forkIO $ pollPath interval isRecursive callback path' actPred pmMap
   let wk = WatchKey threadId
-  modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' chan)
+  modifyMVar_ mvarMap $ return . Map.insert wk (WatchData path' callback)
   return $ killAndUnregister mvarMap wk
 
 
-instance FileListener PollManager where
-  initSession = Right <$> createPollManager
+instance FileListener PollManager Int where
+  initSession interval = Right <$> createPollManager interval
 
-  killSession (PollManager mvarMap) = do
+  killSession (PollManager mvarMap _) = do
     watchMap <- readMVar mvarMap
     forM_ (Map.keys watchMap) killWatchingThread
 

@@ -57,15 +57,18 @@ main :: IO ()
 main = do
   hasNative <- nativeMgrSupported
   unless hasNative $ putStrLn "WARNING: native manager cannot be used or tested on this platform"
-  hspec $ tests hasNative
+  hspec $ do
+    describe "SingleThread" $ tests SingleThread hasNative
+    describe "ThreadPerWatch" $ tests ThreadPerWatch hasNative
+    describe "ThreadPerEvent" $ tests ThreadPerEvent hasNative
 
-tests :: Bool -> Spec
-tests hasNative = describe "Tests" $
+tests :: ThreadingMode -> Bool -> Spec
+tests threadingMode hasNative = describe "Tests" $
   forM_ (if hasNative then [False, True] else [True]) $ \poll -> describe (if poll then "Polling" else "Native") $ do
     let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
-        makeTestFolder poll recursive nested $ do
+        makeTestFolder threadingMode poll recursive nested $ do
           unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ \(watchedDir, _f, getEvents, _clearEvents) -> do
             removeDirectory watchedDir
 
@@ -154,29 +157,30 @@ retryOnExpectationFailure seconds action = recovering (constantDelay 50000 <> li
     handleFn (fromException -> Just (HUnitFailure {})) = return True
     handleFn _ = return False
 
-makeTestFolder :: (?timeInterval :: Int) => Bool -> Bool -> Bool -> SpecWith (FilePath, FilePath, IO [Event], IO ()) -> Spec
-makeTestFolder poll recursive nested = around withTestDir
-  where withTestDir action = do
-        -- Use a random identifier so that every test happens in a different folder
-        -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
-        randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
+makeTestFolder :: (?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecWith (FilePath, FilePath, IO [Event], IO ()) -> Spec
+makeTestFolder threadingMode poll recursive nested = around $ \action -> do
+  -- Use a random identifier so that every test happens in a different folder
+  -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
+  randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
 
-        withSystemTempDirectory ("test." <> randomID) $ \watchedDir -> do
-          let fileName = "testfile"
-          let baseDir = if nested then watchedDir </> "subdir" else watchedDir
-          let watchFn = if recursive then watchTree else watchDir
+  withSystemTempDirectory ("test." <> randomID) $ \watchedDir -> do
+    let fileName = "testfile"
+    let baseDir = if nested then watchedDir </> "subdir" else watchedDir
+    let watchFn = if recursive then watchTree else watchDir
 
-          createDirectoryIfMissing True baseDir
+    createDirectoryIfMissing True baseDir
 
-          -- On Mac, delay before starting the watcher because otherwise creation of "subdir"
-          -- can get picked up.
-          when isMac $ threadDelay 2000000
+    -- On Mac, delay before starting the watcher because otherwise creation of "subdir"
+    -- can get picked up.
+    when isMac $ threadDelay 2000000
 
-          mgr <- startManagerConf defaultConfig { confDebounce = NoDebounce
-                                                , confUsePolling = poll
-                                                , confPollInterval = 2 * 10^(5 :: Int) }
-          eventsVar <- newIORef []
-          stop <- watchFn mgr watchedDir (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
-          let clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
-          _ <- action (watchedDir, normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
-          stop
+    mgr <- startManagerConf defaultConfig {
+      confDebounce = NoDebounce
+      , confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
+      , confThreadingMode = threadingMode
+      }
+    eventsVar <- newIORef []
+    stop <- watchFn mgr watchedDir (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
+    let clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
+    _ <- action (watchedDir, normalise $ baseDir </> fileName, readIORef eventsVar, clearEvents)
+    stop

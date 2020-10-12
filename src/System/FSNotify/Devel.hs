@@ -1,9 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 -- | Some additional functions on top of "System.FSNotify".
 --
 -- Example of compiling scss files with compass
 --
 -- @
--- compass :: WatchManager -> FilePath -> IO ()
+-- compass :: WatchManager -> FilePath -> m ()
 -- compass man dir = do
 --  putStrLn $ "compass " ++ encodeString dir
 --  treeExtExists man dir "scss" $ \fp ->
@@ -31,20 +33,20 @@ import System.FilePath
 -- events (but ignore 'Removed' events) for files with the given file
 -- extension
 treeExtExists :: WatchManager
-         -> FilePath -- ^ Directory to watch
-         -> Text -- ^ extension
-         -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO StopListening
+              -> FilePath -- ^ Directory to watch
+              -> Text -- ^ extension
+              -> (FilePath -> IO ()) -- ^ action to run on file
+              -> IO StopListening
 treeExtExists man dir ext action =
   watchTree man dir (existsEvents $ flip hasThisExtension ext) (doAllEvents action)
 
 -- | In the given directory tree, watch for any events for files with the
 -- given file extension
 treeExtAny :: WatchManager
-         -> FilePath -- ^ Directory to watch
-         -> Text -- ^ extension
-         -> (FilePath -> IO ()) -- ^ action to run on file
-         -> IO StopListening
+           -> FilePath -- ^ Directory to watch
+           -> Text -- ^ extension
+           -> (FilePath -> IO ()) -- ^ action to run on file
+           -> IO StopListening
 treeExtAny man dir ext action =
   watchTree man dir (allEvents $ flip hasThisExtension ext) (doAllEvents action)
 
