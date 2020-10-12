@@ -17,6 +17,10 @@ import System.Random as R
 import Test.Hspec
 import Test.HUnit.Lang
 
+#if !MIN_VERSION_base(4,11,0)
+import Data.Monoid
+#endif
+
 #ifdef mingw32_HOST_OS
 import Data.Bits
 import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
