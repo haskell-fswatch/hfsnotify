@@ -65,11 +65,11 @@ watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path act
     WNo.killWatch wid2
     modifyMVar_ mvarMap $ \watchMap -> return (Map.delete wid2 watchMap)
 
-instance FileListener WNo.WatchManager where
+instance FileListener WNo.WatchManager () where
   -- TODO: This should actually lookup a Windows API version and possibly return
   -- Nothing the calls we need are not available. This will require that API
   -- version information be exposed by Win32-notify.
-  initSession = Right <$> WNo.initWatchManager
+  initSession _ = Right <$> WNo.initWatchManager
 
   killSession = WNo.killWatchManager
 

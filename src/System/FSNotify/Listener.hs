@@ -32,7 +32,7 @@ type ListenFn sessionType argType = FileListener sessionType argType => WatchCon
 -- for events, or simulated listening for events.
 class FileListener sessionType argType | sessionType -> argType where
   -- | Initialize a file listener instance.
-  initSession :: Int -> IO (Either Text sessionType)
+  initSession :: argType -> IO (Either Text sessionType)
   -- ^ An initialized file listener, or a reason why one wasn't able to start.
 
   -- | Kill a file listener instance.

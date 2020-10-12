@@ -162,7 +162,7 @@ startManagerConf conf = do
 
   case confWatchMode conf of
     WatchModePoll interval -> WatchManager conf <$> liftIO (createPollManager interval) <*> cleanupVar <*> globalWatchChan
-    WatchModeOS -> liftIO (initSession 0) >>= createManager
+    WatchModeOS -> liftIO (initSession ()) >>= createManager
 
   where
     createManager :: Either Text NativeManager -> IO (WatchManager)

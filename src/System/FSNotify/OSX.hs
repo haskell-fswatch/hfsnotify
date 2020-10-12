@@ -117,8 +117,8 @@ listenFn handler conf (OSXManager mvarMap) path actPred callback = do
     FSE.eventStreamDestroy eventStream
     modifyMVar_ mvarMap $ \watchMap -> return $ Map.delete unique watchMap
 
-instance FileListener OSXManager where
-  initSession = do
+instance FileListener OSXManager () where
+  initSession _ = do
     (v1, v2, _) <- FSE.osVersion
     if not $ v1 > 10 || (v1 == 10 && v2 > 6) then return $ Left "Unsupported OS version" else
       (Right . OSXManager) <$> newMVar Map.empty
