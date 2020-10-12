@@ -86,6 +86,10 @@ jobs:
         ghc-version: 8.8.3 # TODO: match resolver?
         stack-version: ${{ matrix.stack }}
 
+    - name: Run stack setup
+      run: |
+        stack setup --resolver ${{matrix.resolver}}
+
     - uses: actions/cache@v1
       name: Cache ~/.stack
       with:
