@@ -11,6 +11,7 @@ API breaking update.
 * Pull out debouncing stuff, since it was never correct.
 * Don't silently fall back to polling on failure of native watcher.
   Instead, throw an exception which the user can recover from by switching to polling.
+* Add ModifiedAttributes event type + Linux support
 
 Version 0.3.0.0
 ---------------
