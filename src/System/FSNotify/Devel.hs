@@ -56,15 +56,14 @@ doAllEvents :: Monad m => (FilePath -> m ()) -> Event -> m ()
 doAllEvents action = action . eventPath
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
--- only 'Added' and 'Modified' event types
+-- only 'Added', 'Modified', and 'ModifiedAttributes' event types
 existsEvents :: (FilePath -> Bool) -> (Event -> Bool)
 existsEvents filt event =
   case event of
     Added {eventPath} -> filt eventPath
     Modified {eventPath} -> filt eventPath
-    WatchedDirectoryRemoved {} -> False
-    Removed {} -> False
-    Unknown {} -> False
+    ModifiedAttributes {eventPath} -> filt eventPath
+    _ -> False
 
 -- | Turn a 'FilePath' predicate into an 'Event' predicate that accepts
 -- any event types
