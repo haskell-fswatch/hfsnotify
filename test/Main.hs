@@ -2,21 +2,23 @@
 
 module Main where
 
+import Control.Exception.Safe
 import Control.Monad
-import EventTests
+import FSNotify.Test.EventTests
+import FSNotify.Test.Util
 import Prelude hiding (FilePath)
 import System.FSNotify
 import Test.Hspec
-import Util
 
 
 main :: IO ()
 main = do
   hasNative <- nativeMgrSupported
-  unless hasNative $ putStrLn "WARNING: native manager cannot be used or tested on this platform"
-  hspec $ do
-    describe "SingleThread" $ eventTests SingleThread hasNative
-    describe "ThreadPerWatch" $ eventTests ThreadPerWatch hasNative
-    describe "ThreadPerEvent" $ eventTests ThreadPerEvent hasNative
+  unless hasNative $ throwIO $ userError "WARNING: native manager cannot be used or tested on this platform"
 
+  hspec $ do
     it "respects the confOnHandlerException option" $ pending
+
+    describe "SingleThread" $ eventTests SingleThread
+    describe "ThreadPerWatch" $ eventTests ThreadPerWatch
+    describe "ThreadPerEvent" $ eventTests ThreadPerEvent

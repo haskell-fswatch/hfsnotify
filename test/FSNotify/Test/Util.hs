@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
 -- |
 
-module Util where
+module FSNotify.Test.Util where
 
 import Control.Concurrent
 import Control.Exception.Safe

@@ -2,22 +2,22 @@
 
 -- |
 
-module EventTests where
+module FSNotify.Test.EventTests where
 
 import Control.Monad
 import Data.Monoid
+import FSNotify.Test.Util
 import Prelude hiding (FilePath)
 import System.Directory
 import System.FSNotify
 import System.FilePath
 import System.IO
 import Test.Hspec
-import Util
 
 
-eventTests :: ThreadingMode -> Bool -> Spec
-eventTests threadingMode hasNative = describe "Tests" $
-  forM_ (if hasNative then [False, True] else [True]) $ \poll -> describe (if poll then "Polling" else "Native") $ do
+eventTests :: ThreadingMode -> Spec
+eventTests threadingMode = describe "Tests" $
+  forM_ [False, True] $ \poll -> describe (if poll then "Polling" else "Native") $ do
     let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $
       forM_ [False, True] $ \nested -> describe (if nested then "In a subdirectory" else "Right here") $
