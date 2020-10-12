@@ -127,7 +127,11 @@ tests threadingMode hasNative = describe "Tests" $
               if | poll -> return ()
                  | nested && not recursive -> events `shouldBe` []
                  | otherwise -> case events of
+#ifdef mingw32_HOST_OS
                      [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+#else
+                     [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+#endif
                      _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a modified file" $ \(_watchedDir, f, getEvents, clearEvents) -> do

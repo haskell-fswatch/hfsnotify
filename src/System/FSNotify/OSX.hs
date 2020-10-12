@@ -3,7 +3,7 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-{-# LANGUAGE MultiWayIf, OverloadedStrings #-}
+{-# LANGUAGE MultiWayIf, OverloadedStrings, MultiParamTypeClasses #-}
 
 module System.FSNotify.OSX
        ( FileListener(..)
