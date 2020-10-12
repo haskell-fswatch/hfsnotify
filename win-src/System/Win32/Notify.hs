@@ -51,7 +51,7 @@ type Handler = Event -> IO ()
 
 data WatchId = WatchId ThreadId ThreadId Handle deriving (Eq, Ord, Show)
 type WatchMap = Map WatchId Handler
-data WatchManager = WatchManager (MVar WatchMap)
+data WatchManager = WatchManager { watchManagerWatchMap :: (MVar WatchMap) }
 
 initWatchManager :: IO WatchManager
 initWatchManager =  do
