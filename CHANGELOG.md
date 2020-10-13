@@ -13,6 +13,7 @@ API breaking update.
   Instead, throw an exception which the user can recover from by switching to polling.
 * Add ModifiedAttributes event type + Linux support
 * Add confOnHandlerException to be able to control what happens when a handler throws an exception.
+* WatchConfig constructor is no longer exposed. Instead use `defaultConfig {...}` with the accessors.
 
 Version 0.3.0.0
 ---------------
