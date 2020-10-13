@@ -75,6 +75,10 @@ jobs:
           - lts-14
           - lts-15
           - lts-16
+        exclude:
+          # GHC bug on this version causes the build to fail ("Access violation in generated code when writing 0x0")
+          - os: windows-latest
+            resolver: lts-15
 
     steps:
     - uses: actions/checkout@v2
