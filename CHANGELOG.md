@@ -7,7 +7,7 @@ Version 0.4.0.0
 API breaking update.
 
 * New options for threading control (single-threaded, thread-per-watch, and thread-per-manager)
-* Revamp `WatchConfig` options to be less confusing reduce boolean blindness.
+* Revamp `WatchConfig` options to be less confusing and reduce boolean blindness.
 * Pull out debouncing stuff, since it was never correct.
 * Don't silently fall back to polling on failure of native watcher.
   Instead, throw an exception which the user can recover from by switching to polling.
