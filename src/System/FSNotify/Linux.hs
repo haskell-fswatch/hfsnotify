@@ -143,12 +143,9 @@ watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar act
 
 handleRecursiveEvent :: FilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
 handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedDir listener wdVar event = do
-  -- When a new directory is created, add recursive inotify watches to it
-  -- TODO: there's a race condition here; if there are files present in the directory before
-  -- we add the watches, we'll miss them. The right thing to do would be to ls the directory
-  -- and trigger Added events for everything we find there
   case event of
     (INo.Created True rawDirPath) -> do
+      -- A new directory was created, so add recursive inotify watches to it
       dirPath <- fromRawFilePath rawDirPath
       let newDir = baseDir </> dirPath
       timestampBeforeAddingWatch <- getPOSIXTime
