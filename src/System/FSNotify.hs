@@ -45,12 +45,10 @@ module System.FSNotify
        , defaultConfig
        , defaultPollingConfig
 
-       , confDebounce
        , confWatchMode
        , confThreadingMode
        , confOnHandlerException
 
-       , Debounce(..)
        , WatchMode(..)
        , ThreadingMode(..)
        , withManagerConf
@@ -111,8 +109,7 @@ data WatchManager = forall manager argType. FileListener manager argType =>
 defaultConfig :: WatchConfig
 defaultConfig =
   WatchConfig
-    { confDebounce = DebounceDefault
-    , confWatchMode = WatchModeOS
+    { confWatchMode = WatchModeOS
     , confThreadingMode = SingleThread
     , confOnHandlerException = defaultOnHandlerException
     }
@@ -123,8 +120,7 @@ defaultConfig =
 defaultPollingConfig :: WatchConfig
 defaultPollingConfig =
   WatchConfig
-    { confDebounce = DebounceDefault
-    , confWatchMode = WatchModePoll (10^(6 :: Int)) -- 1 second
+    { confWatchMode = WatchModePoll (10^(6 :: Int)) -- 1 second
     , confThreadingMode = SingleThread
     , confOnHandlerException = defaultOnHandlerException
     }

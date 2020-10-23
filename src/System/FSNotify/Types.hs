@@ -10,9 +10,6 @@ module System.FSNotify.Types
        , WatchConfig(..)
        , WatchMode(..)
        , ThreadingMode(..)
-       , Debounce(..)
-       , DebounceData(..)
-       , DebouncePayload
        , Event(..)
        , EventIsDirectory(..)
        , EventCallback
@@ -24,7 +21,6 @@ module System.FSNotify.Types
 import Control.Concurrent.Chan
 import Control.Exception.Safe
 import Data.IORef (IORef)
-import Data.Time (NominalDiffTime)
 import Data.Time.Clock (UTCTime)
 import Prelude hiding (FilePath)
 import System.FilePath
@@ -71,9 +67,7 @@ data ThreadingMode =
 
 -- | Watch configuration
 data WatchConfig = WatchConfig
-  { confDebounce :: Debounce
-    -- ^ Debounce configuration
-  , confWatchMode :: WatchMode
+  { confWatchMode :: WatchMode
     -- ^ Watch mode to use
   , confThreadingMode :: ThreadingMode
     -- ^ Threading mode to use
@@ -81,38 +75,7 @@ data WatchConfig = WatchConfig
     -- ^ Called when a handler throws an exception
   }
 
--- | This specifies whether multiple events from the same file should be
--- collapsed together, and how close is close enough.
---
--- This is performed by ignoring any event that occurs to the same file
--- until the specified time interval has elapsed.
---
--- Note that the current debouncing logic may fail to report certain changes
--- to a file, potentially leaving your program in a state that is not
--- consistent with the filesystem.
---
--- Make sure that if you are using this feature, all changes you make as a
--- result of an 'Event' notification are both non-essential and idempotent.
-data Debounce
-  = DebounceDefault
-    -- ^ perform debouncing based on the default time interval of 1 millisecond
-  | Debounce NominalDiffTime
-    -- ^ perform debouncing based on the specified time interval
-  | NoDebounce
-    -- ^ do not perform debouncing
-
 type IOEvent = IORef Event
-
--- | DebouncePayload contents. Contains epsilon value for debouncing
--- near-simultaneous events and an IORef of the latest Event. Difference in
--- arrival time is measured according to Event value timestamps.
-data DebounceData = DebounceData NominalDiffTime IOEvent
-
--- | Data "payload" passed to event handlers to enable debouncing. This value
--- is automatically derived from a 'WatchConfig' value. A value of Just
--- DebounceData results in debouncing according to the given epsilon and
--- IOEvent. A value of Nothing results in no debouncing.
-type DebouncePayload = Maybe DebounceData
 
 -- | A predicate used to determine whether to act on an event.
 type ActionPredicate = Event -> Bool

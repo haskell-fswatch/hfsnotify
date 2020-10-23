@@ -6,19 +6,13 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.FSNotify.Listener
-       ( debounce
-       , epsilonDefault
-       , FileListener(..)
-       , StopListening
-       , ListenFn
-       , newDebouncePayload
-       ) where
+module System.FSNotify.Listener (
+  FileListener(..)
+  , StopListening
+  , ListenFn
+  ) where
 
-import Data.IORef (newIORef)
 import Data.Text
-import Data.Time (diffUTCTime, NominalDiffTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Prelude hiding (FilePath)
 import System.FSNotify.Types
 import System.FilePath
@@ -54,28 +48,3 @@ class FileListener sessionType argType | sessionType -> argType where
 
   -- | Does this manager use polling?
   usesPolling :: sessionType -> Bool
-
--- | The default maximum difference (exclusive, in seconds) for two
--- events to be considered as occuring "at the same time".
-epsilonDefault :: NominalDiffTime
-epsilonDefault = 0.001
-
--- | The default event that provides a basis for comparison.
-eventDefault :: Event
-eventDefault = Added "" (posixSecondsToUTCTime 0) IsFile
-
--- | A predicate indicating whether two events may be considered "the same
--- event". This predicate is applied to the most recent dispatched event and
--- the current event after the client-specified ActionPredicate is applied,
--- before the event is dispatched.
-debounce :: NominalDiffTime -> Event -> Event -> Bool
-debounce epsilon e1 e2 =
-  eventPath e1 == eventPath e2 && timeDiff > -epsilon && timeDiff < epsilon
-  where
-    timeDiff = diffUTCTime (eventTime e2) (eventTime e1)
-
--- | Produces a fresh data payload used for debouncing events in a handler.
-newDebouncePayload :: Debounce -> IO DebouncePayload
-newDebouncePayload DebounceDefault = (Just . DebounceData epsilonDefault) <$> newIORef eventDefault
-newDebouncePayload (Debounce epsilon) = (Just . DebounceData epsilon) <$> newIORef eventDefault
-newDebouncePayload NoDebounce = return Nothing

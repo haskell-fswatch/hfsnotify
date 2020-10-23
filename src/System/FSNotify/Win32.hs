@@ -38,8 +38,8 @@ fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (ba
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
 
-handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventCallback -> DebouncePayload -> WNo.Event -> IO ()
-handleWNoEvent isDirectory basedir actPred callback dbp inoEvent = do
+handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventCallback -> WNo.Event -> IO ()
+handleWNoEvent isDirectory basedir actPred callback inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent isDirectory basedir currentTime inoEvent
   when (actPred event) $ callback event
@@ -47,15 +47,14 @@ handleWNoEvent isDirectory basedir actPred callback dbp inoEvent = do
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
 watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
-  dbp <- newDebouncePayload $ confDebounce conf
 
   let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE, WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
   let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
 
   -- Start one watch for file events and one for directory events
   -- (There seems to be no other way to provide isDirectory information)
-  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred callback dbp)
-  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred callback dbp)
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred callback)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred callback)
 
   -- The StopListening action should make sure to remove the watches from the manager after they're killed.
   -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.

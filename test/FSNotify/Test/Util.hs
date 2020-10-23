@@ -84,8 +84,7 @@ makeTestFolder threadingMode poll recursive nested = around $ \action -> do
     when isMac $ threadDelay 2000000
 
     let conf = defaultConfig {
-          confDebounce = NoDebounce
-          , confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
+          confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
           , confThreadingMode = threadingMode
           }
 
