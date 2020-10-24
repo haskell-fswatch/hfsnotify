@@ -4,9 +4,11 @@ module Main where
 
 import Control.Exception.Safe
 import Control.Monad
+import Data.IORef
 import FSNotify.Test.EventTests
 import FSNotify.Test.Util
 import Prelude hiding (FilePath)
+import System.FilePath
 import System.FSNotify
 import Test.Hspec
 
@@ -17,7 +19,25 @@ main = do
   unless hasNative $ throwIO $ userError "WARNING: native manager cannot be used or tested on this platform"
 
   hspec $ do
-    it "respects the confOnHandlerException option" $ pending
+    describe "Configuration" $ do
+      it "respects the confOnHandlerException option" $ do
+        withRandomTempDirectory $ \watchedDir -> do
+          exceptions <- newIORef (0 :: Int)
+          let conf = defaultConfig { confOnHandlerException = \_ -> modifyIORef exceptions (+ 1) }
+
+          withManagerConf conf $ \mgr -> do
+            stop <- watchDir mgr watchedDir (const True) $ \ev -> do
+              case ev of
+                Added {} -> throwIO $ userError "Oh no!"
+                _ -> return ()
+
+            writeFile (watchedDir </> "testfile") "foo"
+
+            let ?timeInterval = 5*10^(5 :: Int)
+            pauseAndRetryOnExpectationFailure 3 $
+              readIORef exceptions >>= (`shouldBe` 1)
+
+            stop
 
     describe "SingleThread" $ eventTests SingleThread
     describe "ThreadPerWatch" $ eventTests ThreadPerWatch
