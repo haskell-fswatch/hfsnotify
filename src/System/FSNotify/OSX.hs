@@ -134,5 +134,3 @@ instance FileListener OSXManager () where
 
   listen = listenFn $ handleFSEEvent False
   listenRecursive = listenFn $ handleFSEEvent True
-
-  usesPolling = const False

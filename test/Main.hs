@@ -15,9 +15,6 @@ import Test.Hspec
 
 main :: IO ()
 main = do
-  hasNative <- nativeMgrSupported
-  unless hasNative $ throwIO $ userError "WARNING: native manager cannot be used or tested on this platform"
-
   hspec $ do
     describe "Configuration" $ do
       it "respects the confOnHandlerException option" $ do

@@ -75,5 +75,3 @@ instance FileListener WNo.WatchManager () where
 
   listen = watchDirectory False
   listenRecursive = watchDirectory True
-
-  usesPolling = const False

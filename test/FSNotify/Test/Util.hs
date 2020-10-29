@@ -49,12 +49,6 @@ isWin = True
 isWin = False
 #endif
 
-nativeMgrSupported :: IO Bool
-nativeMgrSupported = do
-  mgr <- startManager
-  stopManager mgr
-  return $ not $ isPollingManager mgr
-
 pauseAndRetryOnExpectationFailure :: (?timeInterval :: Int) => Int -> IO a -> IO a
 pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
 

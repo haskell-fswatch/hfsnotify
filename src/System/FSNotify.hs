@@ -42,19 +42,19 @@ module System.FSNotify
        , withManager
        , startManager
        , stopManager
-       , defaultConfig
-       , defaultPollingConfig
 
+       -- * Configuration
+       , defaultConfig
        , confWatchMode
        , confThreadingMode
        , confOnHandlerException
-
        , WatchMode(..)
        , ThreadingMode(..)
+
+       -- * Lower level
        , withManagerConf
        , startManagerConf
        , StopListening
-       , isPollingManager
 
        -- * Watching
        , watchDir
@@ -110,17 +110,6 @@ defaultConfig :: WatchConfig
 defaultConfig =
   WatchConfig
     { confWatchMode = WatchModeOS
-    , confThreadingMode = SingleThread
-    , confOnHandlerException = defaultOnHandlerException
-    }
-
--- | Default polling configuration
---
--- * Uses polling interval of 1 second and single thread.
-defaultPollingConfig :: WatchConfig
-defaultPollingConfig =
-  WatchConfig
-    { confWatchMode = WatchModePoll (10^(6 :: Int)) -- 1 second
     , confThreadingMode = SingleThread
     , confOnHandlerException = defaultOnHandlerException
     }
@@ -187,10 +176,6 @@ startManagerConf conf = do
       _ -> return Nothing
 
     cleanupVar = newMVar (Just (return ()))
-
--- | Does this manager use polling?
-isPollingManager :: WatchManager -> Bool
-isPollingManager (WatchManager {..}) = usesPolling watchManagerManager
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events

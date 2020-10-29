@@ -45,6 +45,3 @@ class FileListener sessionType argType | sessionType -> argType where
   -- report events associated with files within the specified directory and its
   -- subdirectories.
   listenRecursive :: ListenFn sessionType argType
-
-  -- | Does this manager use polling?
-  usesPolling :: sessionType -> Bool

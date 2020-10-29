@@ -125,8 +125,6 @@ instance FileListener INotifyListener () where
 
     return stopListening
 
-  usesPolling = const False
-
 
 type RecursiveWatches = MVar (Maybe [(INo.WatchDescriptor, MVar Bool)])
 

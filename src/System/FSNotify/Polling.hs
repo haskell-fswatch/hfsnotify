@@ -136,9 +136,6 @@ instance FileListener PollManager Int where
 
   listenRecursive = listen' True
 
-  usesPolling = const True
-
-
 getModificationTime :: FilePath -> IO UTCTime
 getModificationTime p = fromEpoch . modificationTime <$> getFileStatus p
 
