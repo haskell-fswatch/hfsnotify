@@ -2,7 +2,10 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
-{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 
 module System.FSNotify.Path
        ( findFiles
@@ -24,7 +27,11 @@ getDirectoryContentsPath :: FilePath -> IO [FilePath]
 getDirectoryContentsPath path =
   ((map (path </>)) . filter (not . dots) <$> D.getDirectoryContents path) >>= filterM exists
   where
+#if MIN_VERSION_directory(1, 2, 7)
+    exists x = D.doesPathExist x
+#else
     exists x = (||) <$> D.doesFileExist x <*> D.doesDirectoryExist x
+#endif
     dots "."  = True
     dots ".." = True
     dots _    = False
