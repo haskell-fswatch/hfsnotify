@@ -21,6 +21,7 @@ Extra-Source-Files:
 
 Library
   Build-Depends:          base >= 4.8 && < 5
+                        , auto-update >= 0.1.6
                         , async >= 2.0.0.0
                         , bytestring >= 0.10.2
                         , containers >= 0.4
@@ -32,6 +33,7 @@ Library
                         , time >= 1.1
                         , unix-compat >= 0.2
   Exposed-Modules:        System.FSNotify
+                        , System.FSNotify.Debounce
                         , System.FSNotify.Devel
   Other-Modules:          System.FSNotify.Find
                         , System.FSNotify.Listener
@@ -68,9 +70,9 @@ Test-Suite test
                         , FSNotify.Test.Util
 
   if os(windows)
-    Build-Depends:      base >= 4.3.1.0, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, safe-exceptions, temporary, random, retry, Win32
+    Build-Depends:      base >= 4.3.1.0, auto-update, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, safe-exceptions, temporary, random, retry, Win32
   else
-    Build-Depends:      base >= 4.3.1.0, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, safe-exceptions, temporary, random, retry
+    Build-Depends:      base >= 4.3.1.0, auto-update, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, safe-exceptions, temporary, random, retry
 
 Source-Repository head
   Type:                 git

@@ -61,6 +61,10 @@ module System.FSNotify
        , watchDirChan
        , watchTree
        , watchTreeChan
+
+       -- * Debouncing
+       , makeDebouncedAction
+
        ) where
 
 import Prelude hiding (FilePath)
@@ -71,6 +75,7 @@ import Control.Exception.Safe as E
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Text as T
+import System.FSNotify.Debounce
 import System.FSNotify.Polling
 import System.FSNotify.Types
 import System.FilePath
