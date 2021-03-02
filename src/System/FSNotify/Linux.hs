@@ -193,6 +193,7 @@ x <//> y = x <> "/" <> y
 traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
 traverseAllDirs dir cb = traverseAll dir $ \subPath ->
   -- TODO: wish we didn't need fromRawFilePath here
+  -- TODO: make sure this does the right thing with symlinks
   fromRawFilePath subPath >>= getFileStatus >>= \case
     (isDirectory -> True) -> cb subPath >> return True
     _ -> return False
