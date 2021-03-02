@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 --
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
@@ -125,7 +127,7 @@ listen' isRecursive _conf (PollManager mvarMap interval) path actPred callback =
   return $ killAndUnregister mvarMap wk
 
 
-instance FileListener PollManager Int where
+instance FileListener PollManager Int FilePath where
   initSession interval = Right <$> createPollManager interval
 
   killSession (PollManager mvarMap _) = do

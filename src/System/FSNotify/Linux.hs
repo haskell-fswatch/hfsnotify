@@ -9,6 +9,9 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.FSNotify.Linux
@@ -20,6 +23,7 @@ import Control.Concurrent.MVar
 import Control.Exception.Safe as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import Data.Function
 import Data.Monoid
 import Data.String
 import Data.Time.Clock (UTCTime)
@@ -29,10 +33,12 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Prelude hiding (FilePath)
 import System.FSNotify.Find
 import System.FSNotify.Listener
-import System.FSNotify.Path (findDirs, canonicalizeDirPath)
+import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
 import System.FilePath
 import qualified System.INotify as INo
+import System.Posix.ByteString (RawFilePath(..))
+import System.Posix.Directory.ByteString (openDirStream, readDirStream, closeDirStream)
 import System.Posix.Files (getFileStatus, isDirectory, modificationTimeHiRes)
 
 data INotifyListener = INotifyListener { listenerINotify :: INo.INotify }
@@ -42,37 +48,35 @@ type NativeManager = INotifyListener
 data EventVarietyMismatchException = EventVarietyMismatchException deriving (Show, Typeable)
 instance Exception EventVarietyMismatchException
 
-#if MIN_VERSION_hinotify(0, 3, 10)
-toRawFilePath :: FilePath -> IO BS.ByteString
-toRawFilePath fp = do
-  enc <- getFileSystemEncoding
-  F.withCString enc fp BS.packCString
 
-fromRawFilePath :: BS.ByteString -> IO FilePath
-fromRawFilePath bs = do
-  enc <- getFileSystemEncoding
-  BS.useAsCString bs (F.peekCString enc)
-#else
-toRawFilePath = return . id
-fromRawFilePath = return . id
-#endif
-
-fsnEvents :: FilePath -> UTCTime -> INo.Event -> IO [Event]
-fsnEvents basePath timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
-fsnEvents basePath timestamp INo.DeletedSelf = return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
+fsnEvents :: RawFilePath -> UTCTime -> INo.Event -> IO [Event]
+fsnEvents basePath' timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp INo.DeletedSelf = do
+  basePath <- fromRawFilePath basePath'
+  return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
 fsnEvents _ _ INo.Ignored = return []
-fsnEvents basePath timestamp inoEvent = return [Unknown basePath timestamp IsFile (show inoEvent)]
+fsnEvents basePath' timestamp inoEvent = do
+  basePath <- fromRawFilePath basePath'
+  return [Unknown basePath timestamp IsFile (show inoEvent)]
 
-boolToIsDirectory :: Bool -> EventIsDirectory
-boolToIsDirectory False = IsFile
-boolToIsDirectory True = IsDirectory
-
-handleInoEvent :: ActionPredicate -> EventCallback -> FilePath -> MVar Bool -> INo.Event -> IO ()
+handleInoEvent :: ActionPredicate -> EventCallback -> RawFilePath -> MVar Bool -> INo.Event -> IO ()
 handleInoEvent actPred callback basePath watchStillExistsVar inoEvent = do
   when (INo.DeletedSelf == inoEvent) $ modifyMVar_ watchStillExistsVar $ const $ return False
 
@@ -83,7 +87,7 @@ handleInoEvent actPred callback basePath watchStillExistsVar inoEvent = do
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.DeleteSelf]
 
-instance FileListener INotifyListener () where
+instance FileListener INotifyListener () RawFilePath where
   initSession _ = E.handle (\(e :: IOException) -> return $ Left $ fromString $ show e) $ do
     inotify <- INo.initINotify
     return $ Right $ INotifyListener inotify
@@ -91,10 +95,9 @@ instance FileListener INotifyListener () where
   killSession (INotifyListener {listenerINotify}) = INo.killINotify listenerINotify
 
   listen _conf (INotifyListener {listenerINotify}) path actPred callback = do
-    path' <- canonicalizeDirPath path
-    rawPath <- toRawFilePath path'
+    path' <- canonicalizeRawDirPath path
     watchStillExistsVar <- newMVar True
-    wd <- INo.addWatch listenerINotify varieties rawPath (handleInoEvent actPred callback path' watchStillExistsVar)
+    wd <- INo.addWatch listenerINotify varieties path' (handleInoEvent actPred callback path' watchStillExistsVar)
     return $ do
       watchStillExists <- readMVar watchStillExistsVar
       when watchStillExists $ INo.removeWatch wd
@@ -116,38 +119,37 @@ instance FileListener INotifyListener () where
 
       stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
-    path' <- canonicalizeDirPath initialPath
-    paths <- findDirs True path'
-
     -- Add watches to this directory plus every sub-directory
+    path' <- canonicalizeRawDirPath initialPath
     watchDirectoryRecursively listener wdVar actPred callback True path'
-    forM_ paths $ watchDirectoryRecursively listener wdVar actPred callback False
+    traverseAllDirs path' $ \subPath ->
+      watchDirectoryRecursively listener wdVar actPred callback False subPath
 
     return stopListening
 
 
 type RecursiveWatches = MVar (Maybe [(INo.WatchDescriptor, MVar Bool)])
 
-watchDirectoryRecursively :: INotifyListener -> RecursiveWatches -> ActionPredicate -> EventCallback -> Bool -> FilePath -> IO ()
-watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar actPred callback isRootWatchedDir filePath = do
-  rawFilePath <- toRawFilePath filePath
+watchDirectoryRecursively :: INotifyListener -> RecursiveWatches -> ActionPredicate -> EventCallback -> Bool -> RawFilePath -> IO ()
+watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar actPred callback isRootWatchedDir rawFilePath = do
   modifyMVar_ wdVar $ \case
     Nothing -> return Nothing
     Just wds -> do
       watchStillExistsVar <- newMVar True
-      wd <- INo.addWatch listenerINotify varieties rawFilePath (handleRecursiveEvent filePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
+      wd <- INo.addWatch listenerINotify varieties rawFilePath (handleRecursiveEvent rawFilePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
       return $ Just ((wd, watchStillExistsVar):wds)
 
 
-handleRecursiveEvent :: FilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
+handleRecursiveEvent :: RawFilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
 handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedDir listener wdVar event = do
   case event of
     (INo.Created True rawDirPath) -> do
       -- A new directory was created, so add recursive inotify watches to it
-      dirPath <- fromRawFilePath rawDirPath
-      let newDir = baseDir </> dirPath
+      let newRawDir = baseDir <//> rawDirPath
       timestampBeforeAddingWatch <- getPOSIXTime
-      watchDirectoryRecursively listener wdVar actPred callback False newDir
+      watchDirectoryRecursively listener wdVar actPred callback False newRawDir
+
+      newDir <- fromRawFilePath newRawDir
 
       -- Find all files/folders that might have been created *after* the timestamp, and hence might have been
       -- missed by the watch
@@ -173,3 +175,46 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event
+
+
+
+-- * Util
+
+canonicalizeRawDirPath :: RawFilePath -> IO RawFilePath
+canonicalizeRawDirPath = return . id -- TODO: do the same stuff that System.Directory.canonicalize does
+
+traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
+traverseAllDirs dir cb = bracket (openDirStream dir) closeDirStream $ \dirStream ->
+  fix $ \loop -> do
+    readDirStream dirStream >>= \case
+      x | BS.null x -> return ()
+      subDir -> do
+        -- TODO: canonicalize?
+        let fullSubDir = dir <//> subDir
+        cb fullSubDir
+        traverseAllDirs fullSubDir cb
+        loop
+
+-- | Same as </> but for RawFilePath
+-- TODO: make sure this is correct or find in a library
+(<//>) :: RawFilePath -> RawFilePath -> RawFilePath
+x <//> y = x <> "/" <> y
+
+boolToIsDirectory :: Bool -> EventIsDirectory
+boolToIsDirectory False = IsFile
+boolToIsDirectory True = IsDirectory
+
+#if MIN_VERSION_hinotify(0, 3, 10)
+toRawFilePath :: FilePath -> IO BS.ByteString
+toRawFilePath fp = do
+  enc <- getFileSystemEncoding
+  F.withCString enc fp BS.packCString
+
+fromRawFilePath :: BS.ByteString -> IO FilePath
+fromRawFilePath bs = do
+  enc <- getFileSystemEncoding
+  BS.useAsCString bs (F.peekCString enc)
+#else
+toRawFilePath = return . id
+fromRawFilePath = return . id
+#endif

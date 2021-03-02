@@ -9,7 +9,6 @@
 
 module System.FSNotify.Path
        ( findFiles
-       , findDirs
        , findFilesAndDirs
        , canonicalizeDirPath
        , canonicalizePath
@@ -51,25 +50,14 @@ findAllFiles path = do
   nestedFiles <- mapM findAllFiles dirs
   return (files ++ concat nestedFiles)
 
-findImmediateFiles, findImmediateDirs :: FilePath -> IO [FilePath]
+findImmediateFiles :: FilePath -> IO [FilePath]
 findImmediateFiles = fileDirContents >=> mapM D.canonicalizePath . fst
-findImmediateDirs  = fileDirContents >=> mapM D.canonicalizePath . snd
-
-findAllDirs :: FilePath -> IO [FilePath]
-findAllDirs path = do
-  dirs <- findImmediateDirs path
-  nestedDirs <- mapM findAllDirs dirs
-  return (dirs ++ concat nestedDirs)
 
 -- * Exported functions below this point
 
 findFiles :: Bool -> FilePath -> IO [FilePath]
 findFiles True path  = findAllFiles       =<< canonicalizeDirPath path
 findFiles False path = findImmediateFiles =<<  canonicalizeDirPath path
-
-findDirs :: Bool -> FilePath -> IO [FilePath]
-findDirs True path  = findAllDirs       =<< canonicalizeDirPath path
-findDirs False path = findImmediateDirs =<< canonicalizeDirPath path
 
 findFilesAndDirs :: Bool -> FilePath -> IO [FilePath]
 findFilesAndDirs False path = getDirectoryContentsPath =<< canonicalizeDirPath path
