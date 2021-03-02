@@ -101,7 +101,7 @@ type NativeManager = PollManager
 #endif
 
 -- | Watch manager. You need one in order to create watching jobs.
-data WatchManager = forall manager argType filepathType. FileListener manager argType filepathType =>
+data WatchManager = forall manager argType. FileListener manager argType =>
   WatchManager { watchManagerConfig :: WatchConfig
                , watchManagerManager :: manager
                , watchManagerCleanupVar :: (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
@@ -187,7 +187,7 @@ startManagerConf conf = do
 -- associated with files within the specified directory, and not files
 -- within its subdirectories.
 watchDirChan :: WatchManager -> FilePath -> ActionPredicate -> EventChannel -> IO StopListening
-watchDirChan (WatchManager {..}) path actionPredicate chan = listen watchManagerConfig watchManagerManager (fromFilePath path) actionPredicate (writeChan chan)
+watchDirChan (WatchManager {..}) path actionPredicate chan = listen watchManagerConfig watchManagerManager path actionPredicate (writeChan chan)
 
 -- | Watch all the contents of a directory by streaming events to a Chan.
 -- Watching all the contents of a directory will report events associated with
@@ -212,7 +212,7 @@ watchTree wm@(WatchManager {watchManagerConfig}) fp actionPredicate action = thr
 
 -- * Main threading logic
 
-threadChan :: (forall a b c. ListenFn a b c) -> WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
+threadChan :: (forall a b. ListenFn a b) -> WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 threadChan listenFn (WatchManager {watchManagerGlobalChan=(Just (globalChan, _)), ..}) path actPred action =
   modifyMVar watchManagerCleanupVar $ \case
     Nothing -> return (Nothing, return ()) -- we've been stopped. Throw an exception?

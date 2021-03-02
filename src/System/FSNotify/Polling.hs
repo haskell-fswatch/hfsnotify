@@ -127,7 +127,7 @@ listen' isRecursive _conf (PollManager mvarMap interval) path actPred callback =
   return $ killAndUnregister mvarMap wk
 
 
-instance FileListener PollManager Int FilePath where
+instance FileListener PollManager Int where
   initSession interval = Right <$> createPollManager interval
 
   killSession (PollManager mvarMap _) = do

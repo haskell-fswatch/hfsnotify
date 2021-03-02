@@ -21,11 +21,11 @@ import System.FilePath
 -- | An action that cancels a watching/listening job
 type StopListening = IO ()
 
-type ListenFn sessionType argType filePathType = FileListener sessionType argType filePathType => WatchConfig -> sessionType -> filePathType -> ActionPredicate -> EventCallback -> IO StopListening
+type ListenFn sessionType argType = FileListener sessionType argType => WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventCallback -> IO StopListening
 
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
-class FileListener sessionType argType filePathType | sessionType -> argType, sessionType -> filePathType where
+class FileListener sessionType argType  | sessionType -> argType where
   -- | Initialize a file listener instance.
   initSession :: argType -> IO (Either Text sessionType)
   -- ^ An initialized file listener, or a reason why one wasn't able to start.
@@ -39,13 +39,10 @@ class FileListener sessionType argType filePathType | sessionType -> argType, se
   -- Listening for events associated with immediate contents of a directory will
   -- only report events associated with files within the specified directory, and
   -- not files within its subdirectories.
-  listen :: ListenFn sessionType argType filePathType
+  listen :: ListenFn sessionType argType
 
   -- | Listen for file events associated with all the contents of a directory.
   -- Listening for events associated with all the contents of a directory will
   -- report events associated with files within the specified directory and its
   -- subdirectories.
-  listenRecursive :: ListenFn sessionType argType filePathType
-
-  -- | Convert a FilePath to the preferred filePathType for this class
-  fromFilePath :: FilePath -> filePathType
+  listenRecursive :: ListenFn sessionType argType

@@ -33,13 +33,13 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Prelude hiding (FilePath)
 import System.FSNotify.Find
 import System.FSNotify.Listener
-import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
-import System.FilePath
+import System.FilePath (FilePath, (</>))
 import qualified System.INotify as INo
-import System.Posix.ByteString (RawFilePath(..))
+import System.Posix.ByteString (RawFilePath)
 import System.Posix.Directory.ByteString (openDirStream, readDirStream, closeDirStream)
 import System.Posix.Files (getFileStatus, isDirectory, modificationTimeHiRes)
+
 
 data INotifyListener = INotifyListener { listenerINotify :: INo.INotify }
 
@@ -87,7 +87,7 @@ handleInoEvent actPred callback basePath watchStillExistsVar inoEvent = do
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.DeleteSelf]
 
-instance FileListener INotifyListener () RawFilePath where
+instance FileListener INotifyListener () where
   initSession _ = E.handle (\(e :: IOException) -> return $ Left $ fromString $ show e) $ do
     inotify <- INo.initINotify
     return $ Right $ INotifyListener inotify
@@ -95,9 +95,10 @@ instance FileListener INotifyListener () RawFilePath where
   killSession (INotifyListener {listenerINotify}) = INo.killINotify listenerINotify
 
   listen _conf (INotifyListener {listenerINotify}) path actPred callback = do
-    path' <- canonicalizeRawDirPath path
+    rawPath <- toRawFilePath path
+    canonicalRawPath <- canonicalizeRawDirPath rawPath
     watchStillExistsVar <- newMVar True
-    wd <- INo.addWatch listenerINotify varieties path' (handleInoEvent actPred callback path' watchStillExistsVar)
+    wd <- INo.addWatch listenerINotify varieties canonicalRawPath (handleInoEvent actPred callback canonicalRawPath watchStillExistsVar)
     return $ do
       watchStillExists <- readMVar watchStillExistsVar
       when watchStillExists $ INo.removeWatch wd
@@ -120,9 +121,10 @@ instance FileListener INotifyListener () RawFilePath where
       stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
     -- Add watches to this directory plus every sub-directory
-    path' <- canonicalizeRawDirPath initialPath
-    watchDirectoryRecursively listener wdVar actPred callback True path'
-    traverseAllDirs path' $ \subPath ->
+    rawInitialPath <- toRawFilePath initialPath
+    rawCanonicalInitialPath <- canonicalizeRawDirPath rawInitialPath
+    watchDirectoryRecursively listener wdVar actPred callback True rawCanonicalInitialPath
+    traverseAllDirs rawCanonicalInitialPath $ \subPath ->
       watchDirectoryRecursively listener wdVar actPred callback False subPath
 
     return stopListening
@@ -183,22 +185,30 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
 canonicalizeRawDirPath :: RawFilePath -> IO RawFilePath
 canonicalizeRawDirPath = return . id -- TODO: do the same stuff that System.Directory.canonicalize does
 
-traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
-traverseAllDirs dir cb = bracket (openDirStream dir) closeDirStream $ \dirStream ->
-  fix $ \loop -> do
-    readDirStream dirStream >>= \case
-      x | BS.null x -> return ()
-      subDir -> do
-        -- TODO: canonicalize?
-        let fullSubDir = dir <//> subDir
-        cb fullSubDir
-        traverseAllDirs fullSubDir cb
-        loop
-
 -- | Same as </> but for RawFilePath
 -- TODO: make sure this is correct or find in a library
 (<//>) :: RawFilePath -> RawFilePath -> RawFilePath
 x <//> y = x <> "/" <> y
+
+traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
+traverseAllDirs dir cb = traverseAll dir $ \subPath ->
+  -- TODO: wish we didn't need fromRawFilePath here
+  fromRawFilePath subPath >>= getFileStatus >>= \case
+    (isDirectory -> True) -> cb subPath >> return True
+    _ -> return False
+
+traverseAll :: RawFilePath -> (RawFilePath -> IO Bool) -> IO ()
+traverseAll dir cb = bracket (openDirStream dir) closeDirStream $ \dirStream ->
+  fix $ \loop -> do
+    readDirStream dirStream >>= \case
+      x | BS.null x -> return ()
+      "." -> loop
+      ".." -> loop
+      subDir -> flip finally loop $ do
+        -- TODO: canonicalize?
+        let fullSubDir = dir <//> subDir
+        shouldRecurse <- cb fullSubDir
+        when shouldRecurse $ traverseAll fullSubDir cb
 
 boolToIsDirectory :: Bool -> EventIsDirectory
 boolToIsDirectory False = IsFile
