@@ -31,6 +31,7 @@ import Data.Time.Clock.POSIX
 import qualified GHC.Foreign as F
 import GHC.IO.Encoding (getFileSystemEncoding)
 import Prelude hiding (FilePath)
+import System.Directory (canonicalizePath)
 import System.FSNotify.Find
 import System.FSNotify.Listener
 import System.FSNotify.Types
@@ -186,7 +187,7 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
 -- * Util
 
 canonicalizeRawDirPath :: RawFilePath -> IO RawFilePath
-canonicalizeRawDirPath = return . id -- TODO: do the same stuff that System.Directory.canonicalize does
+canonicalizeRawDirPath p = fromRawFilePath p >>= canonicalizePath >>= toRawFilePath
 
 -- | Same as </> but for RawFilePath
 -- TODO: make sure this is correct or find in a library
