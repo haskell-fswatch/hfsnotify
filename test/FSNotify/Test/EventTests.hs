@@ -1,9 +1,8 @@
 {-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
 
--- |
-
 module FSNotify.Test.EventTests where
 
+import Control.Exception.Safe
 import Control.Monad
 import Data.Monoid
 import FSNotify.Test.Util
@@ -30,13 +29,14 @@ eventTests threadingMode = describe "Tests" $
               events -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a new file" $ \(_watchedDir, f, getEvents, _clearEvents) -> do
-            openFile f AppendMode >>= hClose
+            h <- openFile f AppendMode
 
-            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
-              if | nested && not recursive -> events `shouldBe` []
-                 | otherwise -> case events of
-                     [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-                     _ -> expectationFailure $ "Got wrong events: " <> show events
+            flip finally (hClose h) $ 
+              pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+                if | nested && not recursive -> events `shouldBe` []
+                   | otherwise -> case events of
+                       [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+                       _ -> expectationFailure $ "Got wrong events: " <> show events
 
           it "works with a new directory" $ \(_watchedDir, f, getEvents, _clearEvents) -> do
             createDirectory f
@@ -90,10 +90,25 @@ eventTests threadingMode = describe "Tests" $
           it "works with a modified file" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             writeFile f "" >> clearEvents
 
-            appendFile f "foo"
+            withFile f WriteMode $ \h ->
+              flip finally (hClose h) $ do
+                hPutStr h "foo"
+                pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+                  if | nested && not recursive -> events `shouldBe` []
+                     | otherwise -> case events of
+                         [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+                         _ -> expectationFailure $ "Got wrong events: " <> show events
 
-            pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
-              if | nested && not recursive -> events `shouldBe` []
-                 | otherwise -> case events of
-                     [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-                     _ -> expectationFailure $ "Got wrong events: " <> show events
+#ifdef OS_Linux
+          unless poll $
+            it "gets a close_write" $ \(_watchedDir, f, getEvents, clearEvents) -> do
+              writeFile f "" >> clearEvents
+              withFile f WriteMode $ flip hPutStr "asdf"
+              pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
+                if | nested && not recursive -> events `shouldBe` []
+                   | otherwise -> case events of
+                       [cw@(CloseWrite {}), m@(Modified {})]
+                         | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
+                           && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
+                       _ -> expectationFailure $ "Got wrong events: " <> show events
+#endif

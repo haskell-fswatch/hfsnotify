@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
--- |
 
 module FSNotify.Test.Util where
 
@@ -9,13 +8,13 @@ import Control.Monad
 import Control.Retry
 import Data.IORef
 import System.Directory
-import System.FilePath
 import System.FSNotify
+import System.FilePath
 import System.IO.Temp
 import System.PosixCompat.Files (touchFile)
 import System.Random as R
-import Test.Hspec
 import Test.HUnit.Lang
+import Test.Hspec
 
 #if !MIN_VERSION_base(4,11,0)
 import Data.Monoid

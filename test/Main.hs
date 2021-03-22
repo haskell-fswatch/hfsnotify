@@ -8,8 +8,8 @@ import Data.IORef
 import FSNotify.Test.EventTests
 import FSNotify.Test.Util
 import Prelude hiding (FilePath)
-import System.FilePath
 import System.FSNotify
+import System.FilePath
 import Test.Hspec
 
 

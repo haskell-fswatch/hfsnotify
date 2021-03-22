@@ -56,6 +56,9 @@ fsnEvents basePath' timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just
 fsnEvents basePath' timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = do
   basePath <- fromRawFilePath basePath'
   fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
+fsnEvents basePath' timestamp (INo.Closed (boolToIsDirectory -> isDir) (Just raw) True) = do
+  basePath <- fromRawFilePath basePath'
+  fromRawFilePath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
   fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
@@ -85,7 +88,7 @@ handleInoEvent actPred callback basePath watchStillExistsVar inoEvent = do
   forM_ events $ \event -> when (actPred event) $ callback event
 
 varieties :: [INo.EventVariety]
-varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.DeleteSelf]
+varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.CloseWrite, INo.DeleteSelf]
 
 instance FileListener INotifyListener () where
   initSession _ = E.handle (\(e :: IOException) -> return $ Left $ fromString $ show e) $ do

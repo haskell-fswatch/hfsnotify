@@ -69,6 +69,9 @@ Test-Suite test
   Other-Modules:        FSNotify.Test.EventTests
                         , FSNotify.Test.Util
 
+  if os(linux)
+    CPP-Options:        -DOS_Linux
+
   if os(windows)
     Build-Depends:      base >= 4.3.1.0, auto-update, exceptions, hspec, hspec-core, hspec-expectations, HUnit, directory, filepath, unix-compat, fsnotify, async >= 2, safe-exceptions, temporary, random, retry, Win32
   else
