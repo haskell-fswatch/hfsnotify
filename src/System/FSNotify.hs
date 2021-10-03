@@ -218,7 +218,7 @@ threadChan listenFn (WatchManager {watchManagerGlobalChan=(Just (globalChan, _))
     Nothing -> return (Nothing, return ()) -- we've been stopped. Throw an exception?
     Just cleanup -> do
       stopListener <- liftIO $ listenFn watchManagerConfig watchManagerManager path actPred (\event -> writeChan globalChan (event, action))
-      return (Just cleanup, stopListener)
+      return (Just (cleanup >> stopListener), stopListener)
 threadChan listenFn (WatchManager {watchManagerGlobalChan=Nothing, ..}) path actPred action =
   modifyMVar watchManagerCleanupVar $ \case
     Nothing -> return (Nothing, return ()) -- we've been stopped. Throw an exception?
@@ -230,7 +230,7 @@ threadChan listenFn (WatchManager {watchManagerGlobalChan=Nothing, ..}) path act
             ThreadPerEvent -> True
       readerThread <- async $ readEvents forkThreadPerEvent chan
       stopListener <- liftIO $ listenFn watchManagerConfig watchManagerManager path actPred (writeChan chan)
-      return (Just (cleanup >> cancel readerThread), stopListener >> cancel readerThread)
+      return (Just (cleanup >> stopListener >> cancel readerThread), stopListener >> cancel readerThread)
 
   where
     readEvents :: Bool -> EventChannel -> IO ()

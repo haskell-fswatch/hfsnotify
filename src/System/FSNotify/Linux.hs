@@ -103,9 +103,10 @@ instance FileListener INotifyListener () where
     canonicalRawPath <- canonicalizeRawDirPath rawPath
     watchStillExistsVar <- newMVar True
     wd <- INo.addWatch listenerINotify varieties canonicalRawPath (handleInoEvent actPred callback canonicalRawPath watchStillExistsVar)
-    return $ do
-      watchStillExists <- readMVar watchStillExistsVar
-      when watchStillExists $ INo.removeWatch wd
+    return $
+      modifyMVar_ watchStillExistsVar $ \wse -> do
+        when wse $ INo.removeWatch wd
+        return False
 
   listenRecursive _conf listener initialPath actPred callback = do
     -- wdVar stores the list of created watch descriptors. We use it to
@@ -119,8 +120,11 @@ instance FileListener INotifyListener () where
 
     let
       removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
-        handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
-        (readMVar watchStillExistsVar >>= flip when (INo.removeWatch wd))
+        modifyMVar_ watchStillExistsVar $ \wse -> do
+          when wse $
+            handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
+                   (INo.removeWatch wd)
+          return False
 
       stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
