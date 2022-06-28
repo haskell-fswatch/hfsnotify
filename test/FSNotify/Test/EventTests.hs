@@ -101,7 +101,7 @@ eventTests threadingMode = describe "Tests" $
 #else
                          [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
 #endif
-                         _ -> expectationFailure $ "Got wrong events: " <> show events
+                         _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
 #ifdef OS_Linux
           unless poll $
