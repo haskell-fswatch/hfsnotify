@@ -31,7 +31,7 @@ eventTests threadingMode = describe "Tests" $
           it "works with a new file" $ \(_watchedDir, f, getEvents, _clearEvents) -> do
             h <- openFile f AppendMode
 
-            flip finally (hClose h) $ 
+            flip finally (hClose h) $
               pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
                 if | nested && not recursive -> events `shouldBe` []
                    | otherwise -> case events of
@@ -96,7 +96,11 @@ eventTests threadingMode = describe "Tests" $
                 pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
                   if | nested && not recursive -> events `shouldBe` []
                      | otherwise -> case events of
+#ifdef OS_Mac
+                         [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+#else
                          [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+#endif
                          _ -> expectationFailure $ "Got wrong events: " <> show events
 
 #ifdef OS_Linux
