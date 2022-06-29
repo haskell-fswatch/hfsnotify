@@ -1,4 +1,9 @@
-{-# LANGUAGE CPP, OverloadedStrings, ImplicitParams, MultiWayIf, LambdaCase, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module FSNotify.Test.EventTests where
 
@@ -96,14 +101,14 @@ eventTests threadingMode = describe "Tests" $
                 pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
                   if | nested && not recursive -> events `shouldBe` []
                      | otherwise -> case events of
-#ifdef OS_Mac
+#ifdef darwin_HOST_OS
                          [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
 #else
                          [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
 #endif
                          _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
-#ifdef OS_Linux
+#ifdef linux_HOST_OS
           unless poll $
             it "gets a close_write" $ \(_watchedDir, f, getEvents, clearEvents) -> do
               writeFile f "" >> clearEvents
