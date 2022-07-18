@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module System.FSNotify.Types
        ( act
@@ -16,6 +17,7 @@ module System.FSNotify.Types
        , EventChannel
        , EventAndActionChannel
        , IOEvent
+       , Debouncer(..)
        ) where
 
 import Control.Concurrent.Chan
@@ -89,3 +91,6 @@ type Action = Event -> IO ()
 -- | Predicate to always act.
 act :: ActionPredicate
 act _ = True
+
+class Debouncer a where
+  combineEvents :: a -> FilePath -> [Event] -> [Event]
