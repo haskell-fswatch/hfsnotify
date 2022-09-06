@@ -8,7 +8,10 @@ API breaking update.
 
 * New options for threading control (single-threaded, thread-per-watch, and thread-per-manager)
 * Revamp `WatchConfig` options to be less confusing and reduce boolean blindness.
-* Pull out debouncing stuff, since it was never correct.
+* Pull out debouncing stuff, since it was never correct as it simply took the last event affecting a given file in the debounce period. Debouncing is currently not included, and should be handled as an orthogonal concern. I'd like to include some debouncing logic, but didn't want to delay this release any longer.
+  * We now expose `type DebounceFn = Action -> IO Action`, which represents an arbitrary debouncer. All debouncers should be in the form of one of these functions.
+  * A robust state machine debouncer is in progress but not fully implemented yet; see the `state-machine` branch.
+  * Contributions are welcome! We can potentially add multiple debouncers of different complexity as modules under `System.FSNotify.Debounce.*`.
 * Don't silently fall back to polling on failure of native watcher.
   Instead, throw an exception which the user can recover from by switching to polling.
 * Add ModifiedAttributes event type + Linux support
