@@ -10,7 +10,7 @@ Description:            Cross platform library for file creation, modification,
                         existing libraries for platform-specific Windows, Mac,
                         and Linux filesystem event notification.
 Category:               Filesystem
-Cabal-Version:          >= 1.8
+Cabal-Version:          >= 1.10
 Build-Type:             Simple
 Homepage:               https://github.com/haskell-fswatch/hfsnotify
 Extra-Source-Files:
@@ -33,7 +33,6 @@ Library
                         , time >= 1.1
                         , unix-compat >= 0.2
   Exposed-Modules:        System.FSNotify
-                        , System.FSNotify.Debounce
                         , System.FSNotify.Devel
   Other-Modules:          System.FSNotify.Find
                         , System.FSNotify.Listener

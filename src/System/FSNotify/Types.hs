@@ -7,6 +7,7 @@ module System.FSNotify.Types
        ( act
        , ActionPredicate
        , Action
+       , DebounceFn
        , WatchConfig(..)
        , WatchMode(..)
        , ThreadingMode(..)
@@ -85,6 +86,9 @@ type ActionPredicate = Event -> Bool
 
 -- | An action to be performed in response to an event.
 type Action = Event -> IO ()
+
+-- | A general debouncing function.
+type DebounceFn = Action -> IO Action
 
 -- | Predicate to always act.
 act :: ActionPredicate
