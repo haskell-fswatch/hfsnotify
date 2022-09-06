@@ -25,7 +25,11 @@ main = do
           withManagerConf conf $ \mgr -> do
             stop <- watchDir mgr watchedDir (const True) $ \ev -> do
               case ev of
+#ifdef darwin_HOST_OS
+                Modified {} -> throwIO $ userError "Oh no!"
+#else
                 Added {} -> throwIO $ userError "Oh no!"
+#endif
                 _ -> return ()
 
             writeFile (watchedDir </> "testfile") "foo"

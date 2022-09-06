@@ -102,7 +102,8 @@ eventTests threadingMode = describe "Tests" $
                   if | nested && not recursive -> events `shouldBe` []
                      | otherwise -> case events of
 #ifdef darwin_HOST_OS
-                         [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+                         [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+                         [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
 #else
                          [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
 #endif
