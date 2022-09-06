@@ -119,5 +119,8 @@ eventTests threadingMode = describe "Tests" $
                        [cw@(CloseWrite {}), m@(Modified {})]
                          | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
                            && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
+                       [m@(Modified {}), cw@(CloseWrite {})]
+                         | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
+                           && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
                        _ -> expectationFailure $ "Got wrong events: " <> show events
 #endif
