@@ -62,9 +62,6 @@ module System.FSNotify
        , watchTree
        , watchTreeChan
 
-       -- * Debouncing
-       , makeDebouncedAction
-
        ) where
 
 import Prelude hiding (FilePath)
