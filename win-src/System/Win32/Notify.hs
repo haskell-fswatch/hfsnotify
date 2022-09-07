@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module System.Win32.Notify
   ( Event(..)
@@ -22,6 +23,7 @@ module System.Win32.Notify
 
 import Control.Concurrent
 import Control.Concurrent.MVar
+import Control.Exception.Safe
 import Control.Monad (forever)
 import Data.Bits
 import Data.List (intersect)
