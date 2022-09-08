@@ -95,9 +95,15 @@ eventTests threadingMode = describe "Tests" $
           it "works with a modified file" $ \(_watchedDir, f, getEvents, clearEvents) -> do
             writeFile f "" >> clearEvents
 
+#ifdef mingw32_HOST_OS
+            writeFile f "foo"
+            do
+#else
             withFile f WriteMode $ \h ->
               flip finally (hClose h) $ do
                 hPutStr h "foo"
+#endif
+
                 pauseAndRetryOnExpectationFailure 3 $ getEvents >>= \events ->
                   if | nested && not recursive -> events `shouldBe` []
                      | otherwise -> case events of

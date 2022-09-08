@@ -23,7 +23,7 @@ module System.Win32.Notify
 
 import Control.Concurrent
 import Control.Concurrent.MVar
-import Control.Exception.Safe
+import Control.Exception.Safe (SomeException, catch)
 import Control.Monad (forever)
 import Data.Bits
 import Data.List (intersect)
