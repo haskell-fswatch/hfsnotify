@@ -53,25 +53,25 @@ instance Exception EventVarietyMismatchException
 fsnEvents :: RawFilePath -> UTCTime -> INo.Event -> IO [Event]
 fsnEvents basePath' timestamp (INo.Attributes (boolToIsDirectory -> isDir) (Just raw)) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [ModifiedAttributes (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just raw)) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Modified (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Closed (boolToIsDirectory -> isDir) (Just raw) True) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
-  fromRawFilePath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp INo.DeletedSelf = do
   basePath <- fromRawFilePath basePath'
   return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
@@ -102,7 +102,8 @@ instance FileListener INotifyListener () where
     rawPath <- toRawFilePath path
     canonicalRawPath <- canonicalizeRawDirPath rawPath
     watchStillExistsVar <- newMVar True
-    wd <- INo.addWatch listenerINotify varieties canonicalRawPath (handleInoEvent actPred callback canonicalRawPath watchStillExistsVar)
+    hinotifyPath <- rawToHinotifyPath canonicalRawPath
+    wd <- INo.addWatch listenerINotify varieties hinotifyPath (handleInoEvent actPred callback canonicalRawPath watchStillExistsVar)
     return $
       modifyMVar_ watchStillExistsVar $ \wse -> do
         when wse $ INo.removeWatch wd
@@ -146,15 +147,17 @@ watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar act
     Nothing -> return Nothing
     Just wds -> do
       watchStillExistsVar <- newMVar True
-      wd <- INo.addWatch listenerINotify varieties rawFilePath (handleRecursiveEvent rawFilePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
+      hinotifyPath <- rawToHinotifyPath rawFilePath
+      wd <- INo.addWatch listenerINotify varieties hinotifyPath (handleRecursiveEvent rawFilePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
       return $ Just ((wd, watchStillExistsVar):wds)
 
 
 handleRecursiveEvent :: RawFilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
 handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedDir listener wdVar event = do
   case event of
-    (INo.Created True rawDirPath) -> do
+    (INo.Created True hiNotifyPath) -> do
       -- A new directory was created, so add recursive inotify watches to it
+      rawDirPath <- rawFromHinotifyPath hiNotifyPath
       let newRawDir = baseDir <//> rawDirPath
       timestampBeforeAddingWatch <- getPOSIXTime
       watchDirectoryRecursively listener wdVar actPred callback False newRawDir
@@ -223,7 +226,6 @@ boolToIsDirectory :: Bool -> EventIsDirectory
 boolToIsDirectory False = IsFile
 boolToIsDirectory True = IsDirectory
 
-#if MIN_VERSION_hinotify(0, 3, 10)
 toRawFilePath :: FilePath -> IO BS.ByteString
 toRawFilePath fp = do
   enc <- getFileSystemEncoding
@@ -233,7 +235,23 @@ fromRawFilePath :: BS.ByteString -> IO FilePath
 fromRawFilePath bs = do
   enc <- getFileSystemEncoding
   BS.useAsCString bs (F.peekCString enc)
+
+#if MIN_VERSION_hinotify(0, 3, 10)
+fromHinotifyPath :: BS.ByteString -> IO FilePath
+fromHinotifyPath = fromRawFilePath
+
+rawToHinotifyPath :: BS.ByteString -> IO BS.ByteString
+rawToHinotifyPath = return
+
+rawFromHinotifyPath :: BS.ByteString -> IO BS.ByteString
+rawFromHinotifyPath = return
 #else
-toRawFilePath = return . id
-fromRawFilePath = return . id
+fromHinotifyPath :: FilePath -> IO FilePath
+fromHinotifyPath = return
+
+rawToHinotifyPath :: BS.ByteString -> IO FilePath
+rawToHinotifyPath = fromRawFilePath
+
+rawFromHinotifyPath :: FilePath -> IO BS.ByteString
+rawFromHinotifyPath = toRawFilePath
 #endif
