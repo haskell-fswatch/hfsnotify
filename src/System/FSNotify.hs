@@ -91,7 +91,7 @@ import System.FSNotify.Win32
 #    ifdef OS_Mac
 import System.FSNotify.OSX
 #    else
-type NativeManager = PollManager
+type NativeManager = error "No native file watcher is available on this system. Please use WatchModePoll instead."
 #    endif
 #  endif
 #endif
@@ -108,12 +108,15 @@ data WatchManager = forall manager argType. FileListener manager argType =>
 --
 -- * Uses OS watch mode and single thread.
 defaultConfig :: WatchConfig
-defaultConfig =
-  WatchConfig
-    { confWatchMode = WatchModeOS
-    , confThreadingMode = SingleThread
-    , confOnHandlerException = defaultOnHandlerException
-    }
+defaultConfig = WatchConfig {
+#ifdef OS_BSD
+  confWatchMode = WatchModePoll
+#else
+  confWatchMode = WatchModeOS
+#endif
+  , confThreadingMode = SingleThread
+  , confOnHandlerException = defaultOnHandlerException
+  }
 
 defaultOnHandlerException :: SomeException -> IO ()
 defaultOnHandlerException e = putStrLn ("fsnotify: handler threw exception: " <> show e)
@@ -158,10 +161,12 @@ startManagerConf conf = do
 
   case confWatchMode conf of
     WatchModePoll interval -> WatchManager conf <$> liftIO (createPollManager interval) <*> cleanupVar <*> globalWatchChan
+#ifndef OS_BSD
     WatchModeOS -> liftIO (initSession ()) >>= createManager
+#endif
 
   where
-    createManager :: Either Text NativeManager -> IO (WatchManager)
+    createManager :: Either Text NativeManager -> IO WatchManager
     createManager (Right nativeManager) = WatchManager conf nativeManager <$> cleanupVar <*> globalWatchChan
     createManager (Left err) = throwIO $ userError $ T.unpack $ "Error: couldn't start native file manager: " <> err
 

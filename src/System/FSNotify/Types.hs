@@ -2,6 +2,7 @@
 -- Copyright (c) 2012 Mark Dittmer - http://www.markdittmer.org
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
+{-# LANGUAGE CPP #-}
 
 module System.FSNotify.Types
        ( act
@@ -54,11 +55,14 @@ type EventAndActionChannel = Chan (Event, Action)
 
 -- | Method of watching for changes.
 data WatchMode =
-  WatchModeOS
-  -- ^ Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.)
-  | WatchModePoll { watchModePollInterval :: Int }
+  WatchModePoll { watchModePollInterval :: Int }
   -- ^ Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
-  -- unless you're experiencing problems with 'WatchModeOS'.
+  -- unless you're experiencing problems with 'WatchModeOS' (or 'WatchModeOS' is not supported on your platform).
+#ifndef OS_BSD
+  | WatchModeOS
+  -- ^ Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.).
+  -- Not currently available on *BSD.
+#endif
 
 data ThreadingMode =
   SingleThread

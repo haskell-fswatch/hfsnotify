@@ -51,6 +51,8 @@ library
     cpp-options: -DOS_Windows
   if os(darwin)
     cpp-options: -DOS_Mac
+  if os(freebsd) || os(netbsd) || os(freebsd)
+    cpp-options: -DOS_BSD
   if os(linux)
     other-modules:
         System.FSNotify.Linux
@@ -102,6 +104,8 @@ executable tests
     cpp-options: -DOS_Windows
   if os(darwin)
     cpp-options: -DOS_Mac
+  if os(freebsd) || os(netbsd) || os(freebsd)
+    cpp-options: -DOS_BSD
   if os(windows)
     build-depends:
         Win32
