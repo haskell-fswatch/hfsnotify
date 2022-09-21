@@ -72,8 +72,8 @@ library:
     - System.FSNotify.Devel
 
 
-tests:
-  test:
+executables:
+  tests:
     main: Main.hs
     source-dirs:
     - test
@@ -83,10 +83,7 @@ tests:
     dependencies:
     - base >= 4.3.1.0
     - exceptions
-    - hspec
-    - hspec-core
-    - hspec-expectations
-    - HUnit
+    - sandwich
     - directory
     - filepath
     - unix-compat
@@ -94,6 +91,7 @@ tests:
     - async >= 2
     - safe-exceptions
     - temporary
+    - unliftio
     - random
     - retry
     when:

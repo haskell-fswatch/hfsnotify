@@ -73,8 +73,7 @@ library
         hfsevents >=0.1.3
   default-language: Haskell2010
 
-test-suite test
-  type: exitcode-stdio-1.0
+executable tests
   main-is: Main.hs
   other-modules:
       FSNotify.Test.EventTests
@@ -84,21 +83,19 @@ test-suite test
       test
   ghc-options: -threaded -Wall
   build-depends:
-      HUnit
-    , async >=2
+      async >=2
     , base >=4.3.1.0
     , directory
     , exceptions
     , filepath
     , fsnotify
-    , hspec
-    , hspec-core
-    , hspec-expectations
     , random
     , retry
     , safe-exceptions
+    , sandwich
     , temporary
     , unix-compat
+    , unliftio
   if os(linux)
     cpp-options: -DOS_Linux
   if os(windows)
