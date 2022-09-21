@@ -58,7 +58,7 @@ jobs:
 
     - name: Test
       run: |
-        cabal test all
+        cabal run tests -- --print
 
   stack:
     name: stack ${{ matrix.stack }} / ${{ matrix.os }} / resolver ${{ matrix.resolver }}
@@ -110,4 +110,4 @@ jobs:
 
     - name: Test
       run: |
-        stack test --resolver ${{matrix.resolver}}
+        stack run tests --resolver ${{matrix.resolver}} -- --print
