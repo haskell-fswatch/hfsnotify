@@ -25,7 +25,7 @@ type ListenFn sessionType argType = FileListener sessionType argType => WatchCon
 
 -- | A typeclass that imposes structure on watch managers capable of listening
 -- for events, or simulated listening for events.
-class FileListener sessionType argType  | sessionType -> argType where
+class FileListener sessionType argType | sessionType -> argType where
   -- | Initialize a file listener instance.
   initSession :: argType -> IO (Either Text sessionType)
   -- ^ An initialized file listener, or a reason why one wasn't able to start.

@@ -149,7 +149,7 @@ withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
 withManagerConf conf = bracket (startManagerConf conf) stopManager
 
 -- | Like 'startManager', but configurable
-startManagerConf :: WatchConfig -> IO (WatchManager)
+startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf conf = do
 # ifdef OS_Win32
   -- See https://github.com/haskell-fswatch/hfsnotify/issues/50
