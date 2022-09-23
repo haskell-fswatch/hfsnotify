@@ -51,7 +51,7 @@ library
     cpp-options: -DOS_Windows
   if os(darwin)
     cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(freebsd)
+  if os(freebsd) || os(netbsd) || os(openbsd)
     cpp-options: -DOS_BSD
   if os(linux)
     other-modules:
@@ -104,7 +104,7 @@ executable tests
     cpp-options: -DOS_Windows
   if os(darwin)
     cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(freebsd)
+  if os(freebsd) || os(netbsd) || os(openbsd)
     cpp-options: -DOS_BSD
   if os(windows)
     build-depends:

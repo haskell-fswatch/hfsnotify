@@ -21,7 +21,7 @@ when:
   cpp-options: -DOS_Windows
 - condition: os(darwin)
   cpp-options: -DOS_Mac
-- condition: os(freebsd) || os(netbsd) || os(freebsd)
+- condition: os(freebsd) || os(netbsd) || os(openbsd)
   cpp-options: -DOS_BSD
 
 library:
