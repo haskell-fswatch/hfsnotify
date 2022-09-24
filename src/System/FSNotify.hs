@@ -84,17 +84,16 @@ import Data.Monoid
 
 #ifdef OS_Linux
 import System.FSNotify.Linux
-#else
-#  ifdef OS_Win32
-import System.FSNotify.Win32
-#  else
-#    ifdef OS_Mac
-import System.FSNotify.OSX
-#    else
-type NativeManager = error "No native file watcher is available on this system. Please use WatchModePoll instead."
-#    endif
-#  endif
 #endif
+
+#ifdef OS_Win32
+import System.FSNotify.Win32
+#endif
+
+#ifdef OS_Mac
+import System.FSNotify.OSX
+#endif
+
 
 -- | Watch manager. You need one in order to create watching jobs.
 data WatchManager = forall manager argType. FileListener manager argType =>
@@ -110,7 +109,7 @@ data WatchManager = forall manager argType. FileListener manager argType =>
 defaultConfig :: WatchConfig
 defaultConfig = WatchConfig {
 #ifdef OS_BSD
-  confWatchMode = WatchModePoll
+  confWatchMode = WatchModePoll 500000
 #else
   confWatchMode = WatchModeOS
 #endif
@@ -166,9 +165,11 @@ startManagerConf conf = do
 #endif
 
   where
+#ifndef OS_BSD
     createManager :: Either Text NativeManager -> IO WatchManager
     createManager (Right nativeManager) = WatchManager conf nativeManager <$> cleanupVar <*> globalWatchChan
     createManager (Left err) = throwIO $ userError $ T.unpack $ "Error: couldn't start native file manager: " <> err
+#endif
 
     globalWatchChan = case confThreadingMode conf of
       SingleThread -> do

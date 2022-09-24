@@ -93,7 +93,11 @@ introduceTestFolder threadingMode poll recursive nested = introduceWith "Make te
     when isMac $ threadDelay 2000000
 
     let conf = defaultConfig {
+#ifdef OS_BSD
+          confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else error "No native watcher available."
+#else
           confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
+#endif
           , confThreadingMode = threadingMode
           }
 
