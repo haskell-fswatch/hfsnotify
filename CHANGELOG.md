@@ -1,6 +1,11 @@
 Changes
 =======
 
+Version 0.4.0.1
+---------------
+
+* Fix compatibility with *BSD.
+
 Version 0.4.0.0
 ---------------
 
