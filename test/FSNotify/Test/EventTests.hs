@@ -19,7 +19,7 @@ import FSNotify.Test.Util
 import Prelude hiding (FilePath)
 import System.FSNotify
 import System.FilePath
-import System.IO (hPutStr)
+import System.IO (hPutStr, openFile)
 import Test.Sandwich
 import UnliftIO hiding (poll)
 import UnliftIO.Directory
@@ -55,7 +55,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
   itWithFolder "works with a new file" $ do
     TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
-    h <- openFile f AppendMode
+    h <- liftIO $ openFile f AppendMode
 
     flip finally (hClose h) $
       pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
