@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module FSNotify.Test.Util where
 
@@ -123,8 +124,13 @@ withRandomTempDirectory action = do
   withSystemTempDirectory ("test." <> randomID) action
 
 withParallelSemaphore :: forall context m. (
-  MonadUnliftIO m, HasParallelSemaphore context
+  MonadUnliftIO m, HasLabel context "parallelSemaphore" QSem
   ) => SpecFree context m () -> SpecFree context m ()
 withParallelSemaphore = around' (defaultNodeOptions { nodeOptionsRecordTime = False, nodeOptionsVisibilityThreshold = 125 }) "claim semaphore" $ \action -> do
-  s <- getContext parallelSemaphore
+  s <- getContext parallelSemaphore'
   bracket_ (liftIO $ waitQSem s) (liftIO $ signalQSem s) (void action)
+
+parallelSemaphore' :: Label "parallelSemaphore" QSem
+parallelSemaphore' = Label
+
+type HasParallelSemaphore' context = HasLabel context "parallelSemaphore" QSem

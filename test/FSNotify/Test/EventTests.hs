@@ -25,7 +25,7 @@ import UnliftIO hiding (poll)
 import UnliftIO.Directory
 
 
-eventTests :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore context) => ThreadingMode -> SpecFree context m ()
+eventTests :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context) => ThreadingMode -> SpecFree context m ()
 eventTests threadingMode = describe "Tests" $ parallel $ do
 #ifdef OS_BSD
   let pollOptions = [True]
@@ -41,7 +41,7 @@ eventTests threadingMode = describe "Tests" $ parallel $ do
 
 
 
-eventTests' :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore context, ?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
+eventTests' :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context, ?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
 eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
   let itWithFolder name action = introduceTestFolder threadingMode poll recursive nested $ it name action
 
