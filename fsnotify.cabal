@@ -97,7 +97,7 @@ executable tests
     , sandwich
     , temporary
     , unix-compat
-    , unliftio
+    , unliftio >=0.2.20
   if os(linux)
     cpp-options: -DOS_Linux
   if os(windows)

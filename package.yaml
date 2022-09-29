@@ -93,7 +93,7 @@ executables:
     - async >= 2
     - safe-exceptions
     - temporary
-    - unliftio
+    - unliftio >= 0.2.20
     - random
     - retry
     when:
