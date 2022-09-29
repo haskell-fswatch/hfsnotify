@@ -100,6 +100,8 @@ jobs:
 
         # Certain resolvers need dedicated stack.yaml files
         STACK_EXTRA_ARGS="--resolver ${{matrix.resolver}}"
+        [ "${{matrix.resolver}}" = "lts-14" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts14.yaml"
+        [ "${{matrix.resolver}}" = "lts-15" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts15.yaml"
         [ "${{matrix.resolver}}" = "lts-16" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts16.yaml"
 
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
