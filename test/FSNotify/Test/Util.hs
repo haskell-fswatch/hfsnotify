@@ -120,7 +120,7 @@ introduceTestFolder threadingMode poll recursive nested = introduceWith "Make te
 -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
 withRandomTempDirectory :: MonadUnliftIO m => (FilePath -> m ()) -> m ()
 withRandomTempDirectory action = do
-  randomID <- replicateM 10 $ R.randomRIO ('a', 'z')
+  randomID <- liftIO $ replicateM 10 $ R.randomRIO ('a', 'z')
   withSystemTempDirectory ("test." <> randomID) action
 
 withParallelSemaphore :: forall context m. (

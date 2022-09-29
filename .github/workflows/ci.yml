@@ -98,6 +98,12 @@ jobs:
       run: |
         stack setup --resolver ${{matrix.resolver}}
 
+        # Certain resolvers need dedicated stack.yaml files
+        STACK_EXTRA_ARGS="--resolver ${{matrix.resolver}}"
+        [ "${{matrix.resolver}}" = "lts-16" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts16.yaml"
+
+        echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
+
     - uses: actions/cache@v1
       name: Cache ~/.stack
       with:
@@ -106,8 +112,8 @@ jobs:
 
     - name: Build
       run: |
-        stack build --resolver ${{matrix.resolver}} --test --bench --no-run-tests --no-run-benchmarks
+        stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
       run: |
-        stack run tests --resolver ${{matrix.resolver}} -- --print
+        stack run tests $STACK_EXTRA_ARGS -- --print
