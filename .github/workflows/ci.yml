@@ -69,13 +69,13 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         stack: ["2.7.5"]
         resolver:
-          - lts-12
-          - lts-13
-          - lts-14
-          - lts-15
-          - lts-16
-          - lts-18
-          - lts-19
+          - lts-12 # 8.4.4
+          - lts-13 # 8.6.3
+          - lts-14 # 8.6.5
+          - lts-15 # 8.8.2
+          - lts-16 # 8.8.4
+          - lts-18 # 8.10.7
+          - lts-19 # 9.0.2
         exclude:
           # GHC bug on this version causes the build to fail ("Access violation in generated code when writing 0x0")
           - os: windows-latest
