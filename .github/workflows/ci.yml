@@ -93,6 +93,7 @@ jobs:
         stack-version: ${{ matrix.stack }}
 
     - name: Run stack setup
+      shell: bash
       run: |
         stack setup --resolver ${{matrix.resolver}}
 
