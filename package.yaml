@@ -85,7 +85,6 @@ executables:
     dependencies:
     - base >= 4.3.1.0
     - exceptions
-    - sandwich
     - directory
     - filepath
     - unix-compat
@@ -98,4 +97,10 @@ executables:
     - retry
     when:
     - condition: os(windows)
-      dependencies: Win32
+      then:
+        dependencies:
+        - Win32
+        - sandwich >= 0.1.1.1 # Earliest version to support windows
+      else:
+        dependencies:
+        - sandwich
