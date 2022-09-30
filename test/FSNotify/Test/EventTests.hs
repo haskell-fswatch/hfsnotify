@@ -122,7 +122,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
     liftIO (writeFile f "" >> clearEvents)
 
 #ifdef mingw32_HOST_OS
-    writeFile f "foo"
+    liftIO $ writeFile f "foo"
     do
 #else
     withFile f WriteMode $ \h ->
