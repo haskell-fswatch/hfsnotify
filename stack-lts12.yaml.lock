@@ -25,6 +25,13 @@ packages:
       sha256: 0e15f272a0c0e827aa05d99df5be21be76a6fd362c83c04bafd252b2ac4d8def
   original:
     hackage: string-interpolate-0.3.1.2@sha256:4d0987f453c66040aa8e482fe28a7d3cdc9d8df01b698bc92f42a592cfb337db,4268
+- completed:
+    hackage: stm-2.5.1.0@sha256:2728bfed3864c4bd77cb65ffa23be35c30124fd0054b9e103460a8986aac0ea0,2308
+    pantry-tree:
+      size: 1392
+      sha256: 7aaec938904b73ce0ed2ee62a14205acd3534fd70ec7980a70a9f8506d0c8ddf
+  original:
+    hackage: stm-2.5.1.0@sha256:2728bfed3864c4bd77cb65ffa23be35c30124fd0054b9e103460a8986aac0ea0,2308
 snapshots:
 - completed:
     size: 509471
