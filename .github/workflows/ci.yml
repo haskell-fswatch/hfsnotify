@@ -69,8 +69,6 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         stack: ["2.7.5"]
         resolver:
-          - lts-9
-          - lts-11
           - lts-12
           - lts-13
           - lts-14
