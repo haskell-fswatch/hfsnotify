@@ -110,7 +110,7 @@ jobs:
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.resolver }}-stack-${{ matrix.stack }}-key1
+        key: ${{ runner.os }}-${{ matrix.resolver }}-stack-${{ matrix.stack }}-key2
 
     - name: Build
       run: |
