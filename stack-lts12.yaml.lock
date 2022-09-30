@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: sandwich-0.1.0.11@sha256:e8eb36e7e0c63e29e19b9ddaf9d315b7a93aff3d6f348b44d8d5218da0c28fb2,7430
+    hackage: sandwich-0.1.1.1@sha256:2ff5784dfa23f9159c806fbb984f2aa9af6db4b1f2ba60e0f90bdc0d25352be0,8794
     pantry-tree:
-      size: 5671
-      sha256: abe50c8a10609d42b10fdc506a0654c1cf56a7ba3b32921dd8c295f97b99efd2
+      size: 5797
+      sha256: 2733a5cce5e30f8dd72e3c37f1df6a34a2a4cca97f788e408c3147dd6de7afa6
   original:
-    hackage: sandwich-0.1.0.11@sha256:e8eb36e7e0c63e29e19b9ddaf9d315b7a93aff3d6f348b44d8d5218da0c28fb2,7430
+    hackage: sandwich-0.1.1.1@sha256:2ff5784dfa23f9159c806fbb984f2aa9af6db4b1f2ba60e0f90bdc0d25352be0,8794
 - completed:
     hackage: unliftio-0.2.22.0@sha256:2a3f0298a293c48eddd10c25cbbd6206b6e745cee2e648e48e16531a3ef21ce8,3314
     pantry-tree:
@@ -27,7 +27,7 @@ packages:
     hackage: string-interpolate-0.3.1.2@sha256:4d0987f453c66040aa8e482fe28a7d3cdc9d8df01b698bc92f42a592cfb337db,4268
 snapshots:
 - completed:
-    size: 524996
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/27.yaml
-    sha256: 7ea31a280c56bf36ff591a7397cc384d0dff622e7f9e4225b47d8980f019a0f0
-  original: lts-14.27
+    size: 509471
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/12/26.yaml
+    sha256: 95f014df58d0679b1c4a2b7bf2b652b61da8d30de5f571abb0d59015ef678646
+  original: lts-12.26

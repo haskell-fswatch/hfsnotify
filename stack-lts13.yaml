@@ -1,9 +1,9 @@
-resolver: lts-14.27
+resolver: lts-13.19
 
 packages:
 - '.'
 
 extra-deps:
-- sandwich-0.1.0.11@sha256:e8eb36e7e0c63e29e19b9ddaf9d315b7a93aff3d6f348b44d8d5218da0c28fb2,7430
+- sandwich-0.1.1.1@sha256:2ff5784dfa23f9159c806fbb984f2aa9af6db4b1f2ba60e0f90bdc0d25352be0,8794
 - unliftio-0.2.22.0@sha256:2a3f0298a293c48eddd10c25cbbd6206b6e745cee2e648e48e16531a3ef21ce8,3314
 - string-interpolate-0.3.1.2@sha256:4d0987f453c66040aa8e482fe28a7d3cdc9d8df01b698bc92f42a592cfb337db,4268
