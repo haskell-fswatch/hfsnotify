@@ -5,10 +5,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module System.FSNotify.Win32
-       ( FileListener(..)
-       , NativeManager
-       ) where
+module System.FSNotify.Win32 (
+  FileListener(..)
+  , NativeManager
+  ) where
 
 import Control.Concurrent
 import Control.Monad (when)

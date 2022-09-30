@@ -18,7 +18,7 @@ when:
 - condition: os(linux)
   cpp-options: -DOS_Linux
 - condition: os(windows)
-  cpp-options: -DOS_Windows
+  cpp-options: -DOS_Win32
 - condition: os(darwin)
   cpp-options: -DOS_Mac
 - condition: os(freebsd) || os(netbsd) || os(openbsd)
