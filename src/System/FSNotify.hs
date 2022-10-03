@@ -43,6 +43,7 @@ module System.FSNotify (
 
   -- * Configuration
   , defaultConfig
+  , WatchConfig
   , confWatchMode
   , confThreadingMode
   , confOnHandlerException
