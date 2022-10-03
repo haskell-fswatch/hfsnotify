@@ -55,6 +55,20 @@ isWin = True
 isWin = False
 #endif
 
+isLinux :: Bool
+#ifdef linux_HOST_OS
+isLinux = True
+#else
+isLinux = False
+#endif
+
+isBSD :: Bool
+#ifdef OS_BSD
+isBSD = True
+#else
+isBSD = False
+#endif
+
 pauseAndRetryOnExpectationFailure :: (MonadUnliftIO m, ?timeInterval :: Int) => Int -> m a -> m a
 pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
 

@@ -27,11 +27,7 @@ import UnliftIO.Directory
 
 eventTests :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context) => ThreadingMode -> SpecFree context m ()
 eventTests threadingMode = describe "Tests" $ parallel $ do
-#ifdef OS_BSD
-  let pollOptions = [True]
-#else
-  let pollOptions = [False, True]
-#endif
+  let pollOptions = if isBSD then [True] else [False, True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallel $ do
     let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
@@ -113,12 +109,11 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
     pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
       if | poll -> return ()
          | nested && not recursive -> events `shouldBe` []
-         | otherwise -> case events of
-#ifdef mingw32_HOST_OS
+         | isWin -> case events of
              [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-#else
+             _ -> expectationFailure $ "Got wrong events: " <> show events
+         | otherwise -> case events of
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-#endif
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
   itWithFolder "works with a modified file" $ do
@@ -136,17 +131,15 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
         pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
           if | nested && not recursive -> events `shouldBe` []
-             | otherwise -> case events of
-#ifdef darwin_HOST_OS
+             | isMac -> case events of
                  [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                  [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-#else
+                 _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
+             | otherwise -> case events of
                  [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-#endif
                  _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
-#ifdef linux_HOST_OS
-  unless poll $
+  when isLinux $ unless poll $
     itWithFolder "gets a close_write" $ do
       TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
       liftIO (writeFile f "" >> clearEvents)
@@ -161,4 +154,3 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
                  | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
                    && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
-#endif
