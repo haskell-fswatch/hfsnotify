@@ -17,10 +17,12 @@
 
 {-# LANGUAGE NamedFieldPuns #-}
 
-module System.FSNotify.Devel
-  ( treeExtAny, treeExtExists,
-    doAllEvents,
-    allEvents, existsEvents
+module System.FSNotify.Devel (
+  treeExtAny
+  , treeExtExists
+  , doAllEvents
+  , allEvents
+  , existsEvents
   ) where
 
 import Data.Text

@@ -14,10 +14,10 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module System.FSNotify.Linux
-       ( FileListener(..)
-       , NativeManager
-       ) where
+module System.FSNotify.Linux (
+  FileListener(..)
+  , NativeManager
+  ) where
 
 import Control.Concurrent.MVar
 import Control.Exception.Safe as E

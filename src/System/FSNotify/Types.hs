@@ -4,21 +4,21 @@
 --
 {-# LANGUAGE CPP #-}
 
-module System.FSNotify.Types
-       ( act
-       , ActionPredicate
-       , Action
-       , DebounceFn
-       , WatchConfig(..)
-       , WatchMode(..)
-       , ThreadingMode(..)
-       , Event(..)
-       , EventIsDirectory(..)
-       , EventCallback
-       , EventChannel
-       , EventAndActionChannel
-       , IOEvent
-       ) where
+module System.FSNotify.Types (
+  act
+  , ActionPredicate
+  , Action
+  , DebounceFn
+  , WatchConfig(..)
+  , WatchMode(..)
+  , ThreadingMode(..)
+  , Event(..)
+  , EventIsDirectory(..)
+  , EventCallback
+  , EventChannel
+  , EventAndActionChannel
+  , IOEvent
+  ) where
 
 import Control.Concurrent.Chan
 import Control.Exception.Safe

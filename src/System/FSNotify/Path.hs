@@ -7,13 +7,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
 
-module System.FSNotify.Path
-       ( findFiles
-       , findFilesAndDirs
-       , canonicalizeDirPath
-       , canonicalizePath
-       , hasThisExtension
-       ) where
+module System.FSNotify.Path (
+  findFiles
+  , findFilesAndDirs
+  , canonicalizeDirPath
+  , canonicalizePath
+  , hasThisExtension
+  ) where
 
 import Control.Monad
 import qualified Data.Text as T

@@ -7,8 +7,8 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 
-module System.FSNotify.Polling
-  ( createPollManager
+module System.FSNotify.Polling (
+  createPollManager
   , PollManager(..)
   , FileListener(..)
   ) where

@@ -27,42 +27,39 @@
 -- >    -- sleep forever (until interrupted)
 -- >    forever $ threadDelay 1000000
 
-module System.FSNotify
-       (
+module System.FSNotify (
+  -- * Events
+    Event(..)
+  , EventIsDirectory(..)
+  , EventChannel
+  , Action
+  , ActionPredicate
 
-       -- * Events
-         Event(..)
-       , EventIsDirectory(..)
-       , EventChannel
-       , Action
-       , ActionPredicate
+  -- * Starting/Stopping
+  , WatchManager
+  , withManager
+  , startManager
+  , stopManager
 
-       -- * Starting/Stopping
-       , WatchManager
-       , withManager
-       , startManager
-       , stopManager
+  -- * Configuration
+  , defaultConfig
+  , confWatchMode
+  , confThreadingMode
+  , confOnHandlerException
+  , WatchMode(..)
+  , ThreadingMode(..)
 
-       -- * Configuration
-       , defaultConfig
-       , confWatchMode
-       , confThreadingMode
-       , confOnHandlerException
-       , WatchMode(..)
-       , ThreadingMode(..)
+  -- * Lower level
+  , withManagerConf
+  , startManagerConf
+  , StopListening
 
-       -- * Lower level
-       , withManagerConf
-       , startManagerConf
-       , StopListening
-
-       -- * Watching
-       , watchDir
-       , watchDirChan
-       , watchTree
-       , watchTreeChan
-
-       ) where
+  -- * Watching
+  , watchDir
+  , watchDirChan
+  , watchTree
+  , watchTreeChan
+  ) where
 
 import Prelude hiding (FilePath)
 

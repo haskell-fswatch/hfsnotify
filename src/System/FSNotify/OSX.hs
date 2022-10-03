@@ -5,10 +5,10 @@
 
 {-# LANGUAGE MultiWayIf, OverloadedStrings, MultiParamTypeClasses #-}
 
-module System.FSNotify.OSX
-       ( FileListener(..)
-       , NativeManager
-       ) where
+module System.FSNotify.OSX (
+  FileListener(..)
+  , NativeManager
+  ) where
 
 import Control.Concurrent
 import Control.Monad
