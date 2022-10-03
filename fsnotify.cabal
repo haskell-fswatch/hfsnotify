@@ -94,7 +94,6 @@ executable tests
     , random
     , retry
     , safe-exceptions
-    , sandwich
     , temporary
     , unix-compat
     , unliftio >=0.2.20
@@ -109,4 +108,8 @@ executable tests
   if os(windows)
     build-depends:
         Win32
+      , sandwich >=0.1.1.1
+  else
+    build-depends:
+        sandwich
   default-language: Haskell2010
