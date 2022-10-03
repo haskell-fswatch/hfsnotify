@@ -18,7 +18,7 @@ import Prelude hiding (FilePath)
 import System.FSNotify.Types
 import System.FilePath
 
--- | An action that cancels a watching/listening job
+-- | An action that cancels a watching/listening job.
 type StopListening = IO ()
 
 type ListenFn sessionType argType = FileListener sessionType argType => WatchConfig -> sessionType -> FilePath -> ActionPredicate -> EventCallback -> IO StopListening

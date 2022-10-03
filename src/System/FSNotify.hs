@@ -4,7 +4,7 @@
 --
 {-# LANGUAGE CPP, ScopedTypeVariables, ExistentialQuantification, RankNTypes, LambdaCase, OverloadedStrings, MultiWayIf, FlexibleContexts, RecordWildCards, NamedFieldPuns #-}
 
--- | NOTE: This library does not currently report changes made to directories,
+-- | This library does not currently report changes made to directories,
 -- only files within watched directories.
 --
 -- Minimal example:
@@ -144,11 +144,11 @@ stopManager (WatchManager {..}) = do
     Nothing -> return ()
     Just (_, t) -> cancel t
 
--- | Like 'withManager', but configurable
+-- | Like 'withManager', but configurable.
 withManagerConf :: WatchConfig -> (WatchManager -> IO a) -> IO a
 withManagerConf conf = bracket (startManagerConf conf) stopManager
 
--- | Like 'startManager', but configurable
+-- | Like 'startManager', but configurable.
 startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf conf = do
 # ifdef OS_Win32

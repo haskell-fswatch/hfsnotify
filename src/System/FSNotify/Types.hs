@@ -40,11 +40,11 @@ data Event =
   | ModifiedAttributes { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | Removed { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- ^ Note: currently only emitted on Linux
+  -- ^ Note: Linux-only
   | CloseWrite  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- ^ Note: currently only emitted on Linux
+  -- ^ Note: Linux-only
   | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
-  -- ^ Note: currently only emitted on Linux
+  -- ^ Note: Linux-only
   deriving (Eq, Show)
 
 type EventChannel = Chan Event
@@ -73,14 +73,14 @@ data ThreadingMode =
   | ThreadPerEvent
   -- ^ Launch a separate thread for every event handler.
 
--- | Watch configuration
+-- | Watch configuration.
 data WatchConfig = WatchConfig
   { confWatchMode :: WatchMode
-    -- ^ Watch mode to use
+    -- ^ Watch mode to use.
   , confThreadingMode :: ThreadingMode
-    -- ^ Threading mode to use
+    -- ^ Threading mode to use.
   , confOnHandlerException :: SomeException -> IO ()
-    -- ^ Called when a handler throws an exception
+    -- ^ Called when a handler throws an exception.
   }
 
 type IOEvent = IORef Event
