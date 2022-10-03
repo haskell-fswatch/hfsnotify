@@ -30,6 +30,7 @@ import System.FilePath
 import System.PosixCompat.Files
 import System.PosixCompat.Types
 
+
 data EventType = AddedEvent
                | ModifiedEvent
                | RemovedEvent
@@ -37,8 +38,10 @@ data EventType = AddedEvent
 newtype WatchKey = WatchKey ThreadId deriving (Eq, Ord)
 data WatchData = WatchData FilePath EventCallback
 type WatchMap = Map WatchKey WatchData
-data PollManager = PollManager { pollManagerWatchMap :: MVar WatchMap
-                               , pollManagerInterval :: Int }
+data PollManager = PollManager {
+  pollManagerWatchMap :: MVar WatchMap
+  , pollManagerInterval :: Int
+  }
 
 generateEvent :: UTCTime -> EventIsDirectory -> EventType -> FilePath -> Maybe Event
 generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir)
