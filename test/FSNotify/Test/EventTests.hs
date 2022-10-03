@@ -55,9 +55,13 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
   itWithFolder "works with a new file" $ do
     TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
-    h <- openFile f AppendMode
 
-    flip finally (hClose h) $
+#ifdef mingw32_HOST_OS
+    liftIO $ writeFile f "foo"
+    do
+#else
+    withFile f AppendMode $ \_ -> do
+#endif
       pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
            | otherwise -> case events of
