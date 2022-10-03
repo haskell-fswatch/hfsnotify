@@ -52,14 +52,15 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
   itWithFolder "works with a new file" $ do
     TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
 
-#ifdef mingw32_HOST_OS
-    liftIO $ writeFile f "foo"
-    do
-#else
-    withFile f AppendMode $ \_ -> do
-#endif
+    let wrapper action = if | isWin -> liftIO (writeFile f "foo") >> action
+                            | otherwise -> withFile f AppendMode $ \_ -> action
+
+    wrapper $
       pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
+           | isWin && not poll -> case events of
+               [Modified {}, Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               _ -> expectationFailure $ "Got wrong events: " <> show events
            | otherwise -> case events of
                [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
