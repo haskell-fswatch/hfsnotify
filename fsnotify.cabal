@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -45,6 +45,7 @@ library
     , text >=0.11.0
     , time >=1.1
     , unix-compat >=0.2
+  default-language: Haskell2010
   if os(linux)
     cpp-options: -DOS_Linux
   if os(windows)
@@ -73,7 +74,6 @@ library
         System.FSNotify.OSX
     build-depends:
         hfsevents >=0.1.3
-  default-language: Haskell2010
 
 executable tests
   main-is: Main.hs
@@ -97,6 +97,7 @@ executable tests
     , temporary
     , unix-compat
     , unliftio >=0.2.20
+  default-language: Haskell2010
   if os(linux)
     cpp-options: -DOS_Linux
   if os(windows)
@@ -112,4 +113,3 @@ executable tests
   else
     build-depends:
         sandwich
-  default-language: Haskell2010
