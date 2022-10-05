@@ -3,5 +3,6 @@ dist/
 cabal.sandbox.config
 .cabal-sandbox/
 .stack-work
+dist-newstyle
 *~
 test_runs
