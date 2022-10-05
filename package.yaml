@@ -74,7 +74,7 @@ library:
     - System.FSNotify.Devel
 
 
-executables:
+tests:
   tests:
     main: Main.hs
     source-dirs:

@@ -75,7 +75,8 @@ library
     build-depends:
         hfsevents >=0.1.3
 
-executable tests
+test-suite tests
+  type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
       FSNotify.Test.EventTests
