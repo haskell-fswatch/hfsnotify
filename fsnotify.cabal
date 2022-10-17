@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           fsnotify
-version:        0.4.0.1
+version:        0.4.1.0
 synopsis:       Cross platform library for file change notification.
 description:    Cross platform library for file creation, modification, and deletion notification. This library builds upon existing libraries for platform-specific Windows, Mac, and Linux filesystem event notification.
 category:       Filesystem

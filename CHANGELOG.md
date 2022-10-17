@@ -1,6 +1,14 @@
 Changes
 =======
 
+Version 0.4.1.0
+---------------
+
+* Add `unliftio` lower bound (#106)
+* Change the tests back to a test-suite to avoid building for library users. (#107)
+* Fix up Windows compatibility.
+* Export `WatchConfig` type (#108)
+
 Version 0.4.0.1
 ---------------
 
