@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -121,24 +120,16 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
     TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
     liftIO (writeFile f "" >> clearEvents)
 
-#ifdef mingw32_HOST_OS
-    liftIO $ writeFile f "foo"
-    do
-#else
-    withFile f WriteMode $ \h ->
-      flip finally (hClose h) $ do
-        liftIO $ hPutStr h "foo"
-#endif
-
-        pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
-          if | nested && not recursive -> events `shouldBe` []
-             | isMac -> case events of
-                 [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-                 [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-                 _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
-             | otherwise -> case events of
-                 [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-                 _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
+    (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
+      pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+        if | nested && not recursive -> events `shouldBe` []
+           | isMac -> case events of
+               [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
+           | otherwise -> case events of
+               [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
   when isLinux $ unless poll $
     itWithFolder "gets a close_write" $ do
@@ -155,3 +146,15 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
                  | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
                    && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
+
+withSingleWriteFile :: MonadIO m => FilePath -> String -> m b -> m b
+withSingleWriteFile fp contents action = do
+  liftIO $ writeFile fp contents
+  action
+
+withOpenWritableAndWrite :: MonadUnliftIO m => FilePath -> String -> m b -> m b
+withOpenWritableAndWrite fp contents action = do
+  withFile fp WriteMode $ \h ->
+    flip finally (hClose h) $ do
+      liftIO $ hPutStr h contents
+      action
