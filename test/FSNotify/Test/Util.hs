@@ -62,11 +62,11 @@ isLinux = True
 isLinux = False
 #endif
 
-isBSD :: Bool
-#ifdef OS_BSD
-isBSD = True
+haveNativeWatcher :: Bool
+#ifdef HAVE_NATIVE_WATCHER
+haveNativeWatcher = True
 #else
-isBSD = False
+haveNativeWatcher = False
 #endif
 
 pauseAndRetryOnExpectationFailure :: (MonadUnliftIO m, ?timeInterval :: Int) => Int -> m a -> m a
@@ -108,7 +108,7 @@ introduceTestFolder threadingMode poll recursive nested = introduceWith "Make te
     when isMac $ threadDelay 2000000
 
     let conf = defaultConfig {
-#ifdef OS_BSD
+#ifndef HAVE_NATIVE_WATCHER
           confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else error "No native watcher available."
 #else
           confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
