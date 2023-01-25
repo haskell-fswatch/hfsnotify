@@ -32,7 +32,7 @@ eventTests :: (
   MonadUnliftIO m, MonadThrow m
   ) => TestFolderGenerator -> ThreadingMode -> SpecFree context m ()
 eventTests testFolderGenerator threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
-  let pollOptions = if isBSD then [True] else [False, True]
+  let pollOptions = if haveNativeWatcher then [False, True] else [True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallelWithoutDirectory $ do
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallelWithoutDirectory $
