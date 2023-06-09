@@ -55,7 +55,10 @@ type EventAndActionChannel = Chan (Event, Action)
 
 -- | Method of watching for changes.
 data WatchMode =
-  WatchModePoll { watchModePollInterval :: Int }
+  WatchModePoll { 
+    watchModePollInterval :: Int
+    -- ^ Polling interval in microseconds.
+  }
   -- ^ Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
   -- unless you're experiencing problems with 'WatchModeOS' (or 'WatchModeOS' is not supported on your platform).
 #ifndef OS_BSD
