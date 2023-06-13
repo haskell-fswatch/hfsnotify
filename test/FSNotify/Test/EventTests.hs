@@ -26,7 +26,7 @@ import UnliftIO.Directory
 
 eventTests :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context) => ThreadingMode -> SpecFree context m ()
 eventTests threadingMode = describe "Tests" $ parallel $ do
-  let pollOptions = if isBSD then [True] else [False, True]
+  let pollOptions = if haveNativeWatcher then [False, True] else [True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallel $ do
     let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
