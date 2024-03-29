@@ -121,6 +121,7 @@ defaultConfig = WatchConfig {
 #endif
   , confThreadingMode = SingleThread
   , confOnHandlerException = defaultOnHandlerException
+  , confPathFilter = const True
   }
 
 defaultOnHandlerException :: SomeException -> IO ()
