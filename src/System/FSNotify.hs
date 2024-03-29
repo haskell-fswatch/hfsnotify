@@ -55,6 +55,7 @@ module System.FSNotify (
   , confWatchMode
   , confThreadingMode
   , confOnHandlerException
+  , confPathFilter
   , WatchMode(..)
   , ThreadingMode(..)
 
