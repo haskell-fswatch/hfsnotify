@@ -84,8 +84,10 @@ data WatchConfig = WatchConfig
     -- ^ Threading mode to use.
   , confOnHandlerException :: SomeException -> IO ()
     -- ^ Called when a handler throws an exception.
-  , confPathFilter :: String->Bool
+#ifdef OS_Linux
+  , confPathFilter :: FilePath->IO Bool
     -- ^ Called to determine whether to watch a path.
+#endif
   }
 
 type IOEvent = IORef Event

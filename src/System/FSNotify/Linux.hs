@@ -23,7 +23,6 @@ import Control.Concurrent.MVar
 import Control.Exception.Safe as E
 import Control.Monad
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC
 import Data.Bool
 import Data.Function
 import Data.Monoid
@@ -135,7 +134,7 @@ instance FileListener INotifyListener () where
     rawInitialPath <- toRawFilePath initialPath
     rawCanonicalInitialPath <- canonicalizeRawDirPath rawInitialPath
     watchDirectoryRecursively listener wdVar actPred callback True rawCanonicalInitialPath
-    traverseAllDirs rawCanonicalInitialPath ((confPathFilter conf) . BSC.unpack) $ \subPath ->
+    traverseAllDirs rawCanonicalInitialPath (confPathFilter conf) $ \subPath ->
       watchDirectoryRecursively listener wdVar actPred callback False subPath
 
     return stopListening
@@ -203,15 +202,17 @@ canonicalizeRawDirPath p = fromRawFilePath p >>= canonicalizePath >>= toRawFileP
 (<//>) :: RawFilePath -> RawFilePath -> RawFilePath
 x <//> y = x <> "/" <> y
 
-traverseAllDirs :: RawFilePath -> (RawFilePath -> Bool) -> (RawFilePath -> IO ()) -> IO ()
-traverseAllDirs dir predicate cb = traverseAll dir $ \subPath ->
-  if not (predicate subPath) then return False
-  else do
-    -- TODO: wish we didn't need fromRawFilePath here
-    -- TODO: make sure this does the right thing with symlinks
-    fromRawFilePath subPath >>= getFileStatus >>= \case
-      (isDirectory -> True) -> cb subPath >> return True
-      _ -> return False
+traverseAllDirs :: RawFilePath -> (FilePath -> IO Bool) -> (RawFilePath -> IO ()) -> IO ()
+traverseAllDirs dir predicate cb = traverseAll dir $ \subRawPath -> do
+    subPath <- fromRawFilePath subRawPath
+    needWatch <- predicate subPath
+    if not needWatch then return False
+    else do
+      -- TODO: wish we didn't need fromRawFilePath here
+      -- TODO: make sure this does the right thing with symlinks
+      getFileStatus subPath >>= \case
+        (isDirectory -> True) -> cb subRawPath >> return True
+        _ -> return False
 
 traverseAll :: RawFilePath -> (RawFilePath -> IO Bool) -> IO ()
 traverseAll dir cb = bracket (openDirStream dir) closeDirStream $ \dirStream ->
