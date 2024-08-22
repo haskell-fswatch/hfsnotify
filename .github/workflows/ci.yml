@@ -20,6 +20,11 @@ jobs:
           - "8.10.7"
           - "9.0.2"
           - "9.2.4"
+        include:
+          - os: ubuntu-latest
+            ghc: "9.8"
+          - os: ubuntu-latest
+            ghc: "9.10"
         exclude:
           - os: macOS-latest
             ghc: 8.8.4
