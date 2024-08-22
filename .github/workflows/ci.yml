@@ -13,7 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        cabal: ["3.2"]
         ghc:
           - "8.10.7"
           - "9.0.2"
@@ -32,7 +31,7 @@ jobs:
       name: Setup Haskell (Cabal)
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ matrix.cabal }}
+        cabal-version: "latest"
 
     - name: Freeze
       run: |
@@ -44,6 +43,14 @@ jobs:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
 
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew update
+        # For older GHCs
+        brew install llvm@13 --quiet # Suppress deprecation warning
+        echo /opt/homebrew/opt/llvm@13/bin >> $GITHUB_PATH
+
     - name: Build
       run: |
         cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
@@ -54,22 +61,15 @@ jobs:
         cabal test
 
   stack:
-    name: stack ${{ matrix.stack }} / ${{ matrix.os }} / resolver ${{ matrix.resolver }}
+    name: stack / ${{ matrix.os }} / resolver ${{ matrix.resolver }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         resolver:
-        - lts-14 # 8.6.5
-        - lts-16 # 8.8.4
         - lts-18 # 8.10.7
         - lts-19 # 9.0.2
-        exclude:
-          # GHC bug on this version causes the build to fail ("Access violation in generated code when writing 0x0")
-          - os: windows-latest
-            resolver: lts-15
-
     steps:
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
@@ -84,13 +84,9 @@ jobs:
     - name: Run stack setup
       shell: bash
       run: |
-        stack setup --resolver ${{matrix.resolver}}
+        export STACK_EXTRA_ARGS="--resolver ${{matrix.resolver}}"
 
-        # Certain resolvers need dedicated stack.yaml files
-        STACK_EXTRA_ARGS="--resolver ${{matrix.resolver}}"
-        [ "${{matrix.resolver}}" = "lts-14" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts14.yaml"
-        [ "${{matrix.resolver}}" = "lts-15" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts15.yaml"
-        [ "${{matrix.resolver}}" = "lts-16" ] && STACK_EXTRA_ARGS="--stack-yaml stack-lts16.yaml"
+        stack setup $STACK_EXTRA_ARGS
 
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
@@ -98,7 +94,7 @@ jobs:
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.resolver }}-stack-${{ matrix.stack }}-key2
+        key: ${{ runner.os }}-${{ matrix.resolver }}-stack-key2
 
     - name: Build
       run: |
