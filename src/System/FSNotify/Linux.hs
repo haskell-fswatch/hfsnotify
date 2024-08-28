@@ -23,6 +23,7 @@ import Control.Concurrent.MVar
 import Control.Exception.Safe as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import Data.Bool
 import Data.Function
 import Data.Monoid
 import Data.String
@@ -109,7 +110,7 @@ instance FileListener INotifyListener () where
         when wse $ INo.removeWatch wd
         return False
 
-  listenRecursive _conf listener initialPath actPred callback = do
+  listenRecursive conf listener initialPath actPred callback = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -133,7 +134,7 @@ instance FileListener INotifyListener () where
     rawInitialPath <- toRawFilePath initialPath
     rawCanonicalInitialPath <- canonicalizeRawDirPath rawInitialPath
     watchDirectoryRecursively listener wdVar actPred callback True rawCanonicalInitialPath
-    traverseAllDirs rawCanonicalInitialPath $ \subPath ->
+    traverseAllDirs rawCanonicalInitialPath (confPathFilter conf) $ \subPath ->
       watchDirectoryRecursively listener wdVar actPred callback False subPath
 
     return stopListening
@@ -201,13 +202,17 @@ canonicalizeRawDirPath p = fromRawFilePath p >>= canonicalizePath >>= toRawFileP
 (<//>) :: RawFilePath -> RawFilePath -> RawFilePath
 x <//> y = x <> "/" <> y
 
-traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
-traverseAllDirs dir cb = traverseAll dir $ \subPath ->
-  -- TODO: wish we didn't need fromRawFilePath here
-  -- TODO: make sure this does the right thing with symlinks
-  fromRawFilePath subPath >>= getFileStatus >>= \case
-    (isDirectory -> True) -> cb subPath >> return True
-    _ -> return False
+traverseAllDirs :: RawFilePath -> (FilePath -> IO Bool) -> (RawFilePath -> IO ()) -> IO ()
+traverseAllDirs dir predicate cb = traverseAll dir $ \subRawPath -> do
+    subPath <- fromRawFilePath subRawPath
+    needWatch <- predicate subPath
+    if not needWatch then return False
+    else do
+      -- TODO: wish we didn't need fromRawFilePath here
+      -- TODO: make sure this does the right thing with symlinks
+      getFileStatus subPath >>= \case
+        (isDirectory -> True) -> cb subRawPath >> return True
+        _ -> return False
 
 traverseAll :: RawFilePath -> (RawFilePath -> IO Bool) -> IO ()
 traverseAll dir cb = bracket (openDirStream dir) closeDirStream $ \dirStream ->

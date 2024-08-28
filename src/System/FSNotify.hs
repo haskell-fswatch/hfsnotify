@@ -55,6 +55,9 @@ module System.FSNotify (
   , confWatchMode
   , confThreadingMode
   , confOnHandlerException
+#ifdef OS_Linux
+  , confPathFilter
+#endif
   , WatchMode(..)
   , ThreadingMode(..)
 
@@ -121,6 +124,9 @@ defaultConfig = WatchConfig {
 #endif
   , confThreadingMode = SingleThread
   , confOnHandlerException = defaultOnHandlerException
+#ifdef OS_Linux
+  , confPathFilter = const (return True)
+#endif
   }
 
 defaultOnHandlerException :: SomeException -> IO ()
