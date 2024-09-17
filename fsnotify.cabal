@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -47,13 +47,11 @@ library
     , unix-compat >=0.2
   default-language: Haskell2010
   if os(linux)
-    cpp-options: -DOS_Linux
+    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
   if os(windows)
-    cpp-options: -DOS_Win32
+    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
-    cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(openbsd)
-    cpp-options: -DOS_BSD
+    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
   if os(linux)
     other-modules:
         System.FSNotify.Linux
@@ -100,13 +98,11 @@ test-suite tests
     , unliftio >=0.2.20
   default-language: Haskell2010
   if os(linux)
-    cpp-options: -DOS_Linux
+    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
   if os(windows)
-    cpp-options: -DOS_Win32
+    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
-    cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(openbsd)
-    cpp-options: -DOS_BSD
+    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
   if os(windows)
     build-depends:
         Win32
