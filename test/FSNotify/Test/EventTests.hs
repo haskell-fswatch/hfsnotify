@@ -24,27 +24,29 @@ import UnliftIO hiding (poll)
 import UnliftIO.Directory
 
 
-eventTests :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context) => ThreadingMode -> SpecFree context m ()
+eventTests :: (
+  MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context
+  ) => ThreadingMode -> SpecFree context m ()
 eventTests threadingMode = describe "Tests" $ parallel $ do
   let pollOptions = if isBSD then [True] else [False, True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallel $ do
-    let ?timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
+    let timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallel $
       forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallel $
-        eventTests' threadingMode poll recursive nested
+        eventTests' timeInterval threadingMode poll recursive nested
 
-
-
-eventTests' :: (MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context, ?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
-eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
-  let itWithFolder name action = introduceTestFolder threadingMode poll recursive nested $ it name action
+eventTests' :: (
+  MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context
+  ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
+eventTests' timeInterval threadingMode poll recursive nested = do -- withParallelSemaphore $
+  let itWithFolder name action = introduceTestFolder timeInterval threadingMode poll recursive nested $ it name action
 
   unless (nested || poll || isMac || isWin) $ itWithFolder "deletes the watched directory" $ do
     TestFolderContext watchedDir _f getEvents _clearEvents <- getContext testFolderContext
     removeDirectory watchedDir
 
-    pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \case
+    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \case
       [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
       events -> expectationFailure $ "Got wrong events: " <> show events
 
@@ -55,7 +57,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
                             | otherwise -> withFile f AppendMode $ \_ -> action
 
     wrapper $
-      pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
                [Modified {}, Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -68,7 +70,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
     TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
     createDirectory f
 
-    pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
@@ -80,7 +82,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
     removeFile f
 
-    pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -92,7 +94,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
     removeDirectory f
 
-    pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
@@ -106,7 +108,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
 
     -- This test is disabled when polling because the PollManager only keeps track of
     -- modification time, so it won't catch an unrelated file attribute change
-    pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
       if | poll -> return ()
          | nested && not recursive -> events `shouldBe` []
          | isWin -> case events of
@@ -121,7 +123,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
     liftIO (writeFile f "" >> clearEvents)
 
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
-      pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isMac -> case events of
                [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -136,7 +138,7 @@ eventTests' threadingMode poll recursive nested = do -- withParallelSemaphore $
       TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
       liftIO (writeFile f "" >> clearEvents)
       liftIO $ withFile f WriteMode $ flip hPutStr "asdf"
-      pauseAndRetryOnExpectationFailure 3 $ liftIO getEvents >>= \events ->
+      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
            | otherwise -> case events of
                [cw@(CloseWrite {}), m@(Modified {})]

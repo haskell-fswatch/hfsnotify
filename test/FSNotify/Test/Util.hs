@@ -1,18 +1,20 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 module FSNotify.Test.Util where
 
 import Control.Exception.Safe (Handler(..))
 import Control.Monad
 import Control.Retry
+import Data.String.Interpolate
 import System.FSNotify
 import System.FilePath
 import System.PosixCompat.Files (touchFile)
@@ -21,7 +23,6 @@ import Test.Sandwich
 import UnliftIO hiding (poll, Handler)
 import UnliftIO.Concurrent
 import UnliftIO.Directory
-
 
 #if !MIN_VERSION_base(4,11,0)
 import Data.Monoid
@@ -69,14 +70,16 @@ isBSD = True
 isBSD = False
 #endif
 
-pauseAndRetryOnExpectationFailure :: (MonadUnliftIO m, ?timeInterval :: Int) => Int -> m a -> m a
-pauseAndRetryOnExpectationFailure n action = threadDelay ?timeInterval >> retryOnExpectationFailure n action
+pauseAndRetryOnExpectationFailure :: (MonadUnliftIO m) => Int -> Int -> m a -> m a
+pauseAndRetryOnExpectationFailure timeInterval n action = threadDelay timeInterval >> retryOnExpectationFailure n action
 
 retryOnExpectationFailure :: MonadUnliftIO m => Int -> m a -> m a
 #if MIN_VERSION_retry(0, 7, 0)
-retryOnExpectationFailure seconds action = withRunInIO $ \runInIO -> recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (\_ -> runInIO action)
+retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
+  recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (\_ -> runInIO action)
 #else
-retryOnExpectationFailure seconds action = withRunInIO $ \runInIO -> recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (runInIO action)
+retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
+  recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (runInIO action)
 #endif
   where
     handleFn :: SomeException -> IO Bool
@@ -94,9 +97,19 @@ data TestFolderContext = TestFolderContext {
 testFolderContext :: Label "testFolderContext" TestFolderContext
 testFolderContext = Label :: Label "testFolderContext" TestFolderContext
 
-introduceTestFolder :: (MonadUnliftIO m, ?timeInterval :: Int) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree (LabelValue "testFolderContext" TestFolderContext :> context) m () -> SpecFree context m ()
-introduceTestFolder threadingMode poll recursive nested = introduceWith "Make test folder" testFolderContext $ \action -> do
+introduceTestFolder :: (
+  MonadUnliftIO m
+  )
+  => Int
+  -> ThreadingMode
+  -> Bool
+  -> Bool
+  -> Bool
+  -> SpecFree (LabelValue "testFolderContext" TestFolderContext :> context) m ()
+  -> SpecFree context m ()
+introduceTestFolder timeInterval threadingMode poll recursive nested = introduceWith "Make test folder" testFolderContext $ \action -> do
   withRandomTempDirectory $ \watchedDir' -> do
+    info [i|Got temp directory: #{watchedDir'}|]
     let fileName = "testfile"
     let baseDir = if nested then watchedDir' </> "subdir" else watchedDir'
     let watchFn = if recursive then watchTree else watchDir
@@ -124,7 +137,7 @@ introduceTestFolder threadingMode poll recursive nested = introduceWith "Make te
           watchedDir = watchedDir'
           , filePath = normalise $ baseDir </> fileName
           , getEvents = readIORef eventsVar
-          , clearEvents = threadDelay ?timeInterval >> atomicWriteIORef eventsVar []
+          , clearEvents = threadDelay timeInterval >> atomicWriteIORef eventsVar []
           }
 
         stop
