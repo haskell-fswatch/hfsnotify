@@ -1,10 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant multi-way if" #-}
 
@@ -27,19 +29,19 @@ import UnliftIO.Directory
 eventTests :: (
   MonadUnliftIO m, MonadThrow m
   ) => ThreadingMode -> SpecFree context m ()
-eventTests threadingMode = describe "Tests" $ parallel $ do
+eventTests threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
   let pollOptions = if isBSD then [True] else [False, True]
 
-  forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallel $ do
+  forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallelWithoutDirectory $ do
     let timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
-    forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallel $
-      forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallel $
+    forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallelWithoutDirectory $
+      forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallelWithoutDirectory $
         eventTests' timeInterval threadingMode poll recursive nested
 
 eventTests' :: (
   MonadUnliftIO m, MonadThrow m
   ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
-eventTests' timeInterval threadingMode poll recursive nested = do -- withParallelSemaphore $
+eventTests' timeInterval threadingMode poll recursive nested = do
   let itWithFolder name action = introduceTestFolder timeInterval threadingMode poll recursive nested $ it name action
 
   unless (nested || poll || isMac || isWin) $ itWithFolder "deletes the watched directory" $ do

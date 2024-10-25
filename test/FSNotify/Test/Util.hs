@@ -13,6 +13,7 @@ module FSNotify.Test.Util where
 
 import Control.Exception.Safe (Handler(..))
 import Control.Monad
+import Control.Monad.Logger
 import Control.Retry
 import Data.String.Interpolate
 import System.FSNotify
@@ -109,7 +110,20 @@ introduceTestFolder :: (
   -> Bool
   -> SpecFree (LabelValue "testFolderContext" TestFolderContext :> context) m ()
   -> SpecFree context m ()
-introduceTestFolder timeInterval threadingMode poll recursive nested = introduceWith "Make test folder" testFolderContext $ \action -> do
+introduceTestFolder timeInterval threadingMode poll recursive nested = introduceWith "Make test folder" testFolderContext $ \action ->
+  withTestFolder timeInterval threadingMode poll recursive nested (void . action)
+
+withTestFolder :: (
+  MonadUnliftIO m, MonadLogger m
+  )
+  => Int
+  -> ThreadingMode
+  -> Bool
+  -> Bool
+  -> Bool
+  -> (TestFolderContext -> m a)
+  -> m a
+withTestFolder timeInterval threadingMode poll recursive nested action = do
   withRandomTempDirectory $ \watchedDir' -> do
     info [i|Got temp directory: #{watchedDir'}|]
     let fileName = "testfile"
@@ -135,7 +149,7 @@ introduceTestFolder timeInterval threadingMode poll recursive nested = introduce
       withManagerConf conf $ \mgr -> do
         eventsVar <- newIORef []
         stop <- watchFn mgr watchedDir' (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
-        _ <- runInIO $ action $ TestFolderContext {
+        ret <- runInIO $ action $ TestFolderContext {
           watchedDir = watchedDir'
           , filePath = normalise $ baseDir </> fileName
           , getEvents = readIORef eventsVar
@@ -143,14 +157,21 @@ introduceTestFolder timeInterval threadingMode poll recursive nested = introduce
           }
 
         stop
+        return ret
 
 
 -- | Use a random identifier so that every test happens in a different folder
 -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
-withRandomTempDirectory :: MonadUnliftIO m => (FilePath -> m ()) -> m ()
+withRandomTempDirectory :: MonadUnliftIO m => (FilePath -> m a) -> m a
 withRandomTempDirectory action = do
   randomID <- liftIO $ replicateM 10 $ R.randomRIO ('a', 'z')
   withSystemTempDirectory ("test." <> randomID) action
+
+parallelWithoutDirectory :: SpecFree context m () -> SpecFree context m ()
+parallelWithoutDirectory = parallel' (defaultNodeOptions {
+                                         nodeOptionsCreateFolder = False
+                                         , nodeOptionsVisibilityThreshold = 70
+                                         })
 
 -- withParallelSemaphore :: forall context m. (
 --   MonadUnliftIO m, HasLabel context "parallelSemaphore" QSem

@@ -89,6 +89,7 @@ tests:
     - exceptions
     - filepath
     - fsnotify
+    - monad-logger
     - random
     - retry
     - safe-exceptions
