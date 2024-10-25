@@ -97,22 +97,6 @@ data TestFolderContext = TestFolderContext {
   , clearEvents :: IO ()
   }
 
-testFolderContext :: Label "testFolderContext" TestFolderContext
-testFolderContext = Label :: Label "testFolderContext" TestFolderContext
-
-introduceTestFolder :: (
-  MonadUnliftIO m
-  )
-  => Int
-  -> ThreadingMode
-  -> Bool
-  -> Bool
-  -> Bool
-  -> SpecFree (LabelValue "testFolderContext" TestFolderContext :> context) m ()
-  -> SpecFree context m ()
-introduceTestFolder timeInterval threadingMode poll recursive nested = introduceWith "Make test folder" testFolderContext $ \action ->
-  withTestFolder timeInterval threadingMode poll recursive nested (void . action)
-
 withTestFolder :: (
   MonadUnliftIO m, MonadLogger m
   )

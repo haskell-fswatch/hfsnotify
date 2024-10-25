@@ -42,19 +42,16 @@ eventTests' :: (
   MonadUnliftIO m, MonadThrow m
   ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
 eventTests' timeInterval threadingMode poll recursive nested = do
-  let itWithFolder name action = introduceTestFolder timeInterval threadingMode poll recursive nested $ it name action
+  let withFolder = withTestFolder timeInterval threadingMode poll recursive nested
 
-  unless (nested || poll || isMac || isWin) $ itWithFolder "deletes the watched directory" $ do
-    TestFolderContext watchedDir _f getEvents _clearEvents <- getContext testFolderContext
+  unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
     removeDirectory watchedDir
 
     pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \case
       [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
       events -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with a new file" $ do
-    TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
-
+  it "works with a new file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     let wrapper action = if | isWin -> liftIO (writeFile f "foo") >> action
                             | otherwise -> withFile f AppendMode $ \_ -> action
 
@@ -68,8 +65,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
                [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with a new directory" $ do
-    TestFolderContext _watchedDir f getEvents _clearEvents <- getContext testFolderContext
+  it "works with a new directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     createDirectory f
 
     pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
@@ -78,8 +74,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with a deleted file" $ do
-    TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
+  it "works with a deleted file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
     liftIO (writeFile f "" >> clearEvents)
 
     removeFile f
@@ -90,8 +85,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with a deleted directory" $ do
-    TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
+  it "works with a deleted directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
     createDirectory f >> liftIO clearEvents
 
     removeDirectory f
@@ -102,8 +96,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with modified file attributes" $ do
-    TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
+  it "works with modified file attributes" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
     liftIO (writeFile f "" >> clearEvents)
 
     liftIO $ changeFileAttributes f
@@ -120,8 +113,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  itWithFolder "works with a modified file" $ do
-    TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
+  it "works with a modified file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
     liftIO (writeFile f "" >> clearEvents)
 
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
@@ -136,8 +128,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
   when isLinux $ unless poll $
-    itWithFolder "gets a close_write" $ do
-      TestFolderContext _watchedDir f getEvents clearEvents <- getContext testFolderContext
+    it "gets a close_write" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
       liftIO (writeFile f "" >> clearEvents)
       liftIO $ withFile f WriteMode $ flip hPutStr "asdf"
       pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
