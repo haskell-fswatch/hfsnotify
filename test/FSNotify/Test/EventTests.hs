@@ -25,7 +25,7 @@ import UnliftIO.Directory
 
 
 eventTests :: (
-  MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context
+  MonadUnliftIO m, MonadThrow m
   ) => ThreadingMode -> SpecFree context m ()
 eventTests threadingMode = describe "Tests" $ parallel $ do
   let pollOptions = if isBSD then [True] else [False, True]
@@ -37,7 +37,7 @@ eventTests threadingMode = describe "Tests" $ parallel $ do
         eventTests' timeInterval threadingMode poll recursive nested
 
 eventTests' :: (
-  MonadUnliftIO m, MonadThrow m, HasParallelSemaphore' context
+  MonadUnliftIO m, MonadThrow m
   ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
 eventTests' timeInterval threadingMode poll recursive nested = do -- withParallelSemaphore $
   let itWithFolder name action = introduceTestFolder timeInterval threadingMode poll recursive nested $ it name action

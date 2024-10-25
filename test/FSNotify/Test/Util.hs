@@ -17,7 +17,6 @@ import Control.Retry
 import Data.String.Interpolate
 import System.FSNotify
 import System.FilePath
-import System.PosixCompat.Files (touchFile)
 import System.Random as R
 import Test.Sandwich
 import UnliftIO hiding (poll, Handler)
@@ -31,12 +30,15 @@ import Data.Monoid
 #ifdef mingw32_HOST_OS
 import Data.Bits
 import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
+
 -- Perturb the file's attributes, to check that a modification event is emitted
 changeFileAttributes :: FilePath -> IO ()
 changeFileAttributes file = do
   attrs <- getFileAttributes file
   setFileAttributes file (attrs `xor` fILE_ATTRIBUTE_TEMPORARY)
 #else
+import System.PosixCompat.Files (touchFile)
+
 changeFileAttributes :: FilePath -> IO ()
 changeFileAttributes = touchFile
 #endif
@@ -150,14 +152,14 @@ withRandomTempDirectory action = do
   randomID <- liftIO $ replicateM 10 $ R.randomRIO ('a', 'z')
   withSystemTempDirectory ("test." <> randomID) action
 
-withParallelSemaphore :: forall context m. (
-  MonadUnliftIO m, HasLabel context "parallelSemaphore" QSem
-  ) => SpecFree context m () -> SpecFree context m ()
-withParallelSemaphore = around' (defaultNodeOptions { nodeOptionsRecordTime = False, nodeOptionsVisibilityThreshold = 125 }) "claim semaphore" $ \action -> do
-  s <- getContext parallelSemaphore'
-  bracket_ (liftIO $ waitQSem s) (liftIO $ signalQSem s) (void action)
+-- withParallelSemaphore :: forall context m. (
+--   MonadUnliftIO m, HasLabel context "parallelSemaphore" QSem
+--   ) => SpecFree context m () -> SpecFree context m ()
+-- withParallelSemaphore = around' (defaultNodeOptions { nodeOptionsRecordTime = False, nodeOptionsVisibilityThreshold = 125 }) "claim semaphore" $ \action -> do
+--   s <- getContext parallelSemaphore'
+--   bracket_ (liftIO $ waitQSem s) (liftIO $ signalQSem s) (void action)
 
-parallelSemaphore' :: Label "parallelSemaphore" QSem
-parallelSemaphore' = Label
+-- parallelSemaphore' :: Label "parallelSemaphore" QSem
+-- parallelSemaphore' = Label
 
-type HasParallelSemaphore' context = HasLabel context "parallelSemaphore" QSem
+-- type HasParallelSemaphore' context = HasLabel context "parallelSemaphore" QSem
