@@ -41,7 +41,7 @@ import System.Win32.Types (
   , localFree
   , nullPtr
   )
-import System.Win32.WindowsString.String (peekTString)
+import System.Win32.WindowsString.Types (peekTString)
 
 
 #include <windows.h>
