@@ -78,7 +78,8 @@ type FileAction = DWORD
  , fILE_ACTION_RENAMED_NEW_NAME = FILE_ACTION_RENAMED_NEW_NAME
  }
 
-type WCHAR = Word16
+-- type WCHAR = Word16
+
 -- This is a bit overkill for now, I'll only use nullFunPtr anyway,
 -- but who knows, maybe someday I'll want asynchronous callbacks on the OS level.
 type LPOVERLAPPED_COMPLETION_ROUTINE = FunPtr ((DWORD, DWORD, LPOVERLAPPED) -> IO ())
