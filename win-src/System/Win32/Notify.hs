@@ -35,25 +35,27 @@ import System.Win32 (closeHandle)
 import System.Win32.File
 import System.Win32.FileNotify
 
-data EventVariety = Modify
-                  | Create
-                  | Delete
-                  | Move deriving Eq
+data EventVariety =
+  Modify
+  | Create
+  | Delete
+  | Move
+  deriving Eq
 
 data Event
-    -- | A file was modified. @Modified isDirectory file@
-    = Modified { filePath :: FilePath }
-    -- | A file was created. @Created isDirectory file@
-    | Created { filePath :: FilePath }
-    -- | A file was deleted. @Deleted isDirectory file@
-    | Deleted { filePath :: FilePath }
-    deriving (Eq, Show)
+  -- | A file was modified. @Modified isDirectory file@
+  = Modified { filePath :: FilePath }
+  -- | A file was created. @Created isDirectory file@
+  | Created { filePath :: FilePath }
+  -- | A file was deleted. @Deleted isDirectory file@
+  | Deleted { filePath :: FilePath }
+  deriving (Eq, Show)
 
 type Handler = Event -> IO ()
 
 data WatchId = WatchId ThreadId ThreadId Handle deriving (Eq, Ord, Show)
 type WatchMap = Map WatchId Handler
-data WatchManager = WatchManager { watchManagerWatchMap :: (MVar WatchMap) }
+data WatchManager = WatchManager { watchManagerWatchMap :: MVar WatchMap }
 
 initWatchManager :: IO WatchManager
 initWatchManager =  do
@@ -80,7 +82,7 @@ watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
 
     osEventsReader :: Handle -> Chan [Event] -> IO ()
     osEventsReader watchHandle chanEvents = forever $ do
-      (readDirectoryChanges watchHandle watchSubTree flags >>= (actsToEvents dir) >>= writeChan chanEvents)
+      (readDirectoryChanges watchHandle watchSubTree flags >>= actsToEvents dir >>= writeChan chanEvents)
 
 watch :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> IO (WatchId, Chan [Event])
 watch (WatchManager mvarMap) dir watchSubTree flags = do
@@ -92,8 +94,8 @@ watch (WatchManager mvarMap) dir watchSubTree flags = do
 
   where
     osEventsReader :: Handle -> Chan [Event] -> IO ()
-    osEventsReader watchHandle chanEvents = forever $ do
-      (readDirectoryChanges watchHandle watchSubTree flags >>= (actsToEvents dir) >>= writeChan chanEvents)
+    osEventsReader watchHandle chanEvents = forever $
+      (readDirectoryChanges watchHandle watchSubTree flags >>= actsToEvents dir >>= writeChan chanEvents)
 
 killWatch :: WatchId -> IO ()
 killWatch (WatchId tid1 tid2 handle) = do
