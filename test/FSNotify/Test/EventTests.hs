@@ -58,7 +58,9 @@ eventTests' timeInterval threadingMode poll recursive nested = do
       pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
+               -- On Windows, we sometimes get an extra modified event
                [Modified {}, Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               [Added {..}, Modified {}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
            | otherwise -> case events of
                [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
