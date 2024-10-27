@@ -7,7 +7,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -151,7 +150,6 @@ watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar act
       wd <- INo.addWatch listenerINotify varieties hinotifyPath (handleRecursiveEvent rawFilePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
       return $ Just ((wd, watchStillExistsVar):wds)
 
-
 handleRecursiveEvent :: RawFilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
 handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedDir listener wdVar event = do
   case event of
@@ -188,7 +186,6 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event
-
 
 
 -- * Util

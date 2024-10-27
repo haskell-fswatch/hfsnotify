@@ -24,6 +24,9 @@ when:
 - condition: os(freebsd) || os(netbsd) || os(openbsd)
   cpp-options: -DOS_BSD
 
+default-extensions:
+- ScopedTypeVariables
+
 library:
   source-dirs: src
 

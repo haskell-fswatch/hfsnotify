@@ -32,6 +32,8 @@ library
       System.FSNotify.Types
   hs-source-dirs:
       src
+  default-extensions:
+      ScopedTypeVariables
   ghc-options: -Wall
   build-depends:
       async >=2.0.0.0
@@ -81,6 +83,8 @@ executable example
       Paths_fsnotify
   hs-source-dirs:
       example
+  default-extensions:
+      ScopedTypeVariables
   ghc-options: -threaded -Wall
   build-depends:
       base
@@ -115,6 +119,8 @@ test-suite tests
       Paths_fsnotify
   hs-source-dirs:
       test
+  default-extensions:
+      ScopedTypeVariables
   ghc-options: -threaded -Wall
   build-depends:
       async >=2
