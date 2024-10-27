@@ -15,10 +15,7 @@ module System.Win32.FileNotify (
 import Data.Char (isSpace)
 import Foreign ((.|.), Ptr, FunPtr, alloca, allocaBytes, castPtr, nullFunPtr, peekByteOff, plusPtr)
 import Foreign.C (peekCWStringLen)
-import GHC.IO.Encoding.Failure (CodingFailureMode(..))
-import GHC.IO.Encoding.UTF16 (mkUTF16le)
 import Numeric (showHex)
-import System.OsString.Windows (decodeWith, encodeWith)
 import System.Win32.File (
   FileNotificationFlag
   , LPOVERLAPPED
@@ -41,7 +38,7 @@ import System.Win32.Types (
   , localFree
   , nullPtr
   )
-import System.Win32.WindowsString.Types (peekTString)
+import System.Win32.Types (peekTString)
 
 
 #include <windows.h>
@@ -140,13 +137,13 @@ readDirectoryChangesW h buf bufSize wst f br =
     False -> do
       -- Extract the failure message, as done in https://hackage.haskell.org/package/Win32-2.14.0.0/docs/src/System.Win32.WindowsString.Types.html#errorWin
       err_code <- getLastError
-      c_msg <- getErrorMessage err_code
-      msg <- either (fail . show) pure . decodeWith (mkUTF16le TransliterateCodingFailure) =<< if c_msg == nullPtr
-               then either (fail . show) pure . encodeWith (mkUTF16le TransliterateCodingFailure) $ "Error 0x" ++ Numeric.showHex err_code ""
-               else do msg <- peekTString c_msg
-                       -- We ignore failure of freeing c_msg, given we're already failing
-                       _ <- localFree c_msg
-                       return msg
+      msg <- getErrorMessage err_code >>= \case
+        x | x == nullPtr -> return $ "Error 0x" ++ Numeric.showHex err_code ""
+        c_msg -> do
+          msg <- peekTString c_msg
+          -- We ignore failure of freeing c_msg, given we're already failing
+          _ <- localFree c_msg
+          return msg
       let msg' = reverse $ dropWhile isSpace $ reverse msg -- drop trailing \n
       return $ Left (err_code, msg')
 
