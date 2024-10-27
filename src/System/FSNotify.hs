@@ -236,11 +236,8 @@ threadChan listenFn (WatchManager {watchManagerGlobalChan=Nothing, ..}) path act
             SingleThread -> error "Should never happen"
             ThreadPerWatch -> False
             ThreadPerEvent -> True
-      readerThread <- async $ readEvents forkThreadPerEvent chan
+      readerThread <- case forkThreadPerEvent of
+        True -> async $ forever (readChan chan >>= (async . action))
+        False -> async $ forever (readChan chan >>= action)
       stopListener <- liftIO $ listenFn watchManagerConfig watchManagerManager path actPred (writeChan chan)
       return (Just (cleanup >> stopListener >> cancel readerThread), stopListener >> cancel readerThread)
-
-  where
-    readEvents :: Bool -> EventChannel -> IO ()
-    readEvents True chan = forever $ readChan chan >>= (async . action)
-    readEvents False chan = forever $ readChan chan >>= action
