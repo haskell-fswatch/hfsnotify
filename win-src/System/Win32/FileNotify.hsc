@@ -3,12 +3,12 @@
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
 
-module System.Win32.FileNotify
-       ( Handle
-       , Action(..)
-       , getWatchHandle
-       , readDirectoryChanges
-       ) where
+module System.Win32.FileNotify (
+  Handle
+  , Action(..)
+  , getWatchHandle
+  , readDirectoryChanges
+  ) where
 
 import System.Win32.File
 import System.Win32.Types
@@ -24,14 +24,13 @@ import Data.Bits
 type Handle = HANDLE
 
 getWatchHandle :: FilePath -> IO Handle
-getWatchHandle dir =
-    createFile dir
-        fILE_LIST_DIRECTORY -- Access mode
-        (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
-        Nothing -- security attributes
-        oPEN_EXISTING -- Create mode, we want to look at an existing directory
-        fILE_FLAG_BACKUP_SEMANTICS -- File attribute, nb NOT using OVERLAPPED since we work synchronously
-        Nothing -- No template file
+getWatchHandle dir = createFile dir
+  fILE_LIST_DIRECTORY -- Access mode
+  (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
+  Nothing -- security attributes
+  oPEN_EXISTING -- Create mode, we want to look at an existing directory
+  fILE_FLAG_BACKUP_SEMANTICS -- File attribute, nb NOT using OVERLAPPED since we work synchronously
+  Nothing -- No template file
 
 
 readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO [(Action, String)]
