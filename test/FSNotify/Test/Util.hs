@@ -132,17 +132,16 @@ withTestFolder timeInterval threadingMode poll recursive nested action = do
     withRunInIO $ \runInIO ->
       withManagerConf conf $ \mgr -> do
         eventsVar <- newIORef []
-        stop <- watchFn mgr watchedDir' (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ())))
-        ret <- runInIO $ action $ TestFolderContext {
-          watchedDir = watchedDir'
-          , filePath = normalise $ baseDir </> fileName
-          , getEvents = readIORef eventsVar
-          , clearEvents = threadDelay timeInterval >> atomicWriteIORef eventsVar []
-          }
-
-        stop
-        return ret
-
+        bracket
+          (watchFn mgr watchedDir' (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ()))))
+          (\stop -> stop)
+          (\_ -> runInIO $ action $ TestFolderContext {
+            watchedDir = watchedDir'
+            , filePath = normalise $ baseDir </> fileName
+            , getEvents = readIORef eventsVar
+            , clearEvents = threadDelay timeInterval >> atomicWriteIORef eventsVar []
+            }
+          )
 
 -- | Use a random identifier so that every test happens in a different folder
 -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs

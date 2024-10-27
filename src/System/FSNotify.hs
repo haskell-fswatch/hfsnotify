@@ -3,14 +3,13 @@
 -- Developed for a Google Summer of Code project - http://gsoc2012.markdittmer.org
 --
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | This library does not currently report changes made to directories,
 -- only files within watched directories.
@@ -103,11 +102,11 @@ import System.FSNotify.OSX
 
 -- | Watch manager. You need one in order to create watching jobs.
 data WatchManager = forall manager argType. FileListener manager argType =>
-  WatchManager { watchManagerConfig :: WatchConfig
-               , watchManagerManager :: manager
-               , watchManagerCleanupVar :: (MVar (Maybe (IO ()))) -- cleanup action, or Nothing if the manager is stopped
-               , watchManagerGlobalChan :: Maybe (EventAndActionChannel, Async ())
-               }
+  WatchManager {
+    watchManagerConfig :: WatchConfig
+    , watchManagerManager :: manager
+    , watchManagerGlobalChan :: Maybe (EventAndActionChannel, Async ())
+    }
 
 -- | Default configuration
 --
@@ -145,8 +144,6 @@ startManager = startManagerConf defaultConfig
 -- watching for files and free resources.
 stopManager :: WatchManager -> IO ()
 stopManager (WatchManager {..}) = do
-  mbCleanup <- swapMVar watchManagerCleanupVar Nothing
-  maybe (return ()) liftIO mbCleanup
   liftIO $ killSession watchManagerManager
   case watchManagerGlobalChan of
     Nothing -> return ()
@@ -165,7 +162,7 @@ startManagerConf conf = do
 # endif
 
   case confWatchMode conf of
-    WatchModePoll interval -> WatchManager conf <$> liftIO (createPollManager interval) <*> cleanupVar <*> globalWatchChan
+    WatchModePoll interval -> WatchManager conf <$> liftIO (createPollManager interval) <*> globalWatchChan
 #ifndef OS_BSD
     WatchModeOS -> liftIO (initSession ()) >>= createManager
 #endif
@@ -173,7 +170,7 @@ startManagerConf conf = do
   where
 #ifndef OS_BSD
     createManager :: Either Text NativeManager -> IO WatchManager
-    createManager (Right nativeManager) = WatchManager conf nativeManager <$> cleanupVar <*> globalWatchChan
+    createManager (Right nativeManager) = WatchManager conf nativeManager <$> globalWatchChan
     createManager (Left err) = throwIO $ userError $ T.unpack $ "Error: couldn't start native file manager: " <> err
 #endif
 
@@ -187,8 +184,6 @@ startManagerConf conf = do
             Right () -> return ()
         return $ Just (globalChan, globalReaderThread)
       _ -> return Nothing
-
-    cleanupVar = newMVar (Just (return ()))
 
 -- | Watch the immediate contents of a directory by streaming events to a Chan.
 -- Watching the immediate contents of a directory will only report events
@@ -222,25 +217,10 @@ watchTree wm@(WatchManager {watchManagerConfig}) fp actionPredicate action = thr
 
 threadChan :: (forall a b. ListenFn a b) -> WatchManager -> FilePath -> ActionPredicate -> Action -> IO StopListening
 threadChan listenFn (WatchManager {watchManagerGlobalChan=(Just (globalChan, _)), ..}) path actPred action =
-  modifyMVar watchManagerCleanupVar $ \case
-    Nothing -> return (Nothing, return ()) -- we've been stopped. Throw an exception?
-    Just cleanup -> do
-      stopListener <- liftIO $ listenFn watchManagerConfig watchManagerManager path actPred (\event -> writeChan globalChan (event, action))
-      return (Just (cleanup >> stopListener), stopListener)
-threadChan listenFn (WatchManager {watchManagerGlobalChan=Nothing, ..}) path actPred action =
-  modifyMVar watchManagerCleanupVar $ \case
-    Nothing -> return (Nothing, return ()) -- we've been stopped. Throw an exception?
-    Just cleanup -> do
-      chan <- newChan
-      let forkThreadPerEvent = case confThreadingMode watchManagerConfig of
-            SingleThread -> error "Should never happen"
-            ThreadPerWatch -> False
-            ThreadPerEvent -> True
-      readerThread <- async $ readEvents forkThreadPerEvent chan
-      stopListener <- liftIO $ listenFn watchManagerConfig watchManagerManager path actPred (writeChan chan)
-      return (Just (cleanup >> stopListener >> cancel readerThread), stopListener >> cancel readerThread)
-
-  where
-    readEvents :: Bool -> EventChannel -> IO ()
-    readEvents True chan = forever $ readChan chan >>= (async . action)
-    readEvents False chan = forever $ readChan chan >>= action
+  listenFn watchManagerConfig watchManagerManager path actPred (\event -> writeChan globalChan (event, action))
+threadChan listenFn (WatchManager {watchManagerGlobalChan=Nothing, ..}) path actPred action = do
+  let wrappedAction = case confThreadingMode watchManagerConfig of
+        SingleThread -> error "Should never happen"
+        ThreadPerWatch -> action
+        ThreadPerEvent -> void . async . action
+  listenFn watchManagerConfig watchManagerManager path actPred wrappedAction

@@ -3,20 +3,45 @@
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
 
-module System.Win32.FileNotify
-       ( Handle
-       , Action(..)
-       , getWatchHandle
-       , readDirectoryChanges
-       ) where
+{-# LANGUAGE LambdaCase #-}
 
-import System.Win32.File
-import System.Win32.Types
+module System.Win32.FileNotify (
+  Handle
+  , Action(..)
+  , getWatchHandle
+  , readDirectoryChanges
+  ) where
 
-import Foreign
-import Foreign.C
-
-import Data.Bits
+import Data.Char (isSpace)
+import Foreign ((.|.), Ptr, FunPtr, alloca, allocaBytes, castPtr, nullFunPtr, peekByteOff, plusPtr)
+import Foreign.C (peekCWStringLen)
+import GHC.IO.Encoding.Failure (CodingFailureMode(..))
+import GHC.IO.Encoding.UTF16 (mkUTF16le)
+import Numeric (showHex)
+import System.OsString.Windows (decodeWith, encodeWith)
+import System.Win32.File (
+  FileNotificationFlag
+  , LPOVERLAPPED
+  , createFile
+  , oPEN_EXISTING
+  , fILE_FLAG_BACKUP_SEMANTICS
+  , fILE_LIST_DIRECTORY
+  , fILE_SHARE_READ
+  , fILE_SHARE_WRITE
+  )
+import System.Win32.Types (
+  BOOL
+  , DWORD
+  , ErrCode
+  , HANDLE
+  , LPDWORD
+  , LPVOID
+  , getErrorMessage
+  , getLastError
+  , localFree
+  , nullPtr
+  )
+import System.Win32.WindowsString.String (peekTString)
 
 
 #include <windows.h>
@@ -24,23 +49,23 @@ import Data.Bits
 type Handle = HANDLE
 
 getWatchHandle :: FilePath -> IO Handle
-getWatchHandle dir =
-    createFile dir
-        fILE_LIST_DIRECTORY -- Access mode
-        (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
-        Nothing -- security attributes
-        oPEN_EXISTING -- Create mode, we want to look at an existing directory
-        fILE_FLAG_BACKUP_SEMANTICS -- File attribute, nb NOT using OVERLAPPED since we work synchronously
-        Nothing -- No template file
+getWatchHandle dir = createFile dir
+  fILE_LIST_DIRECTORY -- Access mode
+  (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
+  Nothing -- security attributes
+  oPEN_EXISTING -- Create mode, we want to look at an existing directory
+  fILE_FLAG_BACKUP_SEMANTICS -- File attribute, nb NOT using OVERLAPPED since we work synchronously
+  Nothing -- No template file
 
 
-readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO [(Action, String)]
+readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO (Either (ErrCode, String) [(Action, String)])
 readDirectoryChanges h wst mask = do
   let maxBuf = 16384
   allocaBytes maxBuf $ \buffer -> do
     alloca $ \bret -> do
-      readDirectoryChangesW h buffer (toEnum maxBuf) wst mask bret
-      readChanges buffer
+      readDirectoryChangesW h buffer (toEnum maxBuf) wst mask bret >>= \case
+        Left err -> return $ Left err
+        Right () -> Right <$> readChanges buffer
 
 data Action = FileAdded | FileRemoved | FileModified | FileRenamedOld | FileRenamedNew
   deriving (Show, Read, Eq, Ord, Enum)
@@ -72,14 +97,15 @@ faToAction fa = toEnum $ fromEnum fa - 1
 type FileAction = DWORD
 
 #{enum FileAction,
- , fILE_ACTION_ADDED            = FILE_ACTION_ADDED
- , fILE_ACTION_REMOVED          = FILE_ACTION_REMOVED
- , fILE_ACTION_MODIFIED         = FILE_ACTION_MODIFIED
- , fILE_ACTION_RENAMED_OLD_NAME = FILE_ACTION_RENAMED_OLD_NAME
- , fILE_ACTION_RENAMED_NEW_NAME = FILE_ACTION_RENAMED_NEW_NAME
+ , _fILE_ACTION_ADDED            = FILE_ACTION_ADDED
+ , _fILE_ACTION_REMOVED          = FILE_ACTION_REMOVED
+ , _fILE_ACTION_MODIFIED         = FILE_ACTION_MODIFIED
+ , _fILE_ACTION_RENAMED_OLD_NAME = FILE_ACTION_RENAMED_OLD_NAME
+ , _fILE_ACTION_RENAMED_NEW_NAME = FILE_ACTION_RENAMED_NEW_NAME
  }
 
-type WCHAR = Word16
+-- type WCHAR = Word16
+
 -- This is a bit overkill for now, I'll only use nullFunPtr anyway,
 -- but who knows, maybe someday I'll want asynchronous callbacks on the OS level.
 type LPOVERLAPPED_COMPLETION_ROUTINE = FunPtr ((DWORD, DWORD, LPOVERLAPPED) -> IO ())
@@ -107,9 +133,22 @@ peekFNI buf = do
   return $ FILE_NOTIFY_INFORMATION neof acti fnam
 
 
-readDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag -> LPDWORD -> IO ()
+readDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag -> LPDWORD -> IO (Either (ErrCode, String) ())
 readDirectoryChangesW h buf bufSize wst f br =
-  failIfFalse_ "ReadDirectoryChangesW" $ c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f br nullPtr nullFunPtr
+  c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f br nullPtr nullFunPtr >>= \case
+    True -> return $ Right ()
+    False -> do
+      -- Extract the failure message, as done in https://hackage.haskell.org/package/Win32-2.14.0.0/docs/src/System.Win32.WindowsString.Types.html#errorWin
+      err_code <- getLastError
+      c_msg <- getErrorMessage err_code
+      msg <- either (fail . show) pure . decodeWith (mkUTF16le TransliterateCodingFailure) =<< if c_msg == nullPtr
+               then either (fail . show) pure . encodeWith (mkUTF16le TransliterateCodingFailure) $ "Error 0x" ++ Numeric.showHex err_code ""
+               else do msg <- peekTString c_msg
+                       -- We ignore failure of freeing c_msg, given we're already failing
+                       _ <- localFree c_msg
+                       return msg
+      let msg' = reverse $ dropWhile isSpace $ reverse msg -- drop trailing \n
+      return $ Left (err_code, msg')
 
 {-
 asynchReadDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag
@@ -149,12 +188,12 @@ data OVERLAPPED = OVERLAPPED
 
 -- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa365465(v=vs.85).aspx
 #{enum FileNotificationFlag,
- , fILE_NOTIFY_CHANGE_FILE_NAME = FILE_NOTIFY_CHANGE_FILE_NAME
- , fILE_NOTIFY_CHANGE_DIR_NAME = FILE_NOTIFY_CHANGE_DIR_NAME
- , fILE_NOTIFY_CHANGE_ATTRIBUTES = FILE_NOTIFY_CHANGE_ATTRIBUTES
- , fILE_NOTIFY_CHANGE_SIZE = FILE_NOTIFY_CHANGE_SIZE
- , fILE_NOTIFY_CHANGE_LAST_WRITE = FILE_NOTIFY_CHANGE_LAST_WRITE
- , fILE_NOTIFY_CHANGE_LAST_ACCESS = FILE_NOTIFY_CHANGE_LAST_ACCESS
- , fILE_NOTIFY_CHANGE_CREATION = FILE_NOTIFY_CHANGE_CREATION
- , fILE_NOTIFY_CHANGE_SECURITY = FILE_NOTIFY_CHANGE_SECURITY
+ , _fILE_NOTIFY_CHANGE_FILE_NAME = FILE_NOTIFY_CHANGE_FILE_NAME
+ , _fILE_NOTIFY_CHANGE_DIR_NAME = FILE_NOTIFY_CHANGE_DIR_NAME
+ , _fILE_NOTIFY_CHANGE_ATTRIBUTES = FILE_NOTIFY_CHANGE_ATTRIBUTES
+ , _fILE_NOTIFY_CHANGE_SIZE = FILE_NOTIFY_CHANGE_SIZE
+ , _fILE_NOTIFY_CHANGE_LAST_WRITE = FILE_NOTIFY_CHANGE_LAST_WRITE
+ , _fILE_NOTIFY_CHANGE_LAST_ACCESS = FILE_NOTIFY_CHANGE_LAST_ACCESS
+ , _fILE_NOTIFY_CHANGE_CREATION = FILE_NOTIFY_CHANGE_CREATION
+ , _fILE_NOTIFY_CHANGE_SECURITY = FILE_NOTIFY_CHANGE_SECURITY
  }

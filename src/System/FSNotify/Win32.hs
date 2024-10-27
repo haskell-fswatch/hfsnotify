@@ -22,33 +22,28 @@ import System.FSNotify.Types
 import System.FilePath
 import qualified System.Win32.Notify as WNo
 
+
 type NativeManager = WNo.WatchManager
 
--- | Apparently Win32 gives back relative paths, so we pass around the base
--- directory to turn them into absolute ones
-type BaseDir = FilePath
-
--- NEXT TODO: Need to ensure we use properly canonalized paths as
--- event paths. In Linux this required passing the base dir to
--- handle[native]Event.
-
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
-fsnEvent :: EventIsDirectory -> BaseDir -> UTCTime -> WNo.Event -> Event
+fsnEvent :: EventIsDirectory -> FilePath -> UTCTime -> WNo.Event -> Event
 fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
 
-handleWNoEvent :: EventIsDirectory -> BaseDir -> ActionPredicate -> EventCallback -> WNo.Event -> IO ()
+handleWNoEvent :: EventIsDirectory -> FilePath -> ActionPredicate -> EventCallback -> WNo.Event -> IO ()
 handleWNoEvent isDirectory basedir actPred callback inoEvent = do
   currentTime <- getCurrentTime
   let event = fsnEvent isDirectory basedir currentTime inoEvent
   when (actPred event) $ callback event
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
-watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
+watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
 
-  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE, WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
+  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME
+                                , WNo.fILE_NOTIFY_CHANGE_SIZE
+                                , WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
   let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
 
   -- Start one watch for file events and one for directory events

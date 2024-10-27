@@ -24,6 +24,9 @@ when:
 - condition: os(freebsd) || os(netbsd) || os(openbsd)
   cpp-options: -DOS_BSD
 
+default-extensions:
+- ScopedTypeVariables
+
 library:
   source-dirs: src
 
@@ -73,6 +76,29 @@ library:
     - System.FSNotify
     - System.FSNotify.Devel
 
+
+executables:
+  example:
+    main: Main.hs
+    source-dirs:
+    - example
+    ghc-options:
+    - -threaded
+    - -Wall
+    dependencies:
+    - base
+    - directory
+    - exceptions
+    - filepath
+    - fsnotify
+    - monad-logger
+    - random
+    - retry
+    - safe-exceptions
+    - string-interpolate
+    - temporary
+    - unix-compat
+    - unliftio
 
 tests:
   tests:

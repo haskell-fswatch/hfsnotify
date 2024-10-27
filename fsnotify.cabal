@@ -32,6 +32,8 @@ library
       System.FSNotify.Types
   hs-source-dirs:
       src
+  default-extensions:
+      ScopedTypeVariables
   ghc-options: -Wall
   build-depends:
       async >=2.0.0.0
@@ -75,6 +77,39 @@ library
     build-depends:
         hfsevents >=0.1.3
 
+executable example
+  main-is: Main.hs
+  other-modules:
+      Paths_fsnotify
+  hs-source-dirs:
+      example
+  default-extensions:
+      ScopedTypeVariables
+  ghc-options: -threaded -Wall
+  build-depends:
+      base
+    , directory
+    , exceptions
+    , filepath
+    , fsnotify
+    , monad-logger
+    , random
+    , retry
+    , safe-exceptions
+    , string-interpolate
+    , temporary
+    , unix-compat
+    , unliftio
+  default-language: Haskell2010
+  if os(linux)
+    cpp-options: -DOS_Linux
+  if os(windows)
+    cpp-options: -DOS_Win32
+  if os(darwin)
+    cpp-options: -DOS_Mac
+  if os(freebsd) || os(netbsd) || os(openbsd)
+    cpp-options: -DOS_BSD
+
 test-suite tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
@@ -84,6 +119,8 @@ test-suite tests
       Paths_fsnotify
   hs-source-dirs:
       test
+  default-extensions:
+      ScopedTypeVariables
   ghc-options: -threaded -Wall
   build-depends:
       async >=2
