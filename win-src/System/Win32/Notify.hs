@@ -11,6 +11,7 @@ module System.Win32.Notify
   , killWatchManager
   , watch
   , watchDirectory
+
   , fILE_NOTIFY_CHANGE_FILE_NAME
   , fILE_NOTIFY_CHANGE_DIR_NAME
   , fILE_NOTIFY_CHANGE_ATTRIBUTES
@@ -54,9 +55,7 @@ type WatchMap = Map WatchId Handler
 data WatchManager = WatchManager { watchManagerWatchMap :: MVar WatchMap }
 
 initWatchManager :: IO WatchManager
-initWatchManager =  do
-  mvarMap <- newMVar Map.empty
-  return (WatchManager mvarMap)
+initWatchManager = WatchManager <$> newMVar Map.empty
 
 killWatchManager :: WatchManager -> IO ()
 killWatchManager (WatchManager mvarMap) = do
