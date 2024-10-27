@@ -22,16 +22,12 @@ module System.Win32.Notify
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.MVar
 import Control.Exception.Safe (SomeException, catch)
 import Control.Monad (forever)
-import Data.Bits
-import Data.List (intersect)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import System.Directory
+import Data.String.Interpolate
 import System.FilePath
-import System.Win32 (closeHandle)
 import System.Win32.File
 import System.Win32.FileNotify
 
@@ -89,7 +85,8 @@ watch (WatchManager mvarMap) dir watchSubTree flags = do
   watchHandle <- getWatchHandle dir
   chanEvents <- newChan
   tid <- forkIO $ osEventsReader watchHandle chanEvents
-  modifyMVar_ mvarMap $ \watchMap -> return (Map.insert (WatchId tid tid watchHandle) (const $ return ()) watchMap)
+  modifyMVar_ mvarMap $ \watchMap ->
+    return (Map.insert (WatchId tid tid watchHandle) (const $ return ()) watchMap)
   return ((WatchId tid tid watchHandle), chanEvents)
 
   where

@@ -45,10 +45,12 @@ handleWNoEvent isDirectory basedir actPred callback inoEvent = do
   when (actPred event) $ callback event
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
-watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
+watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
 
-  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME, WNo.fILE_NOTIFY_CHANGE_SIZE, WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
+  let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME
+                                , WNo.fILE_NOTIFY_CHANGE_SIZE
+                                , WNo.fILE_NOTIFY_CHANGE_ATTRIBUTES]
   let dirFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_DIR_NAME]
 
   -- Start one watch for file events and one for directory events
