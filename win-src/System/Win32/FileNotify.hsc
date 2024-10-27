@@ -3,6 +3,8 @@
 {-# LANGUAGE InterruptibleFFI #-}
 #endif
 
+{-# LANGUAGE LambdaCase #-}
+
 module System.Win32.FileNotify (
   Handle
   , Action(..)
@@ -10,11 +12,36 @@ module System.Win32.FileNotify (
   , readDirectoryChanges
   ) where
 
-import System.Win32.File
-import System.Win32.Types
-
-import Foreign
-import Foreign.C
+import Data.Char (isSpace)
+import Foreign ((.|.), Ptr, FunPtr, alloca, allocaBytes, castPtr, nullFunPtr, peekByteOff, plusPtr)
+import Foreign.C (peekCWStringLen)
+import GHC.IO.Encoding.Failure (CodingFailureMode(..))
+import GHC.IO.Encoding.UTF16 (mkUTF16le)
+import Numeric (showHex)
+import System.OsString.Windows (decodeWith, encodeWith)
+import System.Win32.File (
+  FileNotificationFlag
+  , LPOVERLAPPED
+  , createFile
+  , oPEN_EXISTING
+  , fILE_FLAG_BACKUP_SEMANTICS
+  , fILE_LIST_DIRECTORY
+  , fILE_SHARE_READ
+  , fILE_SHARE_WRITE
+  )
+import System.Win32.Types (
+  BOOL
+  , DWORD
+  , ErrCode
+  , HANDLE
+  , LPDWORD
+  , LPVOID
+  , getErrorMessage
+  , getLastError
+  , localFree
+  , nullPtr
+  )
+import System.Win32.WindowsString.String (peekTString)
 
 
 #include <windows.h>
@@ -31,13 +58,14 @@ getWatchHandle dir = createFile dir
   Nothing -- No template file
 
 
-readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO [(Action, String)]
+readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO (Either (ErrCode, String) [(Action, String)])
 readDirectoryChanges h wst mask = do
   let maxBuf = 16384
   allocaBytes maxBuf $ \buffer -> do
     alloca $ \bret -> do
-      readDirectoryChangesW h buffer (toEnum maxBuf) wst mask bret
-      readChanges buffer
+      readDirectoryChangesW h buffer (toEnum maxBuf) wst mask bret >>= \case
+        Left err -> return $ Left err
+        Right () -> Right <$> readChanges buffer
 
 data Action = FileAdded | FileRemoved | FileModified | FileRenamedOld | FileRenamedNew
   deriving (Show, Read, Eq, Ord, Enum)
@@ -105,9 +133,22 @@ peekFNI buf = do
   return $ FILE_NOTIFY_INFORMATION neof acti fnam
 
 
-readDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag -> LPDWORD -> IO ()
+readDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag -> LPDWORD -> IO (Either (ErrCode, String) ())
 readDirectoryChangesW h buf bufSize wst f br =
-  failIfFalse_ "ReadDirectoryChangesW" $ c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f br nullPtr nullFunPtr
+  c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f br nullPtr nullFunPtr >>= \case
+    True -> return $ Right ()
+    False -> do
+      -- Extract the failure message, as done in https://hackage.haskell.org/package/Win32-2.14.0.0/docs/src/System.Win32.WindowsString.Types.html#errorWin
+      err_code <- getLastError
+      c_msg <- getErrorMessage err_code
+      msg <- either (fail . show) pure . decodeWith (mkUTF16le TransliterateCodingFailure) =<< if c_msg == nullPtr
+               then either (fail . show) pure . encodeWith (mkUTF16le TransliterateCodingFailure) $ "Error 0x" ++ Numeric.showHex err_code ""
+               else do msg <- peekTString c_msg
+                       -- We ignore failure of freeing c_msg, given we're already failing
+                       _ <- localFree c_msg
+                       return msg
+      let msg' = reverse $ dropWhile isSpace $ reverse msg -- drop trailing \n
+      return $ Left (err_code, msg')
 
 {-
 asynchReadDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag
