@@ -41,6 +41,7 @@ library:
   - condition: os(linux)
     other-modules:
     - System.FSNotify.Linux
+    - System.FSNotify.Linux.Util
     dependencies:
     - hinotify >= 0.3.7
     - unix >= 2.7.1.0

@@ -59,6 +59,7 @@ library
   if os(linux)
     other-modules:
         System.FSNotify.Linux
+        System.FSNotify.Linux.Util
     build-depends:
         hinotify >=0.3.7
       , unix >=2.7.1.0
