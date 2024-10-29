@@ -76,7 +76,7 @@ import Control.Concurrent.Async
 import Control.Exception.Safe as E
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Text as T
+import qualified Data.Text as T
 import System.FSNotify.Polling
 import System.FSNotify.Types
 import System.FilePath
@@ -169,7 +169,7 @@ startManagerConf conf = do
 
   where
 #ifndef OS_BSD
-    createManager :: Either Text NativeManager -> IO WatchManager
+    createManager :: Either T.Text NativeManager -> IO WatchManager
     createManager (Right nativeManager) = WatchManager conf nativeManager <$> globalWatchChan
     createManager (Left err) = throwIO $ userError $ T.unpack $ "Error: couldn't start native file manager: " <> err
 #endif
