@@ -42,11 +42,12 @@ eventTests' :: (
   ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
 eventTests' timeInterval threadingMode poll recursive nested = do
   let withFolder = withTestFolder timeInterval threadingMode poll recursive nested
+  let waitForEvents getEvents action = pauseAndRetryOnExpectationFailure timeInterval 3 (liftIO getEvents >>= action)
 
   unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
     removeDirectory watchedDir
 
-    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \case
+    waitForEvents getEvents $ \case
       [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
       events -> expectationFailure $ "Got wrong events: " <> show events
 
@@ -55,7 +56,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
                             | otherwise -> withFile f AppendMode $ \_ -> action
 
     wrapper $
-      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+      waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
                -- On Windows, we sometimes get an extra modified event
@@ -69,7 +70,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
   it "works with a new directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     createDirectory f
 
-    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+    waitForEvents getEvents $ \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
@@ -80,7 +81,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
 
     removeFile f
 
-    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+    waitForEvents getEvents $ \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -91,7 +92,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
 
     removeDirectory f
 
-    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+    waitForEvents getEvents $ \events ->
       if | nested && not recursive -> events `shouldBe` []
          | otherwise -> case events of
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
@@ -104,7 +105,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
 
     -- This test is disabled when polling because the PollManager only keeps track of
     -- modification time, so it won't catch an unrelated file attribute change
-    pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+    waitForEvents getEvents $ \events ->
       if | poll -> return ()
          | nested && not recursive -> events `shouldBe` []
          | isWin -> case events of
@@ -118,7 +119,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
     liftIO (writeFile f "" >> clearEvents)
 
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
-      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+      waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isMac -> case events of
                [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -132,7 +133,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
     it "gets a close_write" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
       liftIO (writeFile f "" >> clearEvents)
       liftIO $ withFile f WriteMode $ flip hPutStr "asdf"
-      pauseAndRetryOnExpectationFailure timeInterval 3 $ liftIO getEvents >>= \events ->
+      waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | otherwise -> case events of
                [cw@(CloseWrite {}), m@(Modified {})]

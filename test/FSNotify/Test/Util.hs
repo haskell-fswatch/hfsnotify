@@ -79,15 +79,17 @@ pauseAndRetryOnExpectationFailure timeInterval n action = threadDelay timeInterv
 retryOnExpectationFailure :: MonadUnliftIO m => Int -> m a -> m a
 #if MIN_VERSION_retry(0, 7, 0)
 retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
-  recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (\_ -> runInIO action)
+  recovering policy [\_ -> Handler handleFn] (\_ -> runInIO action)
 #else
 retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
-  recovering (constantDelay 50000 <> limitRetries (seconds * 20)) [\_ -> Handler handleFn] (runInIO action)
+  recovering policy [\_ -> Handler handleFn] (runInIO action)
 #endif
   where
     handleFn :: SomeException -> IO Bool
     handleFn (fromException -> Just (Reason {})) = return True
     handleFn _ = return False
+
+    policy = constantDelay 50000 <> limitRetries (seconds * 20)
 
 
 data TestFolderContext = TestFolderContext {

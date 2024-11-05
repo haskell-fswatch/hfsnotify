@@ -105,13 +105,15 @@ isDirectlyInside dirPath event = isRelevantFileEvent || isRelevantDirEvent
     isRelevantFileEvent = (eventIsDirectory event == IsFile) && (takeDirectory dirPath == (takeDirectory $ eventPath event))
     isRelevantDirEvent = (eventIsDirectory event == IsDirectory) && (takeDirectory dirPath == (takeDirectory $ takeDirectory $ eventPath event))
 
-listenFn :: (ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO a)
-         -> WatchConfig
-         -> OSXManager
-         -> FilePath
-         -> ActionPredicate
-         -> EventCallback
-         -> IO StopListening
+listenFn :: (
+  ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO a
+  )
+  -> WatchConfig
+  -> OSXManager
+  -> FilePath
+  -> ActionPredicate
+  -> EventCallback
+  -> IO StopListening
 listenFn handler conf (OSXManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
   unique <- newUnique
