@@ -119,20 +119,23 @@ withTestFolder threadingMode poll recursive nested setup action = do
 
     setup p
 
+    let pollInterval = 2 * 10^(5 :: Int)
+
     -- Delay before starting the watcher to make sure setup events picked up.
     --
     -- For MacOS, we can apparently get an event for the creation of "subdir" when doing nested tests,
     -- even though we create the watcher after this.
     --
     -- When polling, we want to ensure we wait at least as long as the effective filesystem modification
-    -- time granularity, which on Linux can be on the order of 10 milliseconds.
-    when (isMac || poll) $ threadDelay 1000000
+    -- time granularity (which on Linux can be on the order of 10 milliseconds), *or*
+    -- the poll interval, whichever is greater.
+    when (isMac || poll) $ threadDelay (max 1000000 pollInterval)
 
     let conf = defaultConfig {
 #ifdef OS_BSD
-          confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else error "No native watcher available."
+          confWatchMode = if poll then WatchModePoll pollInterval else error "No native watcher available."
 #else
-          confWatchMode = if poll then WatchModePoll (2 * 10^(5 :: Int)) else WatchModeOS
+          confWatchMode = if poll then WatchModePoll pollInterval else WatchModeOS
 #endif
           , confThreadingMode = threadingMode
           }
