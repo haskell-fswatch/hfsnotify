@@ -32,17 +32,17 @@ eventTests threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
   let pollOptions = if isBSD then [True] else [False, True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallelWithoutDirectory $ do
-    let timeInterval = if poll then 2*10^(6 :: Int) else 5*10^(5 :: Int)
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallelWithoutDirectory $
       forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallelWithoutDirectory $
-        eventTests' timeInterval threadingMode poll recursive nested
+        eventTests' threadingMode poll recursive nested
 
 eventTests' :: (
   MonadUnliftIO m, MonadThrow m
-  ) => Int -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
-eventTests' timeInterval threadingMode poll recursive nested = do
-  let withFolder = withTestFolder timeInterval threadingMode poll recursive nested
-  let waitForEvents getEvents action = pauseAndRetryOnExpectationFailure timeInterval 3 (liftIO getEvents >>= action)
+  ) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
+eventTests' threadingMode poll recursive nested = do
+  let withFolder' = withTestFolder threadingMode poll recursive nested
+  let withFolder = withFolder' (const $ return ())
+  let waitForEvents getEvents action = waitUntil 5.0 (liftIO getEvents >>= action)
 
   unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
     removeDirectory watchedDir
@@ -76,9 +76,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a deleted file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
-    liftIO (writeFile f "" >> clearEvents)
-
+  it "works with a deleted file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     removeFile f
 
     waitForEvents getEvents $ \events ->
@@ -87,9 +85,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a deleted directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
-    createDirectory f >> liftIO clearEvents
-
+  it "works with a deleted directory" $ withFolder' (\f -> liftIO $ createDirectory f) $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     removeDirectory f
 
     waitForEvents getEvents $ \events ->
@@ -98,9 +94,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with modified file attributes" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
-    liftIO (writeFile f "" >> clearEvents)
-
+  it "works with modified file attributes" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     liftIO $ changeFileAttributes f
 
     -- This test is disabled when polling because the PollManager only keeps track of
@@ -115,9 +109,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a modified file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
-    liftIO (writeFile f "" >> clearEvents)
-
+  it "works with a modified file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
@@ -130,8 +122,7 @@ eventTests' timeInterval threadingMode poll recursive nested = do
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
   when isLinux $ unless poll $
-    it "gets a close_write" $ withFolder $ \(TestFolderContext _watchedDir f getEvents clearEvents) -> do
-      liftIO (writeFile f "" >> clearEvents)
+    it "gets a close_write" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
       liftIO $ withFile f WriteMode $ flip hPutStr "asdf"
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []

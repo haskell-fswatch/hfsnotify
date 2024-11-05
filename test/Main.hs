@@ -5,7 +5,6 @@
 
 module Main where
 
-import Control.Exception.Safe
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.String.Interpolate
@@ -31,16 +30,15 @@ main = runSandwichWithCommandLineArgs defaultOptions $ parallelN 20 $ do
           stop <- watchDir mgr watchedDir' (const True) $ \ev -> do
             case ev of
 #ifdef darwin_HOST_OS
-              Modified {} -> throwIO $ userError "Oh no!"
+              Modified {} -> expectationFailure "Oh no!"
 #else
-              Added {} -> throwIO $ userError "Oh no!"
+              Added {} -> expectationFailure "Oh no!"
 #endif
               _ -> return ()
 
           writeFile (watchedDir' </> "testfile") "foo"
 
-          let timeInterval = 5*10^(5 :: Int)
-          pauseAndRetryOnExpectationFailure timeInterval 3 $
+          waitUntil 5.0 $
             readIORef exceptions >>= (`shouldBe` 1)
 
           stop

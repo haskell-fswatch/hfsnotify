@@ -73,23 +73,20 @@ isBSD = True
 isBSD = False
 #endif
 
-pauseAndRetryOnExpectationFailure :: (MonadUnliftIO m) => Int -> Int -> m a -> m a
-pauseAndRetryOnExpectationFailure timeInterval n action = threadDelay timeInterval >> retryOnExpectationFailure n action
-
-retryOnExpectationFailure :: MonadUnliftIO m => Int -> m a -> m a
+waitUntil :: MonadUnliftIO m => Double -> m a -> m a
 #if MIN_VERSION_retry(0, 7, 0)
-retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
+waitUntil timeInSeconds action = withRunInIO $ \runInIO ->
   recovering policy [\_ -> Handler handleFn] (\_ -> runInIO action)
 #else
-retryOnExpectationFailure seconds action = withRunInIO $ \runInIO ->
+waitUntil timeInSeconds action = withRunInIO $ \runInIO ->
   recovering policy [\_ -> Handler handleFn] (runInIO action)
 #endif
   where
     handleFn :: SomeException -> IO Bool
-    handleFn (fromException -> Just (Reason {})) = return True
+    handleFn (fromException -> Just (_ :: FailureReason)) = return True
     handleFn _ = return False
 
-    policy = constantDelay 50000 <> limitRetries (seconds * 20)
+    policy = limitRetriesByCumulativeDelay (round (timeInSeconds * 1000000.0)) $ capDelay 1000000 $ exponentialBackoff 1000
 
 
 data TestFolderContext = TestFolderContext {
@@ -102,14 +99,14 @@ data TestFolderContext = TestFolderContext {
 withTestFolder :: (
   MonadUnliftIO m, MonadLogger m
   )
-  => Int
-  -> ThreadingMode
+  => ThreadingMode
   -> Bool
   -> Bool
   -> Bool
+  -> (FilePath -> m ())
   -> (TestFolderContext -> m a)
   -> m a
-withTestFolder timeInterval threadingMode poll recursive nested action = do
+withTestFolder threadingMode poll recursive nested setup action = do
   withRandomTempDirectory $ \watchedDir' -> do
     info [i|Got temp directory: #{watchedDir'}|]
     let fileName = "testfile"
@@ -118,9 +115,18 @@ withTestFolder timeInterval threadingMode poll recursive nested action = do
 
     createDirectoryIfMissing True baseDir
 
-    -- On Mac, delay before starting the watcher because otherwise creation of "subdir"
-    -- can get picked up.
-    when isMac $ threadDelay 2000000
+    let p = normalise $ baseDir </> fileName
+
+    setup p
+
+    -- Delay before starting the watcher to make sure setup events picked up.
+    --
+    -- For MacOS, we can apparently get an event for the creation of "subdir" when doing nested tests,
+    -- even though we create the watcher after this.
+    --
+    -- When polling, we want to ensure we wait at least as long as the effective filesystem modification
+    -- time granularity, which on Linux can be on the order of 10 milliseconds.
+    when (isMac || poll) $ threadDelay 1000000
 
     let conf = defaultConfig {
 #ifdef OS_BSD
@@ -139,9 +145,9 @@ withTestFolder timeInterval threadingMode poll recursive nested action = do
           (\stop -> stop)
           (\_ -> runInIO $ action $ TestFolderContext {
             watchedDir = watchedDir'
-            , filePath = normalise $ baseDir </> fileName
+            , filePath = p
             , getEvents = readIORef eventsVar
-            , clearEvents = threadDelay timeInterval >> atomicWriteIORef eventsVar []
+            , clearEvents = atomicWriteIORef eventsVar []
             }
           )
 
