@@ -126,10 +126,14 @@ withTestFolder threadingMode poll recursive nested setup action = do
     -- For MacOS, we can apparently get an event for the creation of "subdir" when doing nested tests,
     -- even though we create the watcher after this.
     --
+    -- On Windows, we occasionally see a test flake when there's no pause here.
+    --
+    -- So, let's put a healthy sleep between the setup actions and the watcher initialization.
+    --
     -- When polling, we want to ensure we wait at least as long as the effective filesystem modification
     -- time granularity (which on Linux can be on the order of 10 milliseconds), *or*
     -- the poll interval, whichever is greater.
-    when (isMac || poll) $ threadDelay (max 1000000 pollInterval)
+    threadDelay (max 2000000 (3 * pollInterval))
 
     let conf = defaultConfig {
 #ifdef OS_BSD
@@ -158,7 +162,7 @@ withTestFolder threadingMode poll recursive nested setup action = do
 -- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
 withRandomTempDirectory :: MonadUnliftIO m => (FilePath -> m a) -> m a
 withRandomTempDirectory action = do
-  randomID <- liftIO $ replicateM 10 $ R.randomRIO ('a', 'z')
+  randomID <- liftIO $ replicateM 20 $ R.randomRIO ('a', 'z')
   withSystemTempDirectory ("test." <> randomID) action
 
 parallelWithoutDirectory :: SpecFree context m () -> SpecFree context m ()
