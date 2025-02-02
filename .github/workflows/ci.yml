@@ -19,7 +19,7 @@ jobs:
           - "9.2.8"
           - "9.4.8"
           - "9.6.6"
-          - "9.8.2"
+          - "9.8.4"
           - "9.10.1"
 
     steps:
@@ -72,6 +72,10 @@ jobs:
         resolver:
         - lts-18 # 8.10.7
         - lts-19 # 9.0.2
+        - lts-20 # 9.2.8
+        - lts-21 # 9.4.8
+        - lts-22 # 9.6.6
+        - lts-23 # 9.8.4
     steps:
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
