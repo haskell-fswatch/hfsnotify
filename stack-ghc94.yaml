@@ -1,0 +1,12 @@
+resolver: lts-21.25
+
+packages:
+- '.'
+
+nix:
+  pure: false
+  packages:
+  - zlib
+
+extra-deps:
+- vty-windows-0.2.0.3@sha256:0c010b1086a725046a8bb08bb1e6bfdfdb3cfe1c72d6fa77c37306ef9ec774d8,2844

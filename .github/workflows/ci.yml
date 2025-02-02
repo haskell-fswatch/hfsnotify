@@ -60,19 +60,19 @@ jobs:
         cabal test
 
   stack:
-    name: stack / ${{ matrix.os }} / resolver ${{ matrix.resolver }}
+    name: stack / ${{ matrix.os }} / ${{ matrix.stack-yaml }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        resolver:
-        - lts-18 # 8.10.7
-        - lts-19 # 9.0.2
-        - lts-20 # 9.2.8
-        - lts-21 # 9.4.8
-        - lts-22 # 9.6.6
-        - lts-23 # 9.8.4
+        stack-yaml:
+        - stack-ghc90.yaml
+        - stack-ghc92.yaml
+        - stack-ghc94.yaml
+        - stack-ghc96.yaml
+        - stack.yaml # Current dev version at ghc98
+
     steps:
     - uses: actions/checkout@v2
 
@@ -93,17 +93,15 @@ jobs:
     - name: Run stack setup
       shell: bash
       run: |
-        export STACK_EXTRA_ARGS="--resolver ${{matrix.resolver}}"
-
+        export STACK_EXTRA_ARGS="--stack-yaml ${{matrix.stack-yaml}}"
         stack setup $STACK_EXTRA_ARGS
-
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
     - uses: actions/cache@v4
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.resolver }}-stack-key3
+        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
 
     - name: Build
       run: |
