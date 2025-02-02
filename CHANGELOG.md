@@ -1,6 +1,13 @@
 Changes
 =======
 
+Version 0.4.1.1
+---------------
+
+* Document polling interval units (#111)
+* Fix compat with text-2.1.2 (closes #116)
+* Remove some redundant cleanup code paths
+
 Version 0.4.1.0
 ---------------
 
