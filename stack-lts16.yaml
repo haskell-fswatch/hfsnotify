@@ -1,8 +1,0 @@
-resolver: lts-16.31
-
-packages:
-- '.'
-
-extra-deps:
-- sandwich-0.1.0.11@sha256:e8eb36e7e0c63e29e19b9ddaf9d315b7a93aff3d6f348b44d8d5218da0c28fb2,7430
-- unliftio-0.2.22.0@sha256:2a3f0298a293c48eddd10c25cbbd6206b6e745cee2e648e48e16531a3ef21ce8,3314
