@@ -21,6 +21,13 @@ jobs:
           - "9.6.6"
           - "9.8.4"
           - "9.10.1"
+        exclude:
+        # These don't work on GitHub CI anymore because they need llvm@13, which became
+        # disabled on 12/31/2024
+        - os: macOS-latest
+          ghc: 8.10.7
+        - os: macOS-latest
+          ghc: 9.0.2
 
     steps:
     - uses: actions/checkout@v4
@@ -77,6 +84,11 @@ jobs:
         - stack-ghc94.yaml
         - stack-ghc96.yaml
         - stack.yaml # Current dev version at ghc98
+        exclude:
+        # These don't work on GitHub CI anymore because they need llvm@13, which became
+        # disabled on 12/31/2024
+        - os: macOS-latest
+          stack-yaml: stack-ghc90.yaml
 
     steps:
     - uses: actions/checkout@v2
