@@ -13,7 +13,7 @@ packages:
     hackage: vty-windows-0.2.0.3@sha256:0c010b1086a725046a8bb08bb1e6bfdfdb3cfe1c72d6fa77c37306ef9ec774d8,2844
 snapshots:
 - completed:
-    sha256: b3858b16720f396d01605a014104be44fd7f3ca2c9c7b0762506b87b78ce526d
-    size: 680777
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/23/6.yaml
-  original: lts-23.6
+    sha256: 08bd13ce621b41a8f5e51456b38d5b46d7783ce114a50ab604d6bbab0d002146
+    size: 720271
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/43.yaml
+  original: lts-22.43
