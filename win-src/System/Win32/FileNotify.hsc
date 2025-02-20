@@ -56,11 +56,11 @@ getWatchHandle dir = createFile dir
 
 
 readDirectoryChanges :: Handle -> Bool -> FileNotificationFlag -> IO (Either (ErrCode, String) [(Action, String)])
-readDirectoryChanges h wst mask = do
+readDirectoryChanges h watchSubTree mask = do
   let maxBuf = 16384
   allocaBytes maxBuf $ \buffer -> do
     alloca $ \bret -> do
-      readDirectoryChangesW h buffer (toEnum maxBuf) wst mask bret >>= \case
+      readDirectoryChangesW h buffer (toEnum maxBuf) watchSubTree mask bret >>= \case
         Left err -> return $ Left err
         Right () -> Right <$> readChanges buffer
 
@@ -131,8 +131,8 @@ peekFNI buf = do
 
 
 readDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag -> LPDWORD -> IO (Either (ErrCode, String) ())
-readDirectoryChangesW h buf bufSize wst f br =
-  c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f br nullPtr nullFunPtr >>= \case
+readDirectoryChangesW h buf bufSize watchSubTree f br =
+  c_ReadDirectoryChangesW h (castPtr buf) bufSize watchSubTree f br nullPtr nullFunPtr >>= \case
     True -> return $ Right ()
     False -> do
       -- Extract the failure message, as done in https://hackage.haskell.org/package/Win32-2.14.0.0/docs/src/System.Win32.WindowsString.Types.html#errorWin
@@ -150,8 +150,8 @@ readDirectoryChangesW h buf bufSize wst f br =
 {-
 asynchReadDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag
                                 -> LPOVERLAPPED -> IO ()
-asynchReadDirectoryChangesW h buf bufSize wst f over =
-  failIfFalse_ "ReadDirectoryChangesW" $ c_ReadDirectoryChangesW h (castPtr buf) bufSize wst f nullPtr over nullFunPtr
+asynchReadDirectoryChangesW h buf bufSize watchSubTree f over =
+  failIfFalse_ "ReadDirectoryChangesW" $ c_ReadDirectoryChangesW h (castPtr buf) bufSize watchSubTree f nullPtr over nullFunPtr
 
 cbReadDirectoryChangesW :: Handle -> Ptr FILE_NOTIFY_INFORMATION -> DWORD -> BOOL -> FileNotificationFlag
                                 -> LPOVERLAPPED -> IO BOOL
