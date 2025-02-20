@@ -10,3 +10,4 @@ nix:
 
 extra-deps:
 - vty-windows-0.2.0.3@sha256:0c010b1086a725046a8bb08bb1e6bfdfdb3cfe1c72d6fa77c37306ef9ec774d8,2844
+- hfsevents-0.1.8@sha256:0a736ab01a1c26a6e081a857254e5a6aa5c84ff5ee84a24ea91a8a2b503cea45,901
