@@ -1,6 +1,11 @@
 Changes
 =======
 
+Unreleased
+----------
+
+* Bump hfsevents constraint to >= 0.1.8 to pick up race condition fix (see https://github.com/luite/hfsevents/pull/19)
+
 Version 0.4.1.1
 ---------------
 

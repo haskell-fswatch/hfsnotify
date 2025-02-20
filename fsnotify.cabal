@@ -76,7 +76,7 @@ library
     other-modules:
         System.FSNotify.OSX
     build-depends:
-        hfsevents >=0.1.3
+        hfsevents >=0.1.8
 
 executable example
   main-is: Main.hs
