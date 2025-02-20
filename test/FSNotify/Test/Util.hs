@@ -6,19 +6,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module FSNotify.Test.Util where
 
 import Control.Exception.Safe (Handler(..))
-import Control.Monad
 import Control.Monad.Logger
 import Control.Retry
 import Data.String.Interpolate
 import System.FSNotify
 import System.FilePath
-import System.Random as R
 import Test.Sandwich
 import UnliftIO hiding (poll, Handler)
 import UnliftIO.Concurrent
@@ -96,18 +95,41 @@ data TestFolderContext = TestFolderContext {
   , clearEvents :: IO ()
   }
 
+data TestFolderGenerator = TestFolderGenerator {
+  testFolderGeneratorRootDir :: FilePath
+  , testFolderGeneratorId :: MVar Int
+  }
+
+newTestFolderGenerator :: MonadUnliftIO m => FilePath -> m TestFolderGenerator
+newTestFolderGenerator dir = TestFolderGenerator dir <$> newMVar 0
+
+withTestFolderGenerator :: MonadUnliftIO m => (TestFolderGenerator -> m a) -> m a
+withTestFolderGenerator action = do
+  withSystemTempDirectory "hfsnotify-tests" $ \dir ->
+    newTestFolderGenerator dir >>= action
+
+withRandomTempDirectory :: MonadUnliftIO m => TestFolderGenerator -> (FilePath -> m a) -> m a
+withRandomTempDirectory (TestFolderGenerator {..}) action = do
+  testId <- modifyMVar testFolderGeneratorId $ \x ->
+    return (x + 1, x)
+  let dir = testFolderGeneratorRootDir </> ("test_" <> show testId)
+  bracket_ (createDirectory dir)
+           (removePathForcibly dir)
+           (action dir)
+
 withTestFolder :: (
   MonadUnliftIO m, MonadLogger m
   )
-  => ThreadingMode
+  => TestFolderGenerator
+  -> ThreadingMode
   -> Bool
   -> Bool
   -> Bool
   -> (FilePath -> m ())
   -> (TestFolderContext -> m a)
   -> m a
-withTestFolder threadingMode poll recursive nested setup action = do
-  withRandomTempDirectory $ \watchedDir' -> do
+withTestFolder testFolderGenerator threadingMode poll recursive nested setup action = do
+  withRandomTempDirectory testFolderGenerator $ \watchedDir' -> do
     info [i|Got temp directory: #{watchedDir'}|]
     let fileName = "testfile"
     let baseDir = if nested then watchedDir' </> "subdir" else watchedDir'
@@ -158,27 +180,8 @@ withTestFolder threadingMode poll recursive nested setup action = do
             }
           )
 
--- | Use a random identifier so that every test happens in a different folder
--- This is unfortunately necessary because of the madness of OS X FSEvents; see the comments in OSX.hs
-withRandomTempDirectory :: MonadUnliftIO m => (FilePath -> m a) -> m a
-withRandomTempDirectory action = do
-  randomID <- liftIO $ replicateM 20 $ R.randomRIO ('a', 'z')
-  withSystemTempDirectory ("test." <> randomID) action
-
 parallelWithoutDirectory :: SpecFree context m () -> SpecFree context m ()
 parallelWithoutDirectory = parallel' (defaultNodeOptions {
                                          nodeOptionsCreateFolder = False
                                          , nodeOptionsVisibilityThreshold = 70
                                          })
-
--- withParallelSemaphore :: forall context m. (
---   MonadUnliftIO m, HasLabel context "parallelSemaphore" QSem
---   ) => SpecFree context m () -> SpecFree context m ()
--- withParallelSemaphore = around' (defaultNodeOptions { nodeOptionsRecordTime = False, nodeOptionsVisibilityThreshold = 125 }) "claim semaphore" $ \action -> do
---   s <- getContext parallelSemaphore'
---   bracket_ (liftIO $ waitQSem s) (liftIO $ signalQSem s) (void action)
-
--- parallelSemaphore' :: Label "parallelSemaphore" QSem
--- parallelSemaphore' = Label
-
--- type HasParallelSemaphore' context = HasLabel context "parallelSemaphore" QSem

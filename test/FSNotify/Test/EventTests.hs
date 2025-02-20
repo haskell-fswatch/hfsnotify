@@ -27,20 +27,20 @@ import UnliftIO.Directory
 
 eventTests :: (
   MonadUnliftIO m, MonadThrow m
-  ) => ThreadingMode -> SpecFree context m ()
-eventTests threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
+  ) => TestFolderGenerator -> ThreadingMode -> SpecFree context m ()
+eventTests testFolderGenerator threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
   let pollOptions = if isBSD then [True] else [False, True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallelWithoutDirectory $ do
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallelWithoutDirectory $
       forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallelWithoutDirectory $
-        eventTests' threadingMode poll recursive nested
+        eventTests' testFolderGenerator threadingMode poll recursive nested
 
 eventTests' :: (
   MonadUnliftIO m, MonadThrow m
-  ) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
-eventTests' threadingMode poll recursive nested = do
-  let withFolder' = withTestFolder threadingMode poll recursive nested
+  ) => TestFolderGenerator -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
+eventTests' testFolderGenerator threadingMode poll recursive nested = do
+  let withFolder' = withTestFolder testFolderGenerator threadingMode poll recursive nested
   let withFolder = withFolder' (const $ return ())
   let waitForEvents getEvents action = waitUntil 5.0 (liftIO getEvents >>= action)
 
