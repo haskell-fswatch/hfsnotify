@@ -83,7 +83,8 @@ jobs:
         - stack-ghc92.yaml
         - stack-ghc94.yaml
         - stack-ghc96.yaml
-        - stack.yaml # Current dev version at ghc98
+        - stack-ghc98.yaml
+        - stack.yaml # Current dev version at ghc910
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024

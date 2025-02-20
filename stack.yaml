@@ -1,4 +1,4 @@
-resolver: lts-23.6
+resolver: nightly-2025-02-20
 
 packages:
 - '.'
@@ -7,6 +7,3 @@ nix:
   pure: false
   packages:
   - zlib
-
-extra-deps:
-- hfsevents-0.1.8@sha256:0a736ab01a1c26a6e081a857254e5a6aa5c84ff5ee84a24ea91a8a2b503cea45,901
