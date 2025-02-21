@@ -7,3 +7,6 @@ nix:
   pure: false
   packages:
   - zlib
+
+extra-deps:
+- hinotify-0.4.2
