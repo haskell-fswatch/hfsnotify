@@ -110,10 +110,10 @@ data WatchManager = forall manager argType. FileListener manager argType =>
 
 -- | Default configuration
 --
--- * Uses OS watch mode and single thread.
+-- * Uses OS watch mode (if possible) and single thread.
 defaultConfig :: WatchConfig
 defaultConfig = WatchConfig {
-#ifdef OS_BSD
+#ifndef HAVE_NATIVE_WATCHER
   confWatchMode = WatchModePoll 500000
 #else
   confWatchMode = WatchModeOS
@@ -163,12 +163,12 @@ startManagerConf conf = do
 
   case confWatchMode conf of
     WatchModePoll interval -> WatchManager conf <$> liftIO (createPollManager interval) <*> globalWatchChan
-#ifndef OS_BSD
+#ifdef HAVE_NATIVE_WATCHER
     WatchModeOS -> liftIO (initSession ()) >>= createManager
 #endif
 
   where
-#ifndef OS_BSD
+#ifdef HAVE_NATIVE_WATCHER
     createManager :: Either T.Text NativeManager -> IO WatchManager
     createManager (Right nativeManager) = WatchManager conf nativeManager <$> globalWatchChan
     createManager (Left err) = throwIO $ userError $ T.unpack $ "Error: couldn't start native file manager: " <> err
