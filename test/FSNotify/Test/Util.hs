@@ -126,8 +126,8 @@ withTestFolder :: (
   -> Bool
   -> Bool
   -> Bool
-  -> (FilePath -> m ())
-  -> (TestFolderContext -> m a)
+  -> (FilePath -> m b)
+  -> (b -> TestFolderContext -> m a)
   -> m a
 withTestFolder testFolderGenerator threadingMode poll recursive nested setup action = do
   withRandomTempDirectory testFolderGenerator $ \watchedDir' -> do
@@ -140,7 +140,7 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
 
     let p = normalise $ baseDir </> fileName
 
-    setup p
+    setupResult <- setup p
 
     let pollInterval = 2 * 10^(5 :: Int)
 
@@ -173,7 +173,7 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
         bracket
           (watchFn mgr watchedDir' (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ()))))
           (\stop -> stop)
-          (\_ -> runInIO $ action $ TestFolderContext {
+          (\_ -> runInIO $ action setupResult $ TestFolderContext {
             watchedDir = watchedDir'
             , filePath = p
             , getEvents = readIORef eventsVar

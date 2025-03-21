@@ -39,12 +39,12 @@ data Event =
   | Modified { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | ModifiedAttributes { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | Removed { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+  -- | Note: Linux-only
   | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- ^ Note: Linux-only
+  -- | Note: Linux-only
   | CloseWrite  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- ^ Note: Linux-only
+  -- | Note: Linux-only
   | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
-  -- ^ Note: Linux-only
   deriving (Eq, Show)
 
 type EventChannel = Chan Event
@@ -55,7 +55,7 @@ type EventAndActionChannel = Chan (Event, Action)
 
 -- | Method of watching for changes.
 data WatchMode =
-  WatchModePoll { 
+  WatchModePoll {
     watchModePollInterval :: Int
     -- ^ Polling interval in microseconds.
   }

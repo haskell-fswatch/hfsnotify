@@ -13,7 +13,7 @@ packages:
     hackage: hinotify-0.4.2
 snapshots:
 - completed:
-    sha256: 6de673d789fcf2a5605736233090d24271257b4031c59f93e40f6632b7568301
-    size: 654476
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2025/2/20.yaml
-  original: nightly-2025-02-20
+    sha256: ab55278dcabc69ac5fbb72dcf67d3ad228598a75496350210f781a39345a2cd6
+    size: 660071
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2025/3/20.yaml
+  original: nightly-2025-03-20

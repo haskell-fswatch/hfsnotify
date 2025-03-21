@@ -6,6 +6,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant multi-way if" #-}
 
@@ -14,7 +15,9 @@ module FSNotify.Test.EventTests where
 import Control.Exception.Safe (MonadThrow)
 import Control.Monad
 import Control.Monad.IO.Class
+import qualified Data.List as L
 import Data.Monoid
+import Data.Ord (comparing)
 import FSNotify.Test.Util
 import Prelude hiding (FilePath)
 import System.FSNotify
@@ -41,7 +44,7 @@ eventTests' :: (
   ) => TestFolderGenerator -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
 eventTests' testFolderGenerator threadingMode poll recursive nested = do
   let withFolder' = withTestFolder testFolderGenerator threadingMode poll recursive nested
-  let withFolder = withFolder' (const $ return ())
+  let withFolder action = withFolder' (const $ return ()) (\() ctx -> action ctx)
   let waitForEvents getEvents action = waitUntil 5.0 (liftIO getEvents >>= action)
 
   unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
@@ -60,8 +63,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
                -- On Windows, we sometimes get an extra modified event
-               [Modified {}, Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
-               [Added {..}, Modified {}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               (sortEvents -> [Added {..}, Modified {}]) | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
            | otherwise -> case events of
                [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
@@ -76,7 +78,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
              [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a deleted file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+  it "works with a deleted file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     removeFile f
 
     waitForEvents getEvents $ \events ->
@@ -85,7 +87,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a deleted directory" $ withFolder' (\f -> liftIO $ createDirectory f) $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+  it "works with a deleted directory" $ withFolder' (\f -> liftIO $ createDirectory f) $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     removeDirectory f
 
     waitForEvents getEvents $ \events ->
@@ -94,7 +96,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsDirectory -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with modified file attributes" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+  it "works with modified file attributes" $ withFolder' (\f -> liftIO $ writeFile f "") $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     liftIO $ changeFileAttributes f
 
     -- This test is disabled when polling because the PollManager only keeps track of
@@ -109,7 +111,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
-  it "works with a modified file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+  it "works with a modified file" $ withFolder' (\f -> liftIO $ writeFile f "") $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
@@ -121,18 +123,17 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
                [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
-  when isLinux $ unless poll $
-    it "gets a close_write" $ withFolder' (\f -> liftIO $ writeFile f "") $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
-      liftIO $ withFile f WriteMode $ flip hPutStr "asdf"
+  when isLinux $ unless poll $ do
+    let setup f = liftIO $ do
+          h <- openFile f WriteMode
+          hPutStr h "asdf" >> hFlush h
+          return h
+    it "gets a close_write" $ withFolder' setup $ \h (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+      liftIO $ hClose h
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | otherwise -> case events of
-               [cw@(CloseWrite {}), m@(Modified {})]
-                 | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
-                   && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
-               [m@(Modified {}), cw@(CloseWrite {})]
-                 | eventPath cw `equalFilePath` f && eventIsDirectory cw == IsFile
-                   && eventPath m `equalFilePath` f && eventIsDirectory m == IsFile -> return ()
+               [CloseWrite {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
 
 withSingleWriteFile :: MonadIO m => FilePath -> String -> m b -> m b
@@ -146,3 +147,15 @@ withOpenWritableAndWrite fp contents action = do
     flip finally (hClose h) $ do
       liftIO $ hPutStr h contents
       action
+
+sortEvents :: [Event] -> [Event]
+sortEvents = L.sortBy (comparing eventToNum)
+  where
+    eventToNum :: Event -> Int
+    eventToNum (Added {}) = 1
+    eventToNum (Modified {}) = 2
+    eventToNum (ModifiedAttributes {}) = 3
+    eventToNum (Removed {}) = 4
+    eventToNum (WatchedDirectoryRemoved {}) = 5
+    eventToNum (CloseWrite {}) = 6
+    eventToNum (Unknown {}) = 7
