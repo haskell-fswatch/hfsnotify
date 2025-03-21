@@ -10,3 +10,7 @@ nix:
 
 extra-deps:
 - hinotify-0.4.2
+
+# Uncomment these to test with text-2.1.2, which exports "show" by default
+# - text-2.1.2
+# - parsec-3.1.17.0
