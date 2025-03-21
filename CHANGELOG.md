@@ -1,25 +1,27 @@
 Changes
 =======
 
-Unreleased
+Version 0.4.2.0
 ----------
 
-* Bump hfsevents constraint to >= 0.1.8 to pick up race condition fix (see https://github.com/luite/hfsevents/pull/19)
+* Bump hfsevents constraint to >= 0.1.8 to pick up race condition fix (see https://github.com/luite/hfsevents/pull/19).
+* Compatibility with text-2.1.2 and an upper bound of 2.2.
+* Lots of CI and test improvements.
 
 Version 0.4.1.1
 ---------------
 
-* Document polling interval units (#111)
-* Fix compat with text-2.1.2 (closes #116)
-* Remove some redundant cleanup code paths
+* Document polling interval units (#111).
+* Fix compat with text-2.1.2 (closes #116).
+* Remove some redundant cleanup code paths.
 
 Version 0.4.1.0
 ---------------
 
-* Add `unliftio` lower bound (#106)
-* Change the tests back to a test-suite to avoid building for library users. (#107)
+* Add `unliftio` lower bound (#106).
+* Change the tests back to a test-suite to avoid building for library users. (#107).
 * Fix up Windows compatibility.
-* Export `WatchConfig` type (#108)
+* Export `WatchConfig` type (#108).
 
 Version 0.4.0.1
 ---------------
@@ -31,7 +33,7 @@ Version 0.4.0.0
 
 API breaking update.
 
-* New options for threading control (single-threaded, thread-per-watch, and thread-per-manager)
+* New options for threading control (single-threaded, thread-per-watch, and thread-per-manager).
 * Revamp `WatchConfig` options to be less confusing and reduce boolean blindness.
 * Pull out debouncing stuff, since it was never correct as it simply took the last event affecting a given file in the debounce period. Debouncing is currently not included, and should be handled as an orthogonal concern. I'd like to include some debouncing logic, but didn't want to delay this release any longer.
   * We now expose `type DebounceFn = Action -> IO Action`, which represents an arbitrary debouncer. All debouncers should be in the form of one of these functions.
@@ -39,7 +41,7 @@ API breaking update.
   * Contributions are welcome! We can potentially add multiple debouncers of different complexity as modules under `System.FSNotify.Debounce.*`.
 * Don't silently fall back to polling on failure of native watcher.
   Instead, throw an exception which the user can recover from by switching to polling.
-* Add ModifiedAttributes event type + Linux support
+* Add ModifiedAttributes event type + Linux support.
 * Add confOnHandlerException to be able to control what happens when a handler throws an exception.
 * WatchConfig constructor is no longer exposed. Instead use `defaultConfig {...}` with the accessors.
 
