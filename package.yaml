@@ -90,8 +90,11 @@ executables:
     source-dirs:
     - example
     ghc-options:
-    - -threaded
     - -Wall
+    when:
+    - condition: '!arch(wasm32)'
+      ghc-options:
+      - -threaded
     dependencies:
     - base
     - directory
