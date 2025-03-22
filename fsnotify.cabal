@@ -89,7 +89,7 @@ executable example
       example
   default-extensions:
       ScopedTypeVariables
-  ghc-options: -threaded -Wall
+  ghc-options: -Wall
   build-depends:
       base
     , directory
@@ -111,6 +111,8 @@ executable example
     cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
     cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
+  if !arch(wasm32)
+    ghc-options: -threaded
 
 test-suite tests
   type: exitcode-stdio-1.0

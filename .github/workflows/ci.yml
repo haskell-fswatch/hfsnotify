@@ -128,3 +128,53 @@ jobs:
     - name: Test
       run: |
         stack test $STACK_EXTRA_ARGS
+
+  wasm:
+    runs-on: ubuntu-latest
+    env:
+      GHC_WASM_META_REV: 45f73c3e075fa38efe84055b0dba87996948101d
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['9.10']
+    steps:
+    - name: Install happy
+      run: |
+        cabal path --installdir >> "$GITHUB_PATH"
+        cabal update -z
+        cabal install -z happy
+
+    - name: Setup ghc-wasm32-wasi
+      run: |
+        cd "$(mktemp -d)"
+        curl -L "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" | tar xz --strip-components=1
+        ./setup.sh
+        ~/.ghc-wasm/add_to_github_path.sh
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/cache/restore@v4
+      id: cache-restore
+      with:
+        path: |
+          ~/.ghc-wasm/.cabal/store
+        key: wasi-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-flavour-${{ matrix.ghc }}-${{ github.sha }}
+        restore-keys: |
+          wasi-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-flavour-${{ matrix.ghc }}-
+
+    - name: Build
+      run: |
+        wasm32-wasi-cabal build all
+        wasm32-wasi-cabal list-bin exe:example
+
+    - name: Test
+      # The test suite doesn't compile due to the sandwich dependency, so we only run the example app.
+      run: |
+        wasmtime.sh "$(wasm32-wasi-cabal list-bin exe:example)"
+
+    - uses: actions/cache/save@v4
+      if: always() && steps.cache-restore.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.ghc-wasm/.cabal/store
+        key: ${{ steps.cache-restore.outputs.cache-primary-key }}
