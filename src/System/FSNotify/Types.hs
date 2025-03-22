@@ -61,10 +61,10 @@ data WatchMode =
   }
   -- ^ Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
   -- unless you're experiencing problems with 'WatchModeOS' (or 'WatchModeOS' is not supported on your platform).
-#ifndef OS_BSD
+#ifdef HAVE_NATIVE_WATCHER
   | WatchModeOS
   -- ^ Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.).
-  -- Not currently available on *BSD.
+  -- Not currently available on e.g. *BSD and Wasm/WASI.
 #endif
 
 data ThreadingMode =

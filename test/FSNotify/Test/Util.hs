@@ -66,11 +66,11 @@ isLinux = True
 isLinux = False
 #endif
 
-isBSD :: Bool
-#ifdef OS_BSD
-isBSD = True
+haveNativeWatcher :: Bool
+#ifdef HAVE_NATIVE_WATCHER
+haveNativeWatcher = True
 #else
-isBSD = False
+haveNativeWatcher = False
 #endif
 
 waitUntil :: MonadUnliftIO m => Double -> m a -> m a
@@ -159,7 +159,7 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
     threadDelay (max 5_000_000 (3 * pollInterval))
 
     let conf = defaultConfig {
-#ifdef OS_BSD
+#ifndef HAVE_NATIVE_WATCHER
           confWatchMode = if poll then WatchModePoll pollInterval else error "No native watcher available."
 #else
           confWatchMode = if poll then WatchModePoll pollInterval else WatchModeOS

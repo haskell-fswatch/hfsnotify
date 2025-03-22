@@ -1,0 +1,14 @@
+packages: .
+
+if arch(wasm32)
+  -- https://github.com/haskell-pkg-janitors/unix-compat/pull/16
+  source-repository-package
+    type: git
+    location: https://github.com/SquidDev/unix-compat
+    tag: 8416bec1b1a578247b03a1492e10ad849e1c2696
+
+  -- https://github.com/haskell/network/pull/598
+  source-repository-package
+    type: git
+    location: https://github.com/haskell-wasm/network
+    tag: ab92e48e9fdf3abe214f85fdbe5301c1280e14e9
