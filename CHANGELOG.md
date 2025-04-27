@@ -1,6 +1,10 @@
 Changes
 =======
 
+Unreleased
+----------
+* Use polling as a generic fallback and add support for WASM (https://github.com/haskell-fswatch/hfsnotify/pull/110)
+
 Version 0.4.2.0
 ----------
 
