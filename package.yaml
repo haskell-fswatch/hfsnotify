@@ -16,13 +16,11 @@ extra-source-files:
 
 when:
 - condition: os(linux)
-  cpp-options: -DOS_Linux
+  cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
 - condition: os(windows)
-  cpp-options: -DOS_Win32
+  cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
 - condition: os(darwin)
-  cpp-options: -DOS_Mac
-- condition: os(freebsd) || os(netbsd) || os(openbsd)
-  cpp-options: -DOS_BSD
+  cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
 
 default-extensions:
 - ScopedTypeVariables
@@ -92,8 +90,11 @@ executables:
     source-dirs:
     - example
     ghc-options:
-    - -threaded
     - -Wall
+    when:
+    - condition: '!arch(wasm32)'
+      ghc-options:
+      - -threaded
     dependencies:
     - base
     - directory

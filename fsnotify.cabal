@@ -49,13 +49,11 @@ library
     , unix-compat >=0.2
   default-language: Haskell2010
   if os(linux)
-    cpp-options: -DOS_Linux
+    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
   if os(windows)
-    cpp-options: -DOS_Win32
+    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
-    cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(openbsd)
-    cpp-options: -DOS_BSD
+    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
   if os(linux)
     other-modules:
         System.FSNotify.Linux
@@ -91,7 +89,7 @@ executable example
       example
   default-extensions:
       ScopedTypeVariables
-  ghc-options: -threaded -Wall
+  ghc-options: -Wall
   build-depends:
       base
     , directory
@@ -108,13 +106,13 @@ executable example
     , unliftio
   default-language: Haskell2010
   if os(linux)
-    cpp-options: -DOS_Linux
+    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
   if os(windows)
-    cpp-options: -DOS_Win32
+    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
-    cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(openbsd)
-    cpp-options: -DOS_BSD
+    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
+  if !arch(wasm32)
+    ghc-options: -threaded
 
 test-suite tests
   type: exitcode-stdio-1.0
@@ -145,13 +143,11 @@ test-suite tests
     , unliftio >=0.2.20
   default-language: Haskell2010
   if os(linux)
-    cpp-options: -DOS_Linux
+    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
   if os(windows)
-    cpp-options: -DOS_Win32
+    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
-    cpp-options: -DOS_Mac
-  if os(freebsd) || os(netbsd) || os(openbsd)
-    cpp-options: -DOS_BSD
+    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
   if os(windows)
     build-depends:
         Win32
