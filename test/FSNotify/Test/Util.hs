@@ -31,17 +31,29 @@ import Data.Monoid
 #ifdef mingw32_HOST_OS
 import Data.Bits
 import System.Win32.File (getFileAttributes, setFileAttributes, fILE_ATTRIBUTE_TEMPORARY)
+import System.Win32.SymbolicLink (createSymbolicLinkFile)
 
 -- Perturb the file's attributes, to check that a modification event is emitted
 changeFileAttributes :: FilePath -> IO ()
 changeFileAttributes file = do
   attrs <- getFileAttributes file
   setFileAttributes file (attrs `xor` fILE_ATTRIBUTE_TEMPORARY)
+
+createSymLink :: FilePath -> FilePath -> IO ()
+#if __GLASGOW_HASKELL__ < 900
+createSymLink file1 file2 = createSymbolicLinkFile file1 file2
 #else
-import System.PosixCompat.Files (touchFile)
+createSymLink file1 file2 = createSymbolicLinkFile file1 file2 True
+#endif
+
+#else
+import System.PosixCompat.Files (touchFile, createSymbolicLink)
 
 changeFileAttributes :: FilePath -> IO ()
 changeFileAttributes = touchFile
+
+createSymLink :: FilePath -> FilePath -> IO ()
+createSymLink = createSymbolicLink
 #endif
 
 
