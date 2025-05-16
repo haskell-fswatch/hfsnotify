@@ -87,6 +87,9 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
              [Removed {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
 
+  it "works if there is bad symlink" $ withFolder' (\f -> liftIO $ createSymLink (f <> ".doesNotExist") f) $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
+    waitForEvents getEvents $ \events -> events `shouldBe` []
+
   it "works with a deleted directory" $ withFolder' (\f -> liftIO $ createDirectory f) $ \() (TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     removeDirectory f
 
