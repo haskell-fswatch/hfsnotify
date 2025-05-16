@@ -33,7 +33,7 @@ import System.FSNotify.Types
 import System.FilePath (FilePath)
 import System.Posix.ByteString (RawFilePath)
 import System.Posix.Directory.ByteString (openDirStream, readDirStream, closeDirStream)
-import System.Posix.Files (getFileStatus, isDirectory)
+import System.Posix.Files (getSymbolicLinkStatus, isDirectory)
 
 
 canonicalizeRawDirPath :: RawFilePath -> IO RawFilePath
@@ -47,8 +47,8 @@ x <//> y = x <> "/" <> y
 traverseAllDirs :: RawFilePath -> (RawFilePath -> IO ()) -> IO ()
 traverseAllDirs dir cb = traverseAll dir $ \subPath ->
   -- TODO: wish we didn't need fromRawFilePath here
-  -- TODO: make sure this does the right thing with symlinks
-  fromRawFilePath subPath >>= getFileStatus >>= \case
+  -- TODO: should this follow symlinks? (What then about symlinks that escape the parent?)
+  fromRawFilePath subPath >>= getSymbolicLinkStatus >>= \case
     (isDirectory -> True) -> cb subPath >> return True
     _ -> return False
 
