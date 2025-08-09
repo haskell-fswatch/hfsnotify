@@ -78,6 +78,13 @@ isLinux = True
 isLinux = False
 #endif
 
+isFreeBSD :: Bool
+#ifdef freebsd_HOST_OS
+isFreeBSD = True
+#else
+isFreeBSD = False
+#endif
+
 haveNativeWatcher :: Bool
 #ifdef HAVE_NATIVE_WATCHER
 haveNativeWatcher = True

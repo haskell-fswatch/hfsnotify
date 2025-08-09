@@ -21,6 +21,8 @@ when:
   cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
 - condition: os(darwin)
   cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
+- condition: os(freebsd)
+  cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
 
 default-extensions:
 - ScopedTypeVariables
@@ -36,7 +38,7 @@ library:
   - System.FSNotify.Types
 
   when:
-  - condition: os(linux)
+  - condition: os(linux) || os(freebsd)
     other-modules:
     - System.FSNotify.Linux
     - System.FSNotify.Linux.Util
@@ -64,6 +66,9 @@ library:
     - System.FSNotify.OSX
     # hfsevents-0.1.8 fixed a race condition in the watch setup
     dependencies: hfsevents >= 0.1.8
+
+  - condition: os(freebsd)
+    dependencies: hinotify >= 0.4.1
 
   dependencies:
   - async >= 2.0.0.0

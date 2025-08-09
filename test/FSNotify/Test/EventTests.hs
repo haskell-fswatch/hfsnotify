@@ -119,7 +119,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
     (if isWin then withSingleWriteFile f "foo" else withOpenWritableAndWrite f "foo") $
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
-           | isMac -> case events of
+           | isMac || isFreeBSD -> case events of
                [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
@@ -127,7 +127,7 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
                [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
 
-  when isLinux $ unless poll $ do
+  when (isLinux || isFreeBSD) $ unless poll $ do
     let setup f = liftIO $ do
           h <- openFile f WriteMode
           hPutStr h "asdf" >> hFlush h
