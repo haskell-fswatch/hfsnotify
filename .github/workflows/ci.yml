@@ -178,3 +178,36 @@ jobs:
         path: |
           ~/.ghc-wasm/.cabal/store
         key: ${{ steps.cache-restore.outputs.cache-primary-key }}
+
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v4
+      - uses: cross-platform-actions/action@v0.29.0
+        with:
+          operating_system: 'freebsd'
+          version: '14.3'
+          architecture: 'x86_64'
+          run: |
+            # Use latest package set
+            sudo mkdir -p /usr/local/etc/pkg/repos/
+            sudo cp /etc/pkg/FreeBSD.conf /usr/local/etc/pkg/repos/FreeBSD.conf
+            sudo sed -i.bak -e 's|/quarterly|/latest|' /usr/local/etc/pkg/repos/FreeBSD.conf
+
+            echo "::group::Dependencies installation"
+            sudo -E pkg install -y \
+                ghc96 hs-cabal-install libinotify
+            echo "::endgroup::"
+
+            echo "::group::Updating Cabal package index"
+            cabal update --with-compiler=ghc-9.6.7
+            echo "::endgroup::"
+
+            echo "::group::Build with Cabal"
+            cabal build --with-compiler=ghc-9.6.7
+            echo "::endgroup::"
+
+            echo "::group::Test with Cabal"
+            cabal test --with-compiler=ghc-9.6.7
+            echo "::endgroup::"
