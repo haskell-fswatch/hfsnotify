@@ -15,14 +15,8 @@ extra-source-files:
 - test/Main.hs
 
 when:
-- condition: os(linux)
-  cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
-- condition: os(windows)
-  cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
-- condition: os(darwin)
-  cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
-- condition: os(freebsd)
-  cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
+- condition: os(linux) || os(windows) || os(darwin) || os(freebsd)
+  cpp-options: -DHAVE_NATIVE_WATCHER
 
 default-extensions:
 - ScopedTypeVariables

@@ -87,15 +87,15 @@ import System.FSNotify.Listener (ListenFn, StopListening)
 import Data.Monoid
 #endif
 
-#if defined(OS_Linux) || defined(OS_FreeBSD)
+#if defined(linux_HOST_OS) || defined(freebsd_HOST_OS)
 import System.FSNotify.Linux
 #endif
 
-#ifdef OS_Win32
+#ifdef mingw32_HOST_OS
 import System.FSNotify.Win32
 #endif
 
-#ifdef OS_Mac
+#ifdef darwin_HOST_OS
 import System.FSNotify.OSX
 #endif
 
@@ -156,7 +156,7 @@ withManagerConf conf = bracket (startManagerConf conf) stopManager
 -- | Like 'startManager', but configurable.
 startManagerConf :: WatchConfig -> IO WatchManager
 startManagerConf conf = do
-# ifdef OS_Win32
+# ifdef mingw32_HOST_OS
   -- See https://github.com/haskell-fswatch/hfsnotify/issues/50
   unless rtsSupportsBoundThreads $ throwIO $ userError "startManagerConf must be called with -threaded on Windows"
 # endif
