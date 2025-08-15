@@ -48,14 +48,8 @@ library
     , time >=1.1
     , unix-compat >=0.2
   default-language: Haskell2010
-  if os(linux)
-    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
-  if os(windows)
-    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
-  if os(darwin)
-    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
-  if os(freebsd)
-    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
+  if os(linux) || os(windows) || os(darwin) || os(freebsd)
+    cpp-options: -DHAVE_NATIVE_WATCHER
   if os(linux) || os(freebsd)
     other-modules:
         System.FSNotify.Linux
@@ -110,14 +104,8 @@ executable example
     , unix-compat
     , unliftio
   default-language: Haskell2010
-  if os(linux)
-    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
-  if os(windows)
-    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
-  if os(darwin)
-    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
-  if os(freebsd)
-    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
+  if os(linux) || os(windows) || os(darwin) || os(freebsd)
+    cpp-options: -DHAVE_NATIVE_WATCHER
   if !arch(wasm32)
     ghc-options: -threaded
 
@@ -149,14 +137,8 @@ test-suite tests
     , unix-compat
     , unliftio >=0.2.20
   default-language: Haskell2010
-  if os(linux)
-    cpp-options: -DOS_Linux -DHAVE_NATIVE_WATCHER
-  if os(windows)
-    cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
-  if os(darwin)
-    cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
-  if os(freebsd)
-    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
+  if os(linux) || os(windows) || os(darwin) || os(freebsd)
+    cpp-options: -DHAVE_NATIVE_WATCHER
   if os(windows)
     build-depends:
         Win32
