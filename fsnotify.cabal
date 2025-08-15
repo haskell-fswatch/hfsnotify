@@ -54,7 +54,9 @@ library
     cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
     cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
-  if os(linux)
+  if os(freebsd)
+    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
+  if os(linux) || os(freebsd)
     other-modules:
         System.FSNotify.Linux
         System.FSNotify.Linux.Util
@@ -80,6 +82,9 @@ library
         System.FSNotify.OSX
     build-depends:
         hfsevents >=0.1.8
+  if os(freebsd)
+    build-depends:
+        hinotify >=0.4.1
 
 executable example
   main-is: Main.hs
@@ -111,6 +116,8 @@ executable example
     cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
     cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
+  if os(freebsd)
+    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
   if !arch(wasm32)
     ghc-options: -threaded
 
@@ -148,6 +155,8 @@ test-suite tests
     cpp-options: -DOS_Win32 -DHAVE_NATIVE_WATCHER
   if os(darwin)
     cpp-options: -DOS_Mac -DHAVE_NATIVE_WATCHER
+  if os(freebsd)
+    cpp-options: -DOS_FreeBSD -DHAVE_NATIVE_WATCHER
   if os(windows)
     build-depends:
         Win32

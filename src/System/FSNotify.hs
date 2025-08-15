@@ -87,7 +87,7 @@ import System.FSNotify.Listener (ListenFn, StopListening)
 import Data.Monoid
 #endif
 
-#ifdef OS_Linux
+#if defined(OS_Linux) || defined(OS_FreeBSD)
 import System.FSNotify.Linux
 #endif
 
