@@ -1,6 +1,11 @@
 Changes
 =======
 
+Version 0.4.4.0
+----------
+* Use hinotify and -DHAVE_NATIVE_WATCHER for FreeBSD (#121)
+* Start testing FreeBSD in CI (#122)
+
 Version 0.4.3.0
 ----------
 * Use polling as a generic fallback and add support for WASM (https://github.com/haskell-fswatch/hfsnotify/pull/110)
