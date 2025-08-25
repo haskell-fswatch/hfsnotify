@@ -1,4 +1,4 @@
-resolver: nightly-2025-03-20
+resolver: lts-24.6
 
 packages:
 - '.'
@@ -7,9 +7,6 @@ nix:
   pure: false
   packages:
   - zlib
-
-extra-deps:
-- hinotify-0.4.2
 
 # Uncomment these to test with text-2.1.2, which exports "show" by default
 # - text-2.1.2
