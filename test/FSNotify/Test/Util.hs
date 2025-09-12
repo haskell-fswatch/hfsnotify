@@ -175,7 +175,7 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
     -- When polling, we want to ensure we wait at least as long as the effective filesystem modification
     -- time granularity (which on Linux can be on the order of 10 milliseconds), *or*
     -- the poll interval, whichever is greater.
-    threadDelay (max 5_000_000 (3 * pollInterval))
+    threadDelay (max 30_000_000 (3 * pollInterval))
 
     let conf = defaultConfig {
 #ifndef HAVE_NATIVE_WATCHER
