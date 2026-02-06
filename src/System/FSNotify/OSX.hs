@@ -117,7 +117,8 @@ listenFn :: (
 listenFn handler conf (OSXManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
   unique <- newUnique
-  eventStream <- FSE.eventStreamCreate [path'] 0.0 True False True (handler actPred callback path')
+  let ignoreSelf = confIgnoreSelf conf
+  eventStream <- FSE.eventStreamCreate [path'] 0.0 True ignoreSelf True (handler actPred callback path')
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream callback) watchMap)
   return $ do
     FSE.eventStreamDestroy eventStream

@@ -84,6 +84,10 @@ data WatchConfig = WatchConfig
     -- ^ Threading mode to use.
   , confOnHandlerException :: SomeException -> IO ()
     -- ^ Called when a handler throws an exception.
+  , confIgnoreSelf :: Bool
+    -- ^ If 'True', ignore events caused by the current process.
+    -- Currently only supported on Darwin (macOS) via FSEvents @kFSEventStreamCreateFlagIgnoreSelf@.
+    -- On all other platforms this option is a no-op.
   }
 
 type IOEvent = IORef Event
