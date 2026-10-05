@@ -15,6 +15,7 @@ module System.FSNotify.Types (
   , Event(..)
   , EventIsDirectory(..)
   , AddedExtraInfo(..)
+  , RescanReason(..)
   , EventCallback
   , EventChannel
   , EventAndActionChannel
@@ -68,9 +69,23 @@ data Event =
   | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   -- | Note: Linux-only
   | CloseWrite  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- | Linux reports unrecognized inotify events (such as a queue overflow) this way; macOS reports
-  -- an FSEvents MustScanSubDirs this way, meaning events under 'eventPath' were lost and it must be rescanned.
+  -- | Note: Linux-only
   | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
+  -- | Events affecting the directory 'eventPath' were lost, so it should be rescanned: recursively
+  -- for a recursive watch, and just its entries for a non-recursive one.
+  | Rescan { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventRescanReason :: RescanReason }
+  deriving (Eq, Show)
+
+-- | Why a 'Rescan' was needed
+data RescanReason =
+  -- | macOS: FSEvents coalesced events under the path into one
+  RescanCoalesced
+  -- | macOS: fseventsd dropped events because this process didn't keep up
+  | RescanUserDropped
+  -- | macOS: the kernel dropped events because fseventsd didn't keep up
+  | RescanKernelDropped
+  -- | Linux: the inotify event queue overflowed
+  | RescanQueueOverflow
   deriving (Eq, Show)
 
 type EventChannel = Chan Event

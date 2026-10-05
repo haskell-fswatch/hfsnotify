@@ -39,6 +39,7 @@ module System.FSNotify (
     Event(..)
   , EventIsDirectory(..)
   , AddedExtraInfo(..)
+  , RescanReason(..)
   , EventChannel
   , Action
   , ActionPredicate
