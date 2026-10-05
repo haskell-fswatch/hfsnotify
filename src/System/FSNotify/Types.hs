@@ -68,7 +68,8 @@ data Event =
   | WatchedDirectoryRemoved  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   -- | Note: Linux-only
   | CloseWrite  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
-  -- | Note: Linux-only
+  -- | Linux reports unrecognized inotify events (such as a queue overflow) this way; macOS reports
+  -- an FSEvents MustScanSubDirs this way, meaning events under 'eventPath' were lost and it must be rescanned.
   | Unknown  { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventString :: String }
   deriving (Eq, Show)
 

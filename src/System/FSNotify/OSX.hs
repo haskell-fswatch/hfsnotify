@@ -4,6 +4,7 @@
 --
 
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
@@ -15,6 +16,7 @@ module System.FSNotify.OSX (
 import Control.Concurrent
 import Control.Monad
 import Data.Bits
+import Data.List (isPrefixOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -70,7 +72,8 @@ fsnEvents timestamp e = do
   -- Uncomment for an easy way to see flag activity when testing manually
   -- putStrLn $ show ["Event", show e, "isDirectory", show isDirectory, "isFile", show isFile, "isModified", show isModified, "isCreated", show isCreated, "path", path e, "exists", show exists]
 
-  return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
+  return $ if | mustScanSubDirs -> [Unknown (FSE.eventPath e) timestamp IsDirectory (droppedDescription e)]
+              | exists && isModified -> [Modified (path e) timestamp isDirectory]
               | exists && isModifiedAttributes -> [ModifiedAttributes (path e) timestamp isDirectory]
               | exists && isCreated -> [Added (path e) timestamp isDirectory AddedByCreate]
               | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
@@ -87,16 +90,33 @@ fsnEvents timestamp e = do
     isRenamed = hasFlag e FSE.eventFlagItemRenamed
     isModified = hasFlag e FSE.eventFlagItemModified
     isModifiedAttributes = hasFlag e FSE.eventFlagItemInodeMetaMod
+    mustScanSubDirs = hasFlag e FSE.eventFlagMustScanSubDirs
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
+
+-- FSEvents sets MustScanSubDirs when it coalesced or dropped events under a path (with UserDropped
+-- or KernelDropped saying where the drop happened). The client must rescan, so this is reported as
+-- 'Unknown' on the path to rescan, the same way the Linux backend reports an inotify queue overflow.
+droppedDescription :: FSE.Event -> String
+droppedDescription e = unwords $ "MustScanSubDirs" : [name | (flag, name) <- droppedFlags, FSE.eventFlags e .&. flag /= 0]
+  where
+    droppedFlags = [(FSE.eventFlagUserDropped, "UserDropped"), (FSE.eventFlagKernelDropped, "KernelDropped")]
 
 handleFSEEvent :: Bool -> ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO ()
 handleFSEEvent isRecursive actPred callback dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
   forM_ events $ \event ->
-    when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $
+    when (actPred event && (isRecursive || isDirectlyInside dirPath event || isRescanOf dirPath event)) $
       callback event
+
+-- | A rescan at the watched directory, above it, or below it may have lost events the watch cares about
+isRescanOf :: FilePath -> Event -> Bool
+isRescanOf dirPath (Unknown {eventPath}) = rescanDirs `isPrefixOf` watchedDirs || watchedDirs `isPrefixOf` rescanDirs
+  where
+    rescanDirs = splitDirectories eventPath
+    watchedDirs = splitDirectories dirPath
+isRescanOf _ _ = False
 
 -- | For non-recursive monitoring, test if an event takes place directly inside the monitored folder
 isDirectlyInside :: FilePath -> Event -> Bool
