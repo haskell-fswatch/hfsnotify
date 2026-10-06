@@ -74,6 +74,12 @@ watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
   chanEvents <- newChan
   tid1 <- forkIO $ dispatcher chanEvents
   tid2 <- forkIO $ osEventsReader dir watchSubTree flags watchHandle chanEvents
+
+  -- EXPERIMENT: the OS records nothing for the handle until the reader thread reaches its first
+  -- ReadDirectoryChangesW. Get off the capability so it has a chance to, before we hand back a
+  -- watch the caller will use immediately.
+  threadDelay 1000
+
   let wid = WatchId [tid1, tid2] watchHandle
   modifyMVar mvarMap $ \watchMap ->
     return (Map.insert wid handler watchMap, wid)
