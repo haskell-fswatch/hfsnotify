@@ -207,9 +207,9 @@ jobs:
             echo "::endgroup::"
 
             echo "::group::Build with Cabal"
-            cabal build --with-compiler=ghc-9.6.7
+            cabal build --enable-tests --with-compiler=ghc-9.6.7
             echo "::endgroup::"
 
             echo "::group::Test with Cabal"
-            cabal test --with-compiler=ghc-9.6.7
+            cabal test --enable-tests --with-compiler=ghc-9.6.7
             echo "::endgroup::"
