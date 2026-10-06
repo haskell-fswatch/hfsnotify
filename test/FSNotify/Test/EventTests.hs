@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -13,6 +15,7 @@
 module FSNotify.Test.EventTests where
 
 import Control.Exception.Safe (MonadThrow)
+import Control.Concurrent (threadDelay)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.List as L
@@ -25,6 +28,7 @@ import System.FilePath
 import System.IO (hPutStr)
 import Test.Sandwich
 import UnliftIO hiding (poll)
+import qualified UnliftIO
 import UnliftIO.Directory
 
 
@@ -45,7 +49,13 @@ eventTests' :: (
 eventTests' testFolderGenerator threadingMode poll recursive nested = do
   let withFolder' = withTestFolder testFolderGenerator threadingMode poll recursive nested
   let withFolder action = withFolder' (const $ return ()) (\() ctx -> action ctx)
-  let waitForEvents getEvents action = waitUntil 5.0 (liftIO getEvents >>= action)
+  -- EXPERIMENT (not for merge): when the usual 5s window fails, keep waiting and report whether
+  -- the events turn up late or never turn up at all.
+  let waitForEvents getEvents action =
+        waitUntil 5.0 (liftIO getEvents >>= action) `UnliftIO.catch` \(firstFailure :: FailureReason) -> do
+          liftIO $ threadDelay 25_000_000
+          lateEvents <- liftIO getEvents
+          expectationFailure $ "FLAKEDIAG after30s=" <> show lateEvents <> " firstFailure=" <> show firstFailure
 
   unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
     removeDirectory watchedDir

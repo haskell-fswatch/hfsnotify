@@ -1,15 +1,23 @@
 name: CI
 
-# Temporary experiment workflow (not for merge): just the Windows stress probe, so a cycle takes
-# minutes instead of an hour.
+# Temporary experiment workflow (not for merge): run the real test suite on Windows over and over,
+# with the failure path instrumented to say whether a missing event turns up late or never.
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  stress:
+  flake-hunt:
+    name: ${{ matrix.stack-yaml }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack-yaml:
+        - stack.yaml
+        - stack-ghc912.yaml
+
     steps:
     - uses: actions/checkout@v4
 
@@ -23,7 +31,7 @@ jobs:
     - name: Run stack setup
       shell: bash
       run: |
-        export STACK_EXTRA_ARGS="--stack-yaml stack.yaml"
+        export STACK_EXTRA_ARGS="--stack-yaml ${{matrix.stack-yaml}}"
         stack setup $STACK_EXTRA_ARGS
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
@@ -31,12 +39,12 @@ jobs:
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-stack.yaml-stack-key3
+        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
 
     - name: Build
       shell: bash
-      run: stack build $STACK_EXTRA_ARGS
+      run: stack build $STACK_EXTRA_ARGS --test --no-run-tests
 
-    - name: Stress
+    - name: Test (repeated)
       shell: bash
-      run: stack exec $STACK_EXTRA_ARGS example
+      run: stack test $STACK_EXTRA_ARGS --ta "--repeat 12 --print-failures"
