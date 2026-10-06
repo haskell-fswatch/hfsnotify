@@ -153,7 +153,11 @@ jobs:
     - name: Setup ghc-wasm32-wasi
       run: |
         cd "$(mktemp -d)"
-        curl -L "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" | tar xz --strip-components=1
+        # gitlab.haskell.org intermittently rate limits CI runners, which otherwise shows up as
+        # "gzip: stdin: not in gzip format" when we pipe an HTML error page into tar
+        curl -fL --retry 5 --retry-delay 15 --retry-all-errors \
+          "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" \
+          | tar xz --strip-components=1
         ./setup.sh
         ~/.ghc-wasm/add_to_github_path.sh
 
