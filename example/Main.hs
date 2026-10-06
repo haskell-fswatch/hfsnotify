@@ -126,15 +126,14 @@ createFile' path = writeFile path "foo"
 
 main :: IO ()
 main = do
-  -- Served by the first watch Win32.hs opens
-  report "file-immediate" =<< replicateM 300 (freshWatchTrial False createFile' 0)
-
-  -- Served by the second watch, the one with the narrowest startup window
+  -- Control: one watch at a time
   report "dir-immediate" =<< replicateM 300 (freshWatchTrial False createDirectory 0)
-  report "dir-immediate-recursive" =<< replicateM 300 (freshWatchTrial True createDirectory 0)
 
-  -- Same, but let the watch settle first. If this is clean while the above aren't, the window
-  -- between the watch being set up and it actually listening is the whole problem.
-  report "dir-settled-50ms" =<< replicateM 300 (freshWatchTrial False createDirectory 50_000)
+  -- The suite's conditions: 20 watches starting at once, each acting the instant its watch is set
+  -- up. On Windows a directory event is served by the second of the two watches watchDir opens,
+  -- which is the one with the least time to start listening.
+  report "dir-immediate-parallel20" . concat
+    =<< replicateM 30 (mapConcurrently (const (freshWatchTrial False createDirectory 0)) [1 .. 20 :: Int])
 
-  report "steady-state" =<< steadyStateTrials 25 400
+  report "file-immediate-parallel20" . concat
+    =<< replicateM 10 (mapConcurrently (const (freshWatchTrial False createFile' 0)) [1 .. 20 :: Int])

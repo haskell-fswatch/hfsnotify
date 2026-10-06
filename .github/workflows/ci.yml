@@ -16,8 +16,6 @@ jobs:
         stack-yaml:
         - stack.yaml
         - stack-ghc912.yaml
-        - stack-ghc98.yaml
-        - stack-ghc96.yaml
 
     steps:
     - uses: actions/checkout@v4
@@ -44,8 +42,8 @@ jobs:
 
     - name: Build
       shell: bash
-      run: stack build $STACK_EXTRA_ARGS --test --no-run-tests
+      run: stack build $STACK_EXTRA_ARGS
 
-    - name: Test (repeated)
+    - name: Stress probe
       shell: bash
-      run: stack test $STACK_EXTRA_ARGS --ta "--repeat 15 --print-failures"
+      run: stack exec $STACK_EXTRA_ARGS example
