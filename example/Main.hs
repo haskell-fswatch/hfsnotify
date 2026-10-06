@@ -12,36 +12,46 @@ import Control.Monad
 import Data.IORef
 import Data.List (sort)
 import GHC.Clock (getMonotonicTime)
+import System.Directory (createDirectory)
 import System.FSNotify
 import System.FilePath
 import UnliftIO.Async (mapConcurrently)
 import UnliftIO.Temporary (withSystemTempDirectory)
 
 
--- | The window the test suite allows (waitUntil 5.0).
+-- | Events normally arrive in well under 20ms, so anything slower than this is as good as missed
+-- (the suite allows 5s).
 suiteWindowSecs :: Double
-suiteWindowSecs = 5
+suiteWindowSecs = 2
 
 -- | How much longer we keep waiting after that, to see whether the event was merely late.
 graceSecs :: Double
-graceSecs = 25
+graceSecs = 3
 
 data Outcome =
   InTime Double
   | Late Double
   | Lost
 
--- | Watch a fresh directory and create a file in it immediately, with no pause for the watch to
--- settle. This is what every test in the suite does.
-freshWatchTrial :: IO Outcome
-freshWatchTrial = withSystemTempDirectory "fsnotify-stress" $ \dir -> do
+-- | Watch a fresh directory and act on it after @settleMicros@, with no pause by default. This is
+-- what every test in the suite does.
+--
+-- Which watch delivers the event matters on Windows: watchDir there opens one watch for file
+-- flags and then a second for directory-name flags, so a directory creation is served by the
+-- watch that was set up last and has had the least time to get going.
+freshWatchTrial :: Bool -> (FilePath -> IO ()) -> Int -> IO Outcome
+freshWatchTrial recursive act settleMicros = withSystemTempDirectory "fsnotify-stress" $ \dir -> do
   arrivedAt <- newIORef Nothing
 
+  let watchFn = if recursive then watchTree else watchDir
+
   withManager $ \mgr -> do
-    stop <- watchDir mgr dir (const True) $ \_ev -> recordArrival arrivedAt
+    stop <- watchFn mgr dir (const True) $ \_ev -> recordArrival arrivedAt
+
+    when (settleMicros > 0) $ threadDelay settleMicros
 
     startedAt <- getMonotonicTime
-    writeFile (dir </> "testfile") "foo"
+    act (dir </> "testfile")
     outcome <- awaitOutcome arrivedAt startedAt
 
     stop
@@ -111,11 +121,20 @@ report name outcomes = do
 twoDecimals :: Double -> String
 twoDecimals x = show (fromIntegral (round (x * 100) :: Int) / 100 :: Double)
 
+createFile' :: FilePath -> IO ()
+createFile' path = writeFile path "foo"
+
 main :: IO ()
 main = do
-  report "fresh-watch" =<< replicateM 300 freshWatchTrial
+  -- Served by the first watch Win32.hs opens
+  report "file-immediate" =<< replicateM 300 (freshWatchTrial False createFile' 0)
 
-  -- 20 at a time, the concurrency the suite runs at
-  report "fresh-watch-parallel20" . concat =<< replicateM 25 (mapConcurrently (const freshWatchTrial) [1 .. 20 :: Int])
+  -- Served by the second watch, the one with the narrowest startup window
+  report "dir-immediate" =<< replicateM 300 (freshWatchTrial False createDirectory 0)
+  report "dir-immediate-recursive" =<< replicateM 300 (freshWatchTrial True createDirectory 0)
+
+  -- Same, but let the watch settle first. If this is clean while the above aren't, the window
+  -- between the watch being set up and it actually listening is the whole problem.
+  report "dir-settled-50ms" =<< replicateM 300 (freshWatchTrial False createDirectory 50_000)
 
   report "steady-state" =<< steadyStateTrials 25 400

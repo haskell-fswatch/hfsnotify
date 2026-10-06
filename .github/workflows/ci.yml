@@ -1,7 +1,6 @@
 name: CI
 
-# Temporary experiment workflow (not for merge): run the real test suite on Windows over and over,
-# with the failure path instrumented to say whether a missing event turns up late or never.
+# Temporary experiment workflow (not for merge): run the Windows stress probe.
 
 on:
   push:
@@ -43,8 +42,8 @@ jobs:
 
     - name: Build
       shell: bash
-      run: stack build $STACK_EXTRA_ARGS --test --no-run-tests
+      run: stack build $STACK_EXTRA_ARGS
 
-    - name: Test (repeated)
+    - name: Stress probe
       shell: bash
-      run: stack test $STACK_EXTRA_ARGS --ta "--repeat 12 --print-failures"
+      run: stack exec $STACK_EXTRA_ARGS example
