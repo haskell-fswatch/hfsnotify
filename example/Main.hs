@@ -1,5 +1,6 @@
--- Temporary experiment harness (not for merge): measures how often an event is missed and how
--- long events take to arrive, to tell event loss apart from delivery latency.
+-- Temporary experiment harness (not for merge): measures how often an event fails to arrive
+-- inside the window the test suite allows, and whether it shows up late afterwards or never at
+-- all. "Late" means delivery latency; "Lost" means the event really is gone.
 
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
@@ -17,68 +18,104 @@ import UnliftIO.Async (mapConcurrently)
 import UnliftIO.Temporary (withSystemTempDirectory)
 
 
-trials :: Int
-trials = 100
+-- | The window the test suite allows (waitUntil 5.0).
+suiteWindowSecs :: Double
+suiteWindowSecs = 5
 
--- | How long to keep waiting for an event before calling it missed. The test suite allows 5s, so
--- anything beyond this is a miss by any reasonable standard.
-missedAfterSecs :: Double
-missedAfterSecs = 10
+-- | How much longer we keep waiting after that, to see whether the event was merely late.
+graceSecs :: Double
+graceSecs = 25
 
--- | One trial: watch a fresh directory, wait @settleMicros@, create a file in it, and report how
--- many milliseconds the first event took to arrive ('Nothing' if it never did).
-trial :: Int -> IO (Maybe Double)
-trial settleMicros = withSystemTempDirectory "fsnotify-stress" $ \dir -> do
+data Outcome =
+  InTime Double
+  | Late Double
+  | Lost
+
+-- | Watch a fresh directory and create a file in it immediately, with no pause for the watch to
+-- settle. This is what every test in the suite does.
+freshWatchTrial :: IO Outcome
+freshWatchTrial = withSystemTempDirectory "fsnotify-stress" $ \dir -> do
   arrivedAt <- newIORef Nothing
 
   withManager $ \mgr -> do
-    stop <- watchDir mgr dir (const True) $ \_ev -> do
-      now <- getMonotonicTime
-      atomicModifyIORef' arrivedAt $ \previous -> (maybe (Just now) Just previous, ())
-
-    when (settleMicros > 0) $ threadDelay settleMicros
+    stop <- watchDir mgr dir (const True) $ \_ev -> recordArrival arrivedAt
 
     startedAt <- getMonotonicTime
     writeFile (dir </> "testfile") "foo"
-    result <- waitForEvent arrivedAt startedAt
+    outcome <- awaitOutcome arrivedAt startedAt
 
     stop
-    return result
+    return outcome
 
-waitForEvent :: IORef (Maybe Double) -> Double -> IO (Maybe Double)
-waitForEvent arrivedAt startedAt = go
+-- | Many writes through a single established watch, which is where most of the suite's
+-- assertions actually sit.
+steadyStateTrials :: Int -> Int -> IO [Outcome]
+steadyStateTrials watchers writesPerWatcher = fmap concat $ forM [1 .. watchers] $ \_ ->
+  withSystemTempDirectory "fsnotify-stress" $ \dir -> do
+    wanted <- newIORef ""
+    arrivedAt <- newIORef Nothing
+
+    withManager $ \mgr -> do
+      stop <- watchDir mgr dir (const True) $ \ev -> do
+        name <- readIORef wanted
+        when (takeFileName (eventPath ev) == name) $ recordArrival arrivedAt
+
+      outcomes <- forM [1 .. writesPerWatcher] $ \i -> do
+        let name = "file" <> show i
+        writeIORef arrivedAt Nothing
+        writeIORef wanted name
+
+        startedAt <- getMonotonicTime
+        writeFile (dir </> name) "foo"
+        awaitOutcome arrivedAt startedAt
+
+      stop
+      return outcomes
+
+recordArrival :: IORef (Maybe Double) -> IO ()
+recordArrival arrivedAt = do
+  now <- getMonotonicTime
+  atomicModifyIORef' arrivedAt $ \previous -> (maybe (Just now) Just previous, ())
+
+awaitOutcome :: IORef (Maybe Double) -> Double -> IO Outcome
+awaitOutcome arrivedAt startedAt = go
   where
     go = readIORef arrivedAt >>= \case
-      Just at -> return $ Just ((at - startedAt) * 1000)
+      Just at -> do
+        let elapsed = at - startedAt
+        return $ if elapsed <= suiteWindowSecs then InTime (elapsed * 1000) else Late (elapsed * 1000)
       Nothing -> do
         now <- getMonotonicTime
-        if now - startedAt > missedAfterSecs
-          then return Nothing
+        if now - startedAt > suiteWindowSecs + graceSecs
+          then return Lost
           else threadDelay 1_000 >> go
 
-report :: String -> [Maybe Double] -> IO ()
-report name results = do
+report :: String -> [Outcome] -> IO ()
+report name outcomes = do
   putStrLn $ "PHASE " <> name
-  putStrLn $ "  trials: " <> show (length results) <> "  missed: " <> show (length [() | Nothing <- results])
-  unless (null arrived) $
-    putStrLn $ "  latency_ms: p50=" <> percentile 0.5 <> " p90=" <> percentile 0.9
-                                    <> " p99=" <> percentile 0.99 <> " max=" <> twoDecimals (last arrived)
+  putStrLn $ "  trials: " <> show (length outcomes)
+             <> "  in_time: " <> show (length inTime)
+             <> "  late: " <> show (length late)
+             <> "  lost: " <> show (length [() | Lost <- outcomes])
+  unless (null inTime) $
+    putStrLn $ "  in_time_ms: p50=" <> percentile 0.5 <> " p90=" <> percentile 0.9
+                                    <> " p99=" <> percentile 0.99 <> " max=" <> twoDecimals (last sorted)
+  unless (null late) $
+    putStrLn $ "  late_ms: " <> show (map (twoDecimals) late)
   where
-    arrived = sort [at | Just at <- results]
-    percentile p = twoDecimals $ arrived !! min (length arrived - 1) (floor (p * fromIntegral (length arrived)))
+    inTime = [ms | InTime ms <- outcomes]
+    late = [ms | Late ms <- outcomes]
+    sorted = sort inTime
+    percentile p = twoDecimals $ sorted !! min (length sorted - 1) (floor (p * fromIntegral (length sorted)))
 
 twoDecimals :: Double -> String
 twoDecimals x = show (fromIntegral (round (x * 100) :: Int) / 100 :: Double)
 
 main :: IO ()
 main = do
-  -- Write with no pause after the watch starts: this is what every test in the suite does, and
-  -- what the startup race would break
-  report "immediate" =<< replicateM trials (trial 0)
+  report "fresh-watch" =<< replicateM 300 freshWatchTrial
 
-  -- Same, but give the watch half a second first. If this one is clean while "immediate" isn't,
-  -- the problem is the startup window rather than general latency
-  report "settled-500ms" =<< replicateM trials (trial 500_000)
+  -- 20 at a time, the concurrency the suite runs at
+  report "fresh-watch-parallel20" . concat =<< replicateM 25 (mapConcurrently (const freshWatchTrial) [1 .. 20 :: Int])
 
-  -- 20 watches at once, which is the kind of load the test suite runs under (parallelN 20)
-  report "immediate-parallel20" . concat =<< replicateM 5 (mapConcurrently (const (trial 0)) [1 .. 20 :: Int])
+  report "steady-state" =<< steadyStateTrials 25 400
