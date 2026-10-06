@@ -111,6 +111,12 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
          | isWin -> case events of
              [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
+         | isMac -> case events of
+             -- Current macOS versions set the "modified" flag on a touch, where older ones set
+             -- only the "inode metadata modified" flag
+             [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+             [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+             _ -> expectationFailure $ "Got wrong events: " <> show events
          | otherwise -> case events of
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
@@ -120,7 +126,9 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isMac || isFreeBSD -> case events of
-               [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               -- A write shows up as either event here, depending on the macOS version and on
+               -- which flags FSEvents happens to coalesce
+               [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
            | otherwise -> case events of

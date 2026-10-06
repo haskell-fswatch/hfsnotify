@@ -1,0 +1,9 @@
+resolver: nightly-2026-10-05 # ghc-9.12.4
+
+packages:
+- '.'
+
+nix:
+  pure: false
+  packages:
+  - zlib
