@@ -1,107 +1,17 @@
 name: CI
 
+# Temporary experiment workflow (not for merge): just the Windows stress probe, so a cycle takes
+# minutes instead of an hour.
+
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  cabal:
-    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        ghc:
-          - "8.10.7"
-          - "9.0.2"
-          - "9.2.8"
-          - "9.4.8"
-          - "9.6.7"
-          - "9.8.4"
-          - "9.10.3"
-          - "9.12.4"
-          - "9.14.1"
-        exclude:
-        # These don't work on GitHub CI anymore because they need llvm@13, which became
-        # disabled on 12/31/2024
-        - os: macOS-latest
-          ghc: 8.10.7
-        - os: macOS-latest
-          ghc: 9.0.2
-
+  stress:
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew update
-        # https://gitlab.haskell.org/ghc/ghc/-/issues/20592#note_391266
-        echo "C_INCLUDE_PATH=`xcrun --show-sdk-path`/usr/include/ffi" >> "$GITHUB_ENV"
-
-    - uses: haskell-actions/setup@v2
-      id: setup-haskell-cabal
-      name: Setup Haskell (Cabal)
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: "latest"
-
-    - name: Freeze
-      run: |
-        cabal update
-        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
-        cabal freeze
-        cat cabal.project.freeze
-
-    - uses: actions/cache/restore@v4
-      id: cache-restore
-      with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
-
-    - name: Build
-      run: cabal build all
-
-    - name: Test
-      run: cabal test
-
-    - uses: actions/cache/save@v4
-      if: always() && steps.cache-restore.outputs.cache-hit != 'true'
-      with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
-
-  stack:
-    name: ${{ matrix.os }} / ${{ matrix.stack-yaml }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        stack-yaml:
-        - stack-ghc90.yaml
-        - stack-ghc92.yaml
-        - stack-ghc94.yaml
-        - stack-ghc96.yaml
-        - stack-ghc98.yaml
-        - stack.yaml # Current dev version at ghc910
-        - stack-ghc912.yaml
-        exclude:
-        # These don't work on GitHub CI anymore because they need llvm@13, which became
-        # disabled on 12/31/2024
-        - os: macOS-latest
-          stack-yaml: stack-ghc90.yaml
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew update
-        # https://gitlab.haskell.org/ghc/ghc/-/issues/20592#note_391266
-        echo "C_INCLUDE_PATH=`xcrun --show-sdk-path`/usr/include/ffi" >> "$GITHUB_ENV"
 
     - uses: haskell-actions/setup@v2
       name: Setup Haskell (Stack)
@@ -113,7 +23,7 @@ jobs:
     - name: Run stack setup
       shell: bash
       run: |
-        export STACK_EXTRA_ARGS="--stack-yaml ${{matrix.stack-yaml}}"
+        export STACK_EXTRA_ARGS="--stack-yaml stack.yaml"
         stack setup $STACK_EXTRA_ARGS
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
@@ -121,103 +31,12 @@ jobs:
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
-
-    # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
-    # Windows jobs would all build the default stack.yaml instead of their matrix entry
-    - name: Build
-      shell: bash
-      run: |
-        stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
-
-    - name: Test
-      shell: bash
-      run: |
-        stack test $STACK_EXTRA_ARGS
-
-  wasm:
-    runs-on: ubuntu-latest
-    env:
-      GHC_WASM_META_REV: 45f73c3e075fa38efe84055b0dba87996948101d
-    strategy:
-      fail-fast: false
-      matrix:
-        ghc: ['9.10']
-    steps:
-    - name: Install happy
-      run: |
-        cabal path --installdir >> "$GITHUB_PATH"
-        cabal update -z
-        cabal install -z happy
-
-    - name: Setup ghc-wasm32-wasi
-      run: |
-        cd "$(mktemp -d)"
-        # gitlab.haskell.org intermittently rate limits CI runners, which otherwise shows up as
-        # "gzip: stdin: not in gzip format" when we pipe an HTML error page into tar
-        curl -fL --retry 5 --retry-delay 15 --retry-all-errors \
-          "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" \
-          | tar xz --strip-components=1
-        ./setup.sh
-        ~/.ghc-wasm/add_to_github_path.sh
-
-    - uses: actions/checkout@v4
-
-    - uses: actions/cache/restore@v4
-      id: cache-restore
-      with:
-        path: |
-          ~/.ghc-wasm/.cabal/store
-        key: wasi-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-flavour-${{ matrix.ghc }}-${{ github.sha }}
-        restore-keys: |
-          wasi-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-flavour-${{ matrix.ghc }}-
+        key: ${{ runner.os }}-stack.yaml-stack-key3
 
     - name: Build
-      run: |
-        wasm32-wasi-cabal build all
-        wasm32-wasi-cabal list-bin exe:example
+      shell: bash
+      run: stack build $STACK_EXTRA_ARGS
 
-    - name: Test
-      # The test suite doesn't compile due to the sandwich dependency, so we only run the example app.
-      run: |
-        wasmtime.sh "$(wasm32-wasi-cabal list-bin exe:example)"
-
-    - uses: actions/cache/save@v4
-      if: always() && steps.cache-restore.outputs.cache-hit != 'true'
-      with:
-        path: |
-          ~/.ghc-wasm/.cabal/store
-        key: ${{ steps.cache-restore.outputs.cache-primary-key }}
-
-  freebsd:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Repository checkout
-        uses: actions/checkout@v4
-      - uses: cross-platform-actions/action@v0.29.0
-        with:
-          operating_system: 'freebsd'
-          version: '14.3'
-          architecture: 'x86_64'
-          run: |
-            # Use latest package set
-            sudo mkdir -p /usr/local/etc/pkg/repos/
-            sudo cp /etc/pkg/FreeBSD.conf /usr/local/etc/pkg/repos/FreeBSD.conf
-            sudo sed -i.bak -e 's|/quarterly|/latest|' /usr/local/etc/pkg/repos/FreeBSD.conf
-
-            echo "::group::Dependencies installation"
-            sudo -E pkg install -y \
-                ghc96 hs-cabal-install libinotify
-            echo "::endgroup::"
-
-            echo "::group::Updating Cabal package index"
-            cabal update --with-compiler=ghc-9.6.7
-            echo "::endgroup::"
-
-            echo "::group::Build with Cabal"
-            cabal build --enable-tests --with-compiler=ghc-9.6.7
-            echo "::endgroup::"
-
-            echo "::group::Test with Cabal"
-            cabal test --enable-tests --with-compiler=ghc-9.6.7
-            echo "::endgroup::"
+    - name: Stress
+      shell: bash
+      run: stack exec $STACK_EXTRA_ARGS example
