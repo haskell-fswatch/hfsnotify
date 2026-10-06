@@ -1,5 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module System.Win32.Notify (
   Event(..)
@@ -10,7 +9,6 @@ module System.Win32.Notify (
   , initWatchManager
   , killWatch
   , killWatchManager
-  , watch
   , watchDirectory
 
   , fILE_NOTIFY_CHANGE_FILE_NAME
@@ -34,7 +32,7 @@ import System.FilePath
 import System.IO.Error (ioeSetErrorString)
 import System.Win32.File
 import System.Win32.FileNotify
-import System.Win32.Types (c_maperrno_func)
+import System.Win32.Types (c_maperrno_func, ErrCode)
 
 
 data EventVariety =
@@ -55,7 +53,10 @@ data Event
 
 type Handler = Event -> IO ()
 
-data WatchId = WatchId [ThreadId] Handle deriving (Eq, Ord, Show)
+-- | The dispatcher thread plus the watch it dispatches for. The reader thread isn't here on
+-- purpose: it owns the buffers the OS writes into, so it has to be stopped by closing the handle
+-- rather than killed (see 'killWatch').
+data WatchId = WatchId ThreadId DirectoryWatch deriving (Eq, Ord, Show)
 type WatchMap = Map WatchId Handler
 data WatchManager = WatchManager { watchManagerWatchMap :: MVar WatchMap }
 
@@ -70,54 +71,61 @@ killWatchManager (WatchManager mvarMap) = do
 
 watchDirectory :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> Handler -> IO WatchId
 watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
-  watchHandle <- getWatchHandle dir
+  dirWatch <- openDirectoryWatch dir watchSubTree flags
+
+  -- Put the first read in flight before returning. Otherwise changes made right after this call
+  -- are lost: the OS doesn't record anything for the handle until a read is outstanding, and the
+  -- reader thread below may not have been scheduled yet.
+  armDirectoryWatch dirWatch >>= \case
+    Right () -> return ()
+    Left err -> do
+      closeDirectoryWatch dirWatch
+      -- No read is in flight, since arming it is what just failed
+       freeDirectoryWatch dirWatch
+      throwReadDirectoryChangesError err
+
   chanEvents <- newChan
-  tid1 <- forkIO $ dispatcher chanEvents
-  tid2 <- forkIO $ osEventsReader dir watchSubTree flags watchHandle chanEvents
-  let wid = WatchId [tid1, tid2] watchHandle
+  dispatcherTid <- forkIO $ dispatcher chanEvents
+  _readerTid <- forkIO $ osEventsReader dir dirWatch chanEvents
+  let wid = WatchId dispatcherTid dirWatch
   modifyMVar mvarMap $ \watchMap ->
     return (Map.insert wid handler watchMap, wid)
-
   where
     dispatcher :: Chan [Event] -> IO ()
     dispatcher chanEvents = forever $ readChan chanEvents >>= mapM_ handler
 
-watch :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> IO (WatchId, Chan [Event])
-watch (WatchManager mvarMap) dir watchSubTree flags = do
-  watchHandle <- getWatchHandle dir
-  chanEvents <- newChan
-  tid <- forkIO $ osEventsReader dir watchSubTree flags watchHandle chanEvents
-  let wid = WatchId [tid] watchHandle
-  modifyMVar_ mvarMap $ \watchMap ->
-    return (Map.insert wid (const $ return ()) watchMap)
-  return (wid, chanEvents)
-
-osEventsReader :: FilePath -> Bool -> FileNotificationFlag -> Handle -> Chan [Event] -> IO ()
-osEventsReader dir watchSubTree flags watchHandle chanEvents =
-  -- EXPERIMENT (not for merge): shout if this thread ever stops, since a dead reader means the
-  -- watch goes silent with no other trace
+osEventsReader :: FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
+osEventsReader dir dirWatch chanEvents =
+  -- EXPERIMENT (not for merge): shout if this thread ever stops unexpectedly
   loopBody `catch` \(e :: SomeException) -> do
-    putStrLn ("WATCHDOG reader thread for " <> dir <> " flags=" <> show flags <> " died: " <> show e)
+    putStrLn ("WATCHDOG reader thread for " <> dir <> " died: " <> show e)
     throwIO e
   where
-   loopBody = fix $ \loop ->
-    readDirectoryChanges watchHandle watchSubTree flags >>= \case
-     -- ERROR_OPERATION_ABORTED: this happens when the event read thread is killed.
-     -- https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--500-999-
-     -- Just return silently.
-     Left (995, _) -> return ()
-     Left (err_code, msg) -> do
-       putStrLn ("WATCHDOG ReadDirectoryChangesW failed for " <> dir <> ": " <> show err_code <> " " <> msg)
-       errno <- c_maperrno_func err_code
-       throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
-     Right events -> actsToEvents dir events >>= writeChan chanEvents >> loop
+    loopBody = fix $ \loop ->
+      awaitDirectoryWatch dirWatch >>= \case
+        Right changes -> actsToEvents dir changes >>= writeChan chanEvents >> loop
+
+        -- The watch was killed, which closed the handle and so cancelled the read. Nothing can be
+        -- in flight at this point, so the buffers are ours to release.
+        Left (err, _) | err == eRROR_OPERATION_ABORTED || err == eRROR_INVALID_HANDLE ->
+          freeDirectoryWatch dirWatch
+
+        Left err -> do
+          freeDirectoryWatch dirWatch
+          throwReadDirectoryChangesError err
 
 killWatch :: WatchId -> IO ()
-killWatch (WatchId tids handle) = do
-  forM_ tids killThread
-  -- catch (closeHandle handle) $ \(e :: SomeException) ->
-  --   putStrLn ([i|Failed to kill watch #{handle}: #{e}|])
-  catch (closeHandle handle) $ \(_ :: SomeException) -> return ()
+killWatch (WatchId dispatcherTid dirWatch) = do
+  -- Closing the handle cancels the read in flight, which is how the reader thread learns to stop
+  -- and release its buffers. Killing it outright would leave the OS writing into memory we'd have
+  -- no safe moment to free.
+  catch (closeDirectoryWatch dirWatch) $ \(_ :: SomeException) -> return ()
+  killThread dispatcherTid
+
+throwReadDirectoryChangesError :: (ErrCode, String) -> IO a
+throwReadDirectoryChangesError (errCode, msg) = do
+  errno <- c_maperrno_func errCode
+  throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
 
 actsToEvents :: FilePath -> [(Action, String)] -> IO [Event]
 actsToEvents baseDir = mapM actToEvent
