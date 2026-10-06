@@ -81,7 +81,7 @@ watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
     Left err -> do
       closeDirectoryWatch dirWatch
       -- No read is in flight, since arming it is what just failed
-       freeDirectoryWatch dirWatch
+      freeDirectoryWatch dirWatch
       throwReadDirectoryChangesError err
 
   chanEvents <- newChan
