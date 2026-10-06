@@ -51,6 +51,14 @@ fsnEvents basePath' timestamp (INo.Modified (boolToIsDirectory -> isDir) (Just r
 fsnEvents basePath' timestamp (INo.Closed (boolToIsDirectory -> isDir) (Just raw) True) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
+-- Events about the watched directory itself arrive without a file name. We only ever add watches
+-- to directories, so the subject is the directory at basePath.
+fsnEvents basePath' timestamp (INo.Attributes _isDir Nothing) = do
+  basePath <- fromRawFilePath basePath'
+  return [ModifiedAttributes basePath timestamp IsDirectory]
+fsnEvents basePath' timestamp (INo.Modified _isDir Nothing) = do
+  basePath <- fromRawFilePath basePath'
+  return [Modified basePath timestamp IsDirectory]
 fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir AddedByCreate]
@@ -175,8 +183,10 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
     INo.DeletedSelf -> modifyMVar_ watchStillExistsVar $ const $ return False
     _ -> return ()
 
-  -- Forward the event. Ignore a DeletedSelf if we're not on the root directory,
-  -- since the watch above us will pick up the delete of that directory.
+  -- Forward the event. Ignore events about the watched directory itself if we're not on the
+  -- root directory, since the watch above us picks those up with a file name attached.
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
+    INo.Attributes _ Nothing | not isRootWatchedDir -> return ()
+    INo.Modified _ Nothing | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event
