@@ -93,16 +93,24 @@ watch (WatchManager mvarMap) dir watchSubTree flags = do
   return (wid, chanEvents)
 
 osEventsReader :: FilePath -> Bool -> FileNotificationFlag -> Handle -> Chan [Event] -> IO ()
-osEventsReader dir watchSubTree flags watchHandle chanEvents = fix $ \loop ->
-  readDirectoryChanges watchHandle watchSubTree flags >>= \case
-    -- ERROR_OPERATION_ABORTED: this happens when the event read thread is killed.
-    -- https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--500-999-
-    -- Just return silently.
-    Left (995, _) -> return ()
-    Left (err_code, msg) -> do
-      errno <- c_maperrno_func err_code
-      throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
-    Right events -> actsToEvents dir events >>= writeChan chanEvents >> loop
+osEventsReader dir watchSubTree flags watchHandle chanEvents =
+  -- EXPERIMENT (not for merge): shout if this thread ever stops, since a dead reader means the
+  -- watch goes silent with no other trace
+  loopBody `catch` \(e :: SomeException) -> do
+    putStrLn ("WATCHDOG reader thread for " <> dir <> " flags=" <> show flags <> " died: " <> show e)
+    throwIO e
+  where
+   loopBody = fix $ \loop ->
+    readDirectoryChanges watchHandle watchSubTree flags >>= \case
+     -- ERROR_OPERATION_ABORTED: this happens when the event read thread is killed.
+     -- https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--500-999-
+     -- Just return silently.
+     Left (995, _) -> return ()
+     Left (err_code, msg) -> do
+       putStrLn ("WATCHDOG ReadDirectoryChangesW failed for " <> dir <> ": " <> show err_code <> " " <> msg)
+       errno <- c_maperrno_func err_code
+       throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
+     Right events -> actsToEvents dir events >>= writeChan chanEvents >> loop
 
 killWatch :: WatchId -> IO ()
 killWatch (WatchId tids handle) = do

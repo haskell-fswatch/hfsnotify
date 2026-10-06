@@ -14,6 +14,7 @@
 module FSNotify.Test.Util where
 
 import Control.Exception.Safe (Handler(..))
+import System.IO.Unsafe (unsafePerformIO)
 import Control.Monad.Logger
 import Control.Retry
 import Data.String.Interpolate
@@ -91,6 +92,12 @@ haveNativeWatcher = True
 #else
 haveNativeWatcher = False
 #endif
+
+-- EXPERIMENT (not for merge): lets the failure diagnostic find the directory the running test is
+-- watching, so it can check whether the watch is still delivering anything at all.
+{-# NOINLINE currentWatchedDir #-}
+currentWatchedDir :: IORef [(ThreadId, FilePath)]
+currentWatchedDir = unsafePerformIO (newIORef [])
 
 waitUntil :: MonadUnliftIO m => Double -> m a -> m a
 #if MIN_VERSION_retry(0, 7, 0)
@@ -188,6 +195,7 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
 
     withRunInIO $ \runInIO ->
       withManagerConf conf $ \mgr -> do
+        myThreadId >>= \tid -> modifyIORef currentWatchedDir ((tid, watchedDir') :)
         eventsVar <- newIORef []
         bracket
           (watchFn mgr watchedDir' (const True) (\ev -> atomicModifyIORef eventsVar (\evs -> (ev:evs, ()))))

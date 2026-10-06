@@ -15,7 +15,7 @@
 module FSNotify.Test.EventTests where
 
 import Control.Exception.Safe (MonadThrow)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (threadDelay, myThreadId)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.List as L
@@ -55,7 +55,21 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
         waitUntil 5.0 (liftIO getEvents >>= action) `UnliftIO.catch` \(firstFailure :: FailureReason) -> do
           liftIO $ threadDelay 25_000_000
           lateEvents <- liftIO getEvents
-          expectationFailure $ "FLAKEDIAG after30s=" <> show lateEvents <> " firstFailure=" <> show firstFailure
+
+          -- Is the watch still delivering anything at all, or has it gone silent for good?
+          stillAlive <- liftIO $ do
+            tid <- myThreadId
+            dirs <- readIORef currentWatchedDir
+            case lookup tid dirs of
+              Nothing -> return "no-watched-dir-recorded"
+              Just watchedDir -> do
+                createDirectory (watchedDir </> "flakeprobe")
+                threadDelay 3_000_000
+                show <$> getEvents
+
+          expectationFailure $ "FLAKEDIAG after30s=" <> show lateEvents
+                               <> " afterProbe=" <> stillAlive
+                               <> " firstFailure=" <> show firstFailure
 
   unless (nested || poll || isMac || isWin) $ it "deletes the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
     removeDirectory watchedDir
