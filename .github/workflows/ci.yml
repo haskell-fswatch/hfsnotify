@@ -17,9 +17,11 @@ jobs:
           - "9.0.2"
           - "9.2.8"
           - "9.4.8"
-          - "9.6.6"
+          - "9.6.7"
           - "9.8.4"
-          - "9.10.1"
+          - "9.10.3"
+          - "9.12.4"
+          - "9.14.1"
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
@@ -84,6 +86,7 @@ jobs:
         - stack-ghc96.yaml
         - stack-ghc98.yaml
         - stack.yaml # Current dev version at ghc910
+        - stack-ghc912.yaml
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
@@ -91,7 +94,7 @@ jobs:
           stack-yaml: stack-ghc90.yaml
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
