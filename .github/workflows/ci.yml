@@ -16,6 +16,8 @@ jobs:
         stack-yaml:
         - stack.yaml
         - stack-ghc912.yaml
+        - stack-ghc98.yaml
+        - stack-ghc96.yaml
 
     steps:
     - uses: actions/checkout@v4
