@@ -110,9 +110,9 @@ osEventsReader dir dirWatch chanEvents =
         Left (err, _) | err == eRROR_OPERATION_ABORTED || err == eRROR_INVALID_HANDLE ->
           freeDirectoryWatch dirWatch
 
-        Left err -> do
-          freeDirectoryWatch dirWatch
-          throwReadDirectoryChangesError err
+        -- EXPERIMENT: anything else and we don't know whether a read is still in flight, so leak
+        -- the buffers rather than hand the kernel freed memory to write into
+        Left (err, msg) -> putStrLn ("WATCHDOG unclassified error for " <> dir <> ": " <> show err <> " " <> msg)
 
 killWatch :: WatchId -> IO ()
 killWatch (WatchId dispatcherTid dirWatch) = do
