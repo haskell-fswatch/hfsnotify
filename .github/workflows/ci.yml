@@ -123,11 +123,15 @@ jobs:
         path: ~/.stack
         key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
 
+    # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
+    # Windows jobs would all build the default stack.yaml instead of their matrix entry
     - name: Build
+      shell: bash
       run: |
         stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
+      shell: bash
       run: |
         stack test $STACK_EXTRA_ARGS
 
