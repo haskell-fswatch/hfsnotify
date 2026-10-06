@@ -14,6 +14,7 @@ module System.FSNotify.Types (
   , ThreadingMode(..)
   , Event(..)
   , EventIsDirectory(..)
+  , AddedExtraInfo(..)
   , EventCallback
   , EventChannel
   , EventAndActionChannel
@@ -30,12 +31,36 @@ import System.FilePath
 data EventIsDirectory = IsFile | IsDirectory
   deriving (Show, Eq)
 
+-- | How a path came to be at the location reported by an 'Added' event, when the backend
+-- is able to tell.
+data AddedExtraInfo =
+  -- | The path was created in place, e.g. by @open@ with @O_CREAT@ or by @mkdir@. A file
+  -- reported this way may still be open for writing, so its contents may be incomplete.
+  --
+  -- Emitted by the Linux and FreeBSD backends (inotify's @IN_CREATE@) and the macOS backend
+  -- (FSEvents' @kFSEventStreamEventFlagItemCreated@). On Linux and FreeBSD, you can wait for
+  -- the file's 'CloseWrite' event to know that writing has finished.
+    AddedByCreate
+  -- | The path was moved or renamed into place, e.g. by @rename@. Since the file was written
+  -- elsewhere, its contents are already complete, and no 'CloseWrite' event will follow.
+  --
+  -- Emitted by the Linux and FreeBSD backends (inotify's @IN_MOVED_TO@) and the macOS backend
+  -- (FSEvents' @kFSEventStreamEventFlagItemRenamed@).
+  | AddedByMove
+  -- | The backend can't tell how the path came to be.
+  --
+  -- Emitted by the Windows backend (which reports creations and move-ins identically), by the
+  -- polling backend on every platform, and by the Linux and FreeBSD backends for events they
+  -- synthesize for files found in a newly created directory when watching recursively.
+  | AddedNoExtraInfo
+  deriving (Show, Eq)
+
 -- | A file event reported by a file watcher. Each event contains the
 -- canonical path for the file and a timestamp guaranteed to be after the
 -- event occurred (timestamps represent current time when FSEvents receives
 -- it from the OS and/or platform-specific Haskell modules).
 data Event =
-    Added { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
+    Added { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory, eventAddedExtraInfo :: AddedExtraInfo }
   | Modified { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | ModifiedAttributes { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }
   | Removed { eventPath :: FilePath, eventTime :: UTCTime, eventIsDirectory :: EventIsDirectory }

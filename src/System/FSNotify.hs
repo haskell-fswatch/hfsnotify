@@ -38,6 +38,7 @@ module System.FSNotify (
   -- * Events
     Event(..)
   , EventIsDirectory(..)
+  , AddedExtraInfo(..)
   , EventChannel
   , Action
   , ActionPredicate

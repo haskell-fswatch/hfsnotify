@@ -53,13 +53,13 @@ fsnEvents basePath' timestamp (INo.Closed (boolToIsDirectory -> isDir) (Just raw
   fromHinotifyPath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
-  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir AddedByCreate]
 fsnEvents basePath' timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
-  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir AddedByMove]
 fsnEvents basePath' timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
@@ -163,7 +163,9 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
         let modTime = modificationTimeHiRes fileStatus
         when (modTime > timestampBeforeAddingWatch) $ do
           let isDir = if isDirectory fileStatus then IsDirectory else IsFile
-          let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
+          -- We don't know whether these files were created in place or moved in, since we're
+          -- synthesizing events we may have missed before the watch was in place.
+          let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir AddedNoExtraInfo)
           when (actPred addedEvent) $ callback addedEvent
 
     _ -> return ()
