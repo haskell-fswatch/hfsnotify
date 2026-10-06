@@ -1,5 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module System.Win32.Notify (
   Event(..)
@@ -10,7 +9,6 @@ module System.Win32.Notify (
   , initWatchManager
   , killWatch
   , killWatchManager
-  , watch
   , watchDirectory
 
   , fILE_NOTIFY_CHANGE_FILE_NAME
@@ -24,9 +22,8 @@ module System.Win32.Notify (
   ) where
 
 import Control.Concurrent
-import Control.Exception.Safe (SomeException, catch, throwIO)
+import Control.Exception.Safe (throwIO)
 import Control.Monad (forM_, forever)
-import Data.Function (fix)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Foreign.C.Error (errnoToIOError)
@@ -34,7 +31,7 @@ import System.FilePath
 import System.IO.Error (ioeSetErrorString)
 import System.Win32.File
 import System.Win32.FileNotify
-import System.Win32.Types (c_maperrno_func)
+import System.Win32.Types (c_maperrno_func, ErrCode)
 
 
 data EventVariety =
@@ -55,7 +52,10 @@ data Event
 
 type Handler = Event -> IO ()
 
-data WatchId = WatchId [ThreadId] Handle deriving (Eq, Ord, Show)
+-- | The watch, plus the thread that runs its handler. The reader thread isn't here on purpose: it
+-- is stopped by cancelling its read rather than by being killed, since the OS writes into memory
+-- it owns (see 'killWatch').
+data WatchId = WatchId ThreadId DirectoryWatch deriving (Eq, Ord, Show)
 type WatchMap = Map WatchId Handler
 data WatchManager = WatchManager { watchManagerWatchMap :: MVar WatchMap }
 
@@ -70,11 +70,21 @@ killWatchManager (WatchManager mvarMap) = do
 
 watchDirectory :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> Handler -> IO WatchId
 watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
-  watchHandle <- getWatchHandle dir
+  dirWatch <- openDirectoryWatch dir watchSubTree flags
+
+  -- Issue the first read before handing back a watch. Windows records nothing for the handle until
+  -- a read has been issued, so a change made between here and the reader thread below getting
+  -- going would be lost for good.
+  armDirectoryWatch dirWatch >>= \case
+    Right () -> return ()
+    Left err -> do
+      abandonDirectoryWatch dirWatch
+      throwReadDirectoryChangesError err
+
   chanEvents <- newChan
-  tid1 <- forkIO $ dispatcher chanEvents
-  tid2 <- forkIO $ osEventsReader dir watchSubTree flags watchHandle chanEvents
-  let wid = WatchId [tid1, tid2] watchHandle
+  dispatcherTid <- forkIO $ dispatcher chanEvents
+  _readerTid <- forkIO $ osEventsReader dir dirWatch chanEvents
+  let wid = WatchId dispatcherTid dirWatch
   modifyMVar mvarMap $ \watchMap ->
     return (Map.insert wid handler watchMap, wid)
 
@@ -82,42 +92,40 @@ watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
     dispatcher :: Chan [Event] -> IO ()
     dispatcher chanEvents = forever $ readChan chanEvents >>= mapM_ handler
 
-watch :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> IO (WatchId, Chan [Event])
-watch (WatchManager mvarMap) dir watchSubTree flags = do
-  watchHandle <- getWatchHandle dir
-  chanEvents <- newChan
-  tid <- forkIO $ osEventsReader dir watchSubTree flags watchHandle chanEvents
-  let wid = WatchId [tid] watchHandle
-  modifyMVar_ mvarMap $ \watchMap ->
-    return (Map.insert wid (const $ return ()) watchMap)
-  return (wid, chanEvents)
-
-osEventsReader :: FilePath -> Bool -> FileNotificationFlag -> Handle -> Chan [Event] -> IO ()
-osEventsReader dir watchSubTree flags watchHandle chanEvents =
-  -- EXPERIMENT (not for merge): shout if this thread ever stops, since a dead reader means the
-  -- watch goes silent with no other trace
-  loopBody `catch` \(e :: SomeException) -> do
-    putStrLn ("WATCHDOG reader thread for " <> dir <> " flags=" <> show flags <> " died: " <> show e)
-    throwIO e
+-- | Deliver events until the watch is stopped.
+--
+-- Reporting back when it stops is part of the contract: 'stopDirectoryWatch' can only release the
+-- memory the OS writes into once it knows no read is in flight.
+osEventsReader :: FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
+osEventsReader dir dirWatch chanEvents = loop
   where
-   loopBody = fix $ \loop ->
-    readDirectoryChanges watchHandle watchSubTree flags >>= \case
-     -- ERROR_OPERATION_ABORTED: this happens when the event read thread is killed.
-     -- https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--500-999-
-     -- Just return silently.
-     Left (995, _) -> return ()
-     Left (err_code, msg) -> do
-       putStrLn ("WATCHDOG ReadDirectoryChangesW failed for " <> dir <> ": " <> show err_code <> " " <> msg)
-       errno <- c_maperrno_func err_code
-       throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
-     Right events -> actsToEvents dir events >>= writeChan chanEvents >> loop
+    loop = awaitDirectoryWatch dirWatch >>= \case
+      Right changes -> do
+        actsToEvents dir changes >>= writeChan chanEvents
+        directoryWatchStopping dirWatch >>= \case
+          True -> signalReaderFinished dirWatch
+          False -> armDirectoryWatch dirWatch >>= \case
+            Right () -> loop
+            Left err -> finishWith err
+      Left err -> finishWith err
+
+    -- Either the read was cancelled because the watch is being stopped, or it failed. Either way
+    -- the OS is done with the buffer, so say so; only complain if this wasn't a stop.
+    finishWith err = do
+      signalReaderFinished dirWatch
+      directoryWatchStopping dirWatch >>= \case
+        True -> return ()
+        False -> throwReadDirectoryChangesError err
 
 killWatch :: WatchId -> IO ()
-killWatch (WatchId tids handle) = do
-  forM_ tids killThread
-  -- catch (closeHandle handle) $ \(e :: SomeException) ->
-  --   putStrLn ([i|Failed to kill watch #{handle}: #{e}|])
-  catch (closeHandle handle) $ \(_ :: SomeException) -> return ()
+killWatch (WatchId dispatcherTid dirWatch) = do
+  stopDirectoryWatch dirWatch
+  killThread dispatcherTid
+
+throwReadDirectoryChangesError :: (ErrCode, String) -> IO a
+throwReadDirectoryChangesError (errCode, msg) = do
+  errno <- c_maperrno_func errCode
+  throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
 
 actsToEvents :: FilePath -> [(Action, String)] -> IO [Event]
 actsToEvents baseDir = mapM actToEvent

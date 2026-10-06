@@ -42,8 +42,8 @@ jobs:
 
     - name: Build
       shell: bash
-      run: stack build $STACK_EXTRA_ARGS
+      run: stack build $STACK_EXTRA_ARGS --test --no-run-tests
 
-    - name: Stress probe
+    - name: Test (repeated)
       shell: bash
-      run: stack exec $STACK_EXTRA_ARGS example
+      run: stack test $STACK_EXTRA_ARGS --ta "--repeat 15 --print-failures"
