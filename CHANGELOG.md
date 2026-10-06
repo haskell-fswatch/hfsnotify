@@ -1,6 +1,11 @@
 Changes
 =======
 
+Version 0.5.0.0
+----------
+* Add an `AddedExtraInfo` field to the `Added` event, so you can tell a file created in place
+  from one moved into the watched directory (#124)
+
 Version 0.4.4.0
 ----------
 * Use hinotify and -DHAVE_NATIVE_WATCHER for FreeBSD (#121)

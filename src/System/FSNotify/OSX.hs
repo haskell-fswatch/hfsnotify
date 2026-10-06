@@ -72,11 +72,11 @@ fsnEvents timestamp e = do
 
   return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
               | exists && isModifiedAttributes -> [ModifiedAttributes (path e) timestamp isDirectory]
-              | exists && isCreated -> [Added (path e) timestamp isDirectory]
+              | exists && isCreated -> [Added (path e) timestamp isDirectory AddedByCreate]
               | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
 
               -- Rename stuff
-              | exists && isRenamed -> [Added (path e) timestamp isDirectory]
+              | exists && isRenamed -> [Added (path e) timestamp isDirectory AddedByMove]
               | (not exists) && isRenamed -> [Removed (path e) timestamp isDirectory]
 
               | otherwise -> []

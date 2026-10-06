@@ -58,16 +58,40 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
     let wrapper action = if | isWin -> liftIO (writeFile f "foo") >> action
                             | otherwise -> withFile f AppendMode $ \_ -> action
 
+    -- The Windows and polling backends can't tell how a file came to be
+    let expectedExtraInfo = if | poll || isWin -> AddedNoExtraInfo
+                               | otherwise -> AddedByCreate
+
     wrapper $
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
                -- On Windows, we sometimes get an extra modified event
-               (sortEvents -> [Added {..}, Modified {}]) | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               (sortEvents -> [Added {..}, Modified {}]) | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo == expectedExtraInfo -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
            | otherwise -> case events of
-               [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo == expectedExtraInfo -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
+
+  it "works with a file moved in" $ withFolder $ \(TestFolderContext watchedDir f getEvents _clearEvents) -> do
+    -- Write the file outside the watched directory, then rename it in. This is the atomic write
+    -- pattern that AddedByMove exists to identify.
+    let source = takeDirectory watchedDir </> (takeFileName watchedDir <> "-source")
+
+    -- FreeBSD's libinotify derives its events from kqueue, so it may report a move-in as a
+    -- plain creation.
+    let expectedExtraInfos = if | poll || isWin -> [AddedNoExtraInfo]
+                                | isFreeBSD -> [AddedByMove, AddedByCreate]
+                                | otherwise -> [AddedByMove]
+
+    liftIO $ writeFile source "foo"
+    renamePath source f
+
+    waitForEvents getEvents $ \events ->
+      if | nested && not recursive -> events `shouldBe` []
+         | otherwise -> case events of
+             [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo `elem` expectedExtraInfos -> return ()
+             _ -> expectationFailure $ "Got wrong events: " <> show events
 
   it "works with a new directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     createDirectory f
