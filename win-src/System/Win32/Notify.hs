@@ -125,11 +125,15 @@ osEventsReader armed dir dirWatch chanEvents =
 
     -- Either the read was cancelled because the watch is being stopped, or it failed. Either way
     -- the OS is done with the buffer, so say so; only complain if this wasn't a stop.
-    finishWith err = do
+    finishWith err@(errCode, msg) = do
       signalReaderFinished dirWatch
       directoryWatchStopping dirWatch >>= \case
         True -> return ()
-        False -> throwReadDirectoryChangesError err
+        False -> do
+          -- EXPERIMENT (not for merge): a reader stopping on a live watch means that watch goes
+          -- silent, so record exactly why
+          putStrLn ("WATCHDOG reader stopped on live watch " <> dir <> ": " <> show errCode <> " " <> msg)
+          throwReadDirectoryChangesError err
 
 killWatch :: WatchId -> IO ()
 killWatch (WatchId dispatcherTid dirWatch) = do

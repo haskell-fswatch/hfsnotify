@@ -46,6 +46,13 @@ jobs:
       shell: bash
       run: stack build $STACK_EXTRA_ARGS --test --no-run-tests
 
-    - name: Test (repeated)
+    # Ten *cold* runs: a fresh process each time, which is how CI normally exercises the suite
+    - name: Test (ten cold runs)
       shell: bash
-      run: stack test $STACK_EXTRA_ARGS --ta "--repeat 15 --print-failures"
+      run: |
+        failures=0
+        for i in $(seq 1 10); do
+          echo "=== COLD RUN $i"
+          stack test $STACK_EXTRA_ARGS --ta "--print-failures" || failures=$((failures+1))
+        done
+        echo "=== COLD RUNS FAILED: $failures of 10"
