@@ -84,7 +84,7 @@ data RescanReason =
   | RescanUserDropped
   -- | macOS: the kernel dropped events because fseventsd didn't keep up
   | RescanKernelDropped
-  -- | Linux: the inotify event queue overflowed
+  -- | Linux: the inotify event queue overflowed. Windows: the directory's change buffer overflowed
   | RescanQueueOverflow
   deriving (Eq, Show)
 
