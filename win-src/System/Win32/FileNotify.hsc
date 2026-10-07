@@ -97,10 +97,13 @@ instance Show DirectoryWatch where
 bufferSize :: Int
 bufferSize = 16384
 
--- | How long 'stopDirectoryWatch' waits for the reader to report back before giving up on
--- releasing its memory.
-readerFinishedTimeout :: Int
-readerFinishedTimeout = 5000000
+-- | How long each attempt in 'stopDirectoryWatch' waits for the reader to report back, and how
+-- many attempts it makes before giving up on releasing its memory.
+cancelAttemptTimeout :: Int
+cancelAttemptTimeout = 500000
+
+cancelAttempts :: Int
+cancelAttempts = 10
 
 -- | Open a directory for change notifications. Nothing is recorded until 'armDirectoryWatch' has
 -- issued the first read.
@@ -189,9 +192,8 @@ signalReaderFinished dw = void $ tryPutMVar (dwReaderFinished dw) ()
 stopDirectoryWatch :: DirectoryWatch -> IO ()
 stopDirectoryWatch dw = do
   alreadyStopping <- atomicModifyIORef' (dwStopping dw) $ \stopping -> (True, stopping)
-  unless alreadyStopping $ do
-    _ <- c_CancelIoEx (directoryWatchHandle dw) nullPtr
-    timeout readerFinishedTimeout (takeMVar (dwReaderFinished dw)) >>= \case
+  unless alreadyStopping $
+    waitForReader cancelAttempts >>= \case
       Just () -> do
         closeHandle (directoryWatchHandle dw)
         closeHandle (dwCompletionEvent dw)
@@ -200,6 +202,16 @@ stopDirectoryWatch dw = do
         -- The reader never reported back, so a read may still be in flight. Closing the directory
         -- handle unblocks it; leak the rest rather than hand the OS freed memory to write into.
         closeHandle (directoryWatchHandle dw)
+  where
+    -- We re-cancel on each attempt because the reader can issue a read in the instant between
+    -- checking whether we're stopping and us cancelling, and that read needs cancelling too.
+    waitForReader attemptsLeft
+      | attemptsLeft <= (0 :: Int) = return Nothing
+      | otherwise = do
+          _ <- c_CancelIoEx (directoryWatchHandle dw) nullPtr
+          timeout cancelAttemptTimeout (takeMVar (dwReaderFinished dw)) >>= \case
+            Just () -> return $ Just ()
+            Nothing -> waitForReader (attemptsLeft - 1)
 
 -- | Release a watch whose reader was never started, so nothing can be in flight.
 abandonDirectoryWatch :: DirectoryWatch -> IO ()

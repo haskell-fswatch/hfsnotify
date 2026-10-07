@@ -72,18 +72,26 @@ watchDirectory :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> Ha
 watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
   dirWatch <- openDirectoryWatch dir watchSubTree flags
 
-  -- Issue the first read before handing back a watch. Windows records nothing for the handle until
-  -- a read has been issued, so a change made between here and the reader thread below getting
-  -- going would be lost for good.
-  armDirectoryWatch dirWatch >>= \case
+  chanEvents <- newChan
+  armed <- newEmptyMVar
+
+  -- The reader issues the first read and reports back once it's in flight, so we never hand out a
+  -- watch that isn't listening yet: Windows records nothing for the handle until a read has been
+  -- issued, and a change made before that is lost with nothing to recover it from.
+  --
+  -- It has to be the reader that issues it, on a bound thread, for two reasons. Windows cancels
+  -- pending overlapped I/O when the thread that issued it exits, and only the reader is
+  -- guaranteed to outlive the read; and a plain forkIO thread's FFI calls can land on different
+  -- RTS workers, which come and go.
+  _readerTid <- forkOS $ osEventsReader armed dir dirWatch chanEvents
+  takeMVar armed >>= \case
     Right () -> return ()
     Left err -> do
+      -- Arming is what failed, so nothing is in flight and the reader has already given up
       abandonDirectoryWatch dirWatch
       throwReadDirectoryChangesError err
 
-  chanEvents <- newChan
   dispatcherTid <- forkIO $ dispatcher chanEvents
-  _readerTid <- forkIO $ osEventsReader dir dirWatch chanEvents
   let wid = WatchId dispatcherTid dirWatch
   modifyMVar mvarMap $ \watchMap ->
     return (Map.insert wid handler watchMap, wid)
@@ -92,12 +100,18 @@ watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
     dispatcher :: Chan [Event] -> IO ()
     dispatcher chanEvents = forever $ readChan chanEvents >>= mapM_ handler
 
--- | Deliver events until the watch is stopped.
+-- | Issue the first read, report whether it's in flight, and then deliver events until the watch
+-- is stopped.
 --
--- Reporting back when it stops is part of the contract: 'stopDirectoryWatch' can only release the
--- memory the OS writes into once it knows no read is in flight.
-osEventsReader :: FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
-osEventsReader dir dirWatch chanEvents = loop
+-- Reporting back when it stops is part of the contract too: 'stopDirectoryWatch' can only release
+-- the memory the OS writes into once it knows no read is in flight.
+osEventsReader :: MVar (Either (ErrCode, String) ()) -> FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
+osEventsReader armed dir dirWatch chanEvents =
+  armDirectoryWatch dirWatch >>= \case
+    Left err -> putMVar armed (Left err)
+    Right () -> do
+      putMVar armed (Right ())
+      loop
   where
     loop = awaitDirectoryWatch dirWatch >>= \case
       Right changes -> do
