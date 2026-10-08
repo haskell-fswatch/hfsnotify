@@ -108,7 +108,7 @@ data WatchConfig = WatchConfig
   , confThreadingMode :: ThreadingMode
     -- ^ Threading mode to use.
   , confOnHandlerException :: SomeException -> IO ()
-    -- ^ Called when a handler throws an exception.
+    -- ^ Called when a handler throws an exception or a watch fails internally
   }
 
 type IOEvent = IORef Event

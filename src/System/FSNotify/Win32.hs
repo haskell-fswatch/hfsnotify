@@ -40,7 +40,7 @@ handleWNoEvent isDirectory basedir actPred callback inoEvent = do
   when (actPred event) $ callback event
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
-watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
+watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
 
   let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME
@@ -50,8 +50,9 @@ watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path ac
 
   -- Start one watch for file events and one for directory events
   -- (There seems to be no other way to provide isDirectory information)
-  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred callback)
-  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred callback)
+  let onWatchError = confOnHandlerException conf
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags onWatchError (handleWNoEvent IsFile path' actPred callback)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags onWatchError (handleWNoEvent IsDirectory path' actPred callback)
 
   -- The StopListening action should make sure to remove the watches from the manager after they're killed.
   -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.
