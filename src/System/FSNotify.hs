@@ -124,7 +124,7 @@ defaultConfig = WatchConfig {
   }
 
 defaultOnHandlerException :: SomeException -> IO ()
-defaultOnHandlerException e = putStrLn ("fsnotify: handler threw exception: " <> show e)
+defaultOnHandlerException e = putStrLn ("fsnotify: " <> show e)
 
 -- | Perform an IO action with a WatchManager in place.
 -- Tear down the WatchManager after the action is complete.
