@@ -100,7 +100,7 @@ instance FileListener INotifyListener () where
         when wse $ INo.removeWatch wd
         return False
 
-  listenRecursive _conf listener initialPath actPred callback = do
+  listenRecursive conf listener initialPath actPred callback = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -113,10 +113,11 @@ instance FileListener INotifyListener () where
     let
       removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
         modifyMVar_ watchStillExistsVar $ \wse -> do
-          when wse $
-            handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
-                   (INo.removeWatch wd)
+          when wse $ handle (reportRemoveFailure wd) (INo.removeWatch wd)
           return False
+
+      reportRemoveFailure wd (e :: SomeException) = confOnHandlerException conf $ toException $
+        userError ("error removing inotify watch " <> show wd <> ": " <> show e)
 
       stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
