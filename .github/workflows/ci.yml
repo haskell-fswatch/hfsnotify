@@ -29,6 +29,10 @@ jobs:
           ghc: 8.10.7
         - os: macOS-latest
           ghc: 9.0.2
+        # fast-logger, which the test suite pulls in via monad-logger, imports GHC.IO.SubSystem on
+        # Windows, and that only exists from GHC 9.0 on
+        - os: windows-latest
+          ghc: 8.10.7
 
     steps:
     - uses: actions/checkout@v4
