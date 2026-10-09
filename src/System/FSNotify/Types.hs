@@ -96,35 +96,35 @@ type EventAndActionChannel = Chan (Event, Action)
 
 -- | Method of watching for changes.
 data WatchMode =
-  WatchModePoll {
-    watchModePollInterval :: Int
-    -- ^ Polling interval in microseconds.
-  }
-  -- ^ Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
+  -- | Detect changes by polling the filesystem. Less efficient and may miss fast changes. Not recommended
   -- unless you're experiencing problems with 'WatchModeOS' (or 'WatchModeOS' is not supported on your platform).
+  WatchModePoll {
+    -- | Polling interval in microseconds.
+    watchModePollInterval :: Int
+  }
 #ifdef HAVE_NATIVE_WATCHER
-  | WatchModeOS
-  -- ^ Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.).
+  -- | Use OS-specific mechanisms to be notified of changes (inotify on Linux, FSEvents on OSX, etc.).
   -- Not currently available on e.g. *BSD and Wasm/WASI.
+  | WatchModeOS
 #endif
 
 data ThreadingMode =
+  -- | Use a single thread for the entire 'Manager'. Event handler callbacks will run sequentially.
   SingleThread
-  -- ^ Use a single thread for the entire 'Manager'. Event handler callbacks will run sequentially.
-  | ThreadPerWatch
-  -- ^ Use a single thread for each watch (i.e. each call to 'watchDir', 'watchTree', etc.).
+  -- | Use a single thread for each watch (i.e. each call to 'watchDir', 'watchTree', etc.).
   -- Callbacks within a watch will run sequentially but callbacks from different watches may be interleaved.
+  | ThreadPerWatch
+  -- | Launch a separate thread for every event handler.
   | ThreadPerEvent
-  -- ^ Launch a separate thread for every event handler.
 
 -- | Watch configuration.
 data WatchConfig = WatchConfig
-  { confWatchMode :: WatchMode
-    -- ^ Watch mode to use.
-  , confThreadingMode :: ThreadingMode
-    -- ^ Threading mode to use.
-  , confOnHandlerException :: SomeException -> IO ()
-    -- ^ Called when a handler throws an exception or a watch fails internally
+  { -- | Watch mode to use.
+    confWatchMode :: WatchMode
+  , -- | Threading mode to use.
+    confThreadingMode :: ThreadingMode
+  , -- | Called when a handler throws an exception or a watch fails internally
+    confOnHandlerException :: SomeException -> IO ()
   }
 
 type IOEvent = IORef Event
