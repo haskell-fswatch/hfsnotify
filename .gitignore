@@ -6,3 +6,4 @@ cabal.sandbox.config
 dist-newstyle
 *~
 test_runs
+.direnv
