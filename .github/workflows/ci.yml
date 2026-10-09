@@ -51,12 +51,15 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: "latest"
 
-    # Stripping is only a binary size optimization, and on Windows it intermittently fails with
-    # "strip.exe: error: Permission denied" when something else still has the new file open
+    # Installing happy intermittently fails on Windows with "strip.exe: error: Permission denied",
+    # when something else still has the new happy.exe open. Stripping only saves binary size, and
+    # the configure flag for it only covers our own packages, but this covers happy.
     - name: Freeze
+      shell: bash
       run: |
         cabal update
-        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct --disable-executable-stripping --disable-library-stripping
+        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
+        printf 'package happy\n  executable-stripping: False\n' >> cabal.project.local
         cabal freeze
         cat cabal.project.freeze
 
@@ -64,7 +67,7 @@ jobs:
       id: cache-restore
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key2
 
     - name: Build
       run: cabal build all
@@ -76,7 +79,7 @@ jobs:
       if: always() && steps.cache-restore.outputs.cache-hit != 'true'
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key2
 
   stack:
     name: ${{ matrix.os }} / ${{ matrix.stack-yaml }}
@@ -123,25 +126,36 @@ jobs:
         stack setup $STACK_EXTRA_ARGS
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
+    # Installing happy intermittently fails on Windows with "strip.exe: error: Permission denied",
+    # when something else still has the new happy.exe open. Stripping only saves binary size, and
+    # the stack build flag for it doesn't reach snapshot dependencies, but this does.
+    - name: Don't strip happy
+      shell: bash
+      run: |
+        cat >> ${{matrix.stack-yaml}} <<'EOF'
+
+        configure-options:
+          happy:
+          - --disable-executable-stripping
+        EOF
+
     - uses: actions/cache@v4
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
+        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key4
 
     # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
-    # Windows jobs would all build the default stack.yaml instead of their matrix entry.
-    # Stripping is only a binary size optimization, and on Windows it intermittently fails with
-    # "strip.exe: error: Permission denied" when something else still has the new file open.
+    # Windows jobs would all build the default stack.yaml instead of their matrix entry
     - name: Build
       shell: bash
       run: |
-        stack build $STACK_EXTRA_ARGS --no-executable-stripping --no-library-stripping --test --bench --no-run-tests --no-run-benchmarks
+        stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
       shell: bash
       run: |
-        stack test $STACK_EXTRA_ARGS --no-executable-stripping --no-library-stripping
+        stack test $STACK_EXTRA_ARGS
 
   wasm:
     runs-on: ubuntu-latest
