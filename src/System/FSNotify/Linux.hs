@@ -18,6 +18,8 @@ import Control.Concurrent.MVar
 import Control.Exception.Safe as E
 import Control.Monad
 import Data.Function
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Monoid
 import Data.String
 import Data.Time.Clock (UTCTime)
@@ -101,17 +103,17 @@ instance FileListener INotifyListener () where
         return False
 
   listenRecursive conf listener initialPath actPred callback = do
-    -- wdVar stores the list of created watch descriptors. We use it to
-    -- cancel the whole recursive listening task.
+    -- wdVar stores the watch descriptors we've created, keyed by the directory they watch. We use
+    -- it to cancel the whole recursive listening task.
     --
     -- To avoid a race condition (when a new watch is added right after
     -- we've stopped listening), we replace the MVar contents with Nothing
     -- to signify that the listening task is cancelled, and no new watches
     -- should be added.
-    wdVar <- newMVar (Just [])
+    wdVar <- newMVar (Just mempty)
 
     let
-      removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
+      removeWatches wds = forM_ (Map.elems wds) $ \(wd, watchStillExistsVar) ->
         modifyMVar_ watchStillExistsVar $ \wse -> do
           when wse $ handle (reportRemoveFailure wd) (INo.removeWatch wd)
           return False
@@ -131,7 +133,9 @@ instance FileListener INotifyListener () where
     return stopListening
 
 
-type RecursiveWatches = MVar (Maybe [(INo.WatchDescriptor, MVar Bool)])
+-- | The watches making up a recursive watch. Keyed by directory so each one can drop its own
+-- entry when that directory goes away.
+type RecursiveWatches = MVar (Maybe (Map RawFilePath (INo.WatchDescriptor, MVar Bool)))
 
 watchDirectoryRecursively :: INotifyListener -> RecursiveWatches -> ActionPredicate -> EventCallback -> Bool -> RawFilePath -> IO ()
 watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar actPred callback isRootWatchedDir rawFilePath = do
@@ -141,7 +145,7 @@ watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar act
       watchStillExistsVar <- newMVar True
       hinotifyPath <- rawToHinotifyPath rawFilePath
       wd <- INo.addWatch listenerINotify varieties hinotifyPath (handleRecursiveEvent rawFilePath actPred callback watchStillExistsVar isRootWatchedDir listener wdVar)
-      return $ Just ((wd, watchStillExistsVar):wds)
+      return $ Just (Map.insert rawFilePath (wd, watchStillExistsVar) wds)
 
 handleRecursiveEvent :: RawFilePath -> ActionPredicate -> EventCallback -> MVar Bool -> Bool -> INotifyListener -> RecursiveWatches -> INo.Event -> IO ()
 handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedDir listener wdVar event = do
@@ -171,9 +175,12 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
 
     _ -> return ()
 
-  -- If the watched directory was removed, mark the watch as already removed
+  -- If the watched directory was removed, mark the watch as already removed and forget it. Taking
+  -- the two MVars separately, since stopListening takes them in the opposite order.
   case event of
-    INo.DeletedSelf -> modifyMVar_ watchStillExistsVar $ const $ return False
+    INo.DeletedSelf -> do
+      modifyMVar_ watchStillExistsVar $ const $ return False
+      modifyMVar_ wdVar $ return . fmap (Map.update dropIfStillOurs baseDir)
     _ -> return ()
 
   -- Forward the event. Ignore a DeletedSelf if we're not on the root directory,
@@ -181,3 +188,7 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event
+
+  where
+    -- The directory may already have a new watch under the same key
+    dropIfStillOurs entry@(_, var) = if var == watchStillExistsVar then Nothing else Just entry
