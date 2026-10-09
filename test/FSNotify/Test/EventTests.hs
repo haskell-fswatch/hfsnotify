@@ -54,6 +54,14 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
       [WatchedDirectoryRemoved {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
       events -> expectationFailure $ "Got wrong events: " <> show events
 
+  when (isLinux || isFreeBSD) $ unless poll $
+    it "works with modified attributes on the watched directory" $ withFolder $ \(TestFolderContext watchedDir _f getEvents _clearEvents) -> do
+      liftIO $ changeFileAttributes watchedDir
+
+      waitForEvents getEvents $ \case
+        [ModifiedAttributes {..}] | eventPath `equalFilePath` watchedDir && eventIsDirectory == IsDirectory -> return ()
+        events -> expectationFailure $ "Got wrong events: " <> show events
+
   it "works with a new file" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     let wrapper action = if | isWin -> liftIO (writeFile f "foo") >> action
                             | otherwise -> withFile f AppendMode $ \_ -> action
