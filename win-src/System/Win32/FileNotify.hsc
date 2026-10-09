@@ -8,6 +8,7 @@
 module System.Win32.FileNotify (
   Handle
   , Action(..)
+  , ReadChanges(..)
   , DirectoryWatch
   , openDirectoryWatch
   , directoryWatchOnError
@@ -160,17 +161,21 @@ armDirectoryWatch dw = do
       err | err == eRROR_IO_PENDING -> return ()
           | otherwise -> failWith "ReadDirectoryChangesW" err
 
-awaitDirectoryWatch :: DirectoryWatch -> IO [(Action, String)]
+-- | What a completed read produced.
+data ReadChanges =
+  Changes [(Action, String)]
+  -- | The OS buffer overflowed: those changes are gone and the directory should be rescanned.
+  | Overflowed
+
+awaitDirectoryWatch :: DirectoryWatch -> IO ReadChanges
 awaitDirectoryWatch dw = alloca $ \bytesReturnedPtr ->
   c_GetOverlappedResult (directoryWatchHandle dw) (castPtr (dwOverlapped dw)) bytesReturnedPtr True >>= \case
     False -> errorWin "GetOverlappedResult"
     True -> do
       bytesReturned <- peek bytesReturnedPtr
       if bytesReturned == 0
-        -- No bytes means the OS buffer overflowed and those changes are gone;
-        -- client should rescan.
-        then return []
-        else readChanges (dwBuffer dw)
+        then return Overflowed
+        else Changes <$> readChanges (dwBuffer dw)
 
 directoryWatchOnError :: DirectoryWatch -> SomeException -> IO ()
 directoryWatchOnError = dwOnError

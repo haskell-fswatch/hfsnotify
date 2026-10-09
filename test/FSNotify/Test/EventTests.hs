@@ -195,3 +195,4 @@ sortEvents = L.sortBy (comparing eventToNum)
     eventToNum (WatchedDirectoryRemoved {}) = 5
     eventToNum (CloseWrite {}) = 6
     eventToNum (Unknown {}) = 7
+    eventToNum (Rescan {}) = 8

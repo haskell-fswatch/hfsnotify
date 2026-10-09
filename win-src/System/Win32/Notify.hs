@@ -45,6 +45,8 @@ data Event
   | Created { filePath :: FilePath }
   -- | A file was deleted. @Deleted isDirectory file@
   | Deleted { filePath :: FilePath }
+  -- | Changes under this directory were lost, so it should be rescanned
+  | NeedsRescan { filePath :: FilePath }
   deriving (Eq, Show)
 
 type Handler = Event -> IO ()
@@ -110,8 +112,9 @@ killWatch (WatchId dispatcherTid dirWatch) = do
   killThread dispatcherTid
 
 
-actsToEvents :: FilePath -> [(Action, String)] -> IO [Event]
-actsToEvents baseDir = mapM actToEvent
+actsToEvents :: FilePath -> ReadChanges -> IO [Event]
+actsToEvents baseDir Overflowed = return [NeedsRescan baseDir]
+actsToEvents baseDir (Changes acts) = mapM actToEvent acts
   where
     actToEvent (act, fn) = do
       case act of

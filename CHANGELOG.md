@@ -5,6 +5,7 @@ Version 0.5.0.0
 ----------
 * Add an `AddedExtraInfo` field to the `Added` event, to tell if a file was created or moved into place (#129, closes #124)
 * Windows: fix race that caused events immediately after `watchDir`/`watchTree` to be lost. Reads are now overlapped (#131)
+* New `Rescan` event, reported when the OS lost events and a directory should be rescanned (#127)
 
 Version 0.4.4.0
 ----------

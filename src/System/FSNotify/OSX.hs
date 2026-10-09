@@ -4,6 +4,7 @@
 --
 
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
@@ -15,8 +16,10 @@ module System.FSNotify.OSX (
 import Control.Concurrent
 import Control.Monad
 import Data.Bits
+import Data.List (isPrefixOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Unique
 import Data.Word
@@ -70,7 +73,8 @@ fsnEvents timestamp e = do
   -- Uncomment for an easy way to see flag activity when testing manually
   -- putStrLn $ show ["Event", show e, "isDirectory", show isDirectory, "isFile", show isFile, "isModified", show isModified, "isCreated", show isCreated, "path", path e, "exists", show exists]
 
-  return $ if | exists && isModified -> [Modified (path e) timestamp isDirectory]
+  return $ if | mustScanSubDirs -> [Rescan (FSE.eventPath e) timestamp IsDirectory (rescanReason e)]
+              | exists && isModified -> [Modified (path e) timestamp isDirectory]
               | exists && isModifiedAttributes -> [ModifiedAttributes (path e) timestamp isDirectory]
               | exists && isCreated -> [Added (path e) timestamp isDirectory AddedByCreate]
               | (not exists) && hasFlag e FSE.eventFlagItemRemoved -> [Removed (path e) timestamp isDirectory]
@@ -87,16 +91,41 @@ fsnEvents timestamp e = do
     isRenamed = hasFlag e FSE.eventFlagItemRenamed
     isModified = hasFlag e FSE.eventFlagItemModified
     isModifiedAttributes = hasFlag e FSE.eventFlagItemInodeMetaMod
+    mustScanSubDirs = hasFlag e FSE.eventFlagMustScanSubDirs
     path = canonicalEventPath
     hasFlag event flag = FSE.eventFlags event .&. flag /= 0
+
+-- | MustScanSubDirs comes with UserDropped or KernelDropped when events were lost, and alone when
+-- they were coalesced.
+rescanReason :: FSE.Event -> RescanReason
+rescanReason e
+  | FSE.eventFlags e .&. FSE.eventFlagKernelDropped /= 0 = RescanKernelDropped
+  | FSE.eventFlags e .&. FSE.eventFlagUserDropped /= 0 = RescanUserDropped
+  | otherwise = RescanCoalesced
 
 handleFSEEvent :: Bool -> ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO ()
 handleFSEEvent isRecursive actPred callback dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
-  forM_ events $ \event ->
-    when (actPred event && (isRecursive || (isDirectlyInside dirPath event))) $
+  forM_ (mapMaybe (scopeRescan isRecursive dirPath) events) $ \event ->
+    when (actPred event && (isRecursive || isDirectlyInside dirPath event || isRescan event)) $
       callback event
+  where
+    isRescan (Rescan {}) = True
+    isRescan _ = False
+
+-- | Point a 'Rescan' at what this watch should rescan, or drop it if the watch is unaffected.
+scopeRescan :: Bool -> FilePath -> Event -> Maybe Event
+scopeRescan isRecursive dirPath event@(Rescan {eventPath, eventRescanReason})
+  | eventRescanReason /= RescanCoalesced = Just watchRoot
+  | rescanDirs `isPrefixOf` watchedDirs = Just watchRoot
+  | isRecursive && watchedDirs `isPrefixOf` rescanDirs = Just event
+  | otherwise = Nothing
+  where
+    watchRoot = event { eventPath = dropTrailingPathSeparator dirPath }
+    rescanDirs = splitDirectories eventPath
+    watchedDirs = splitDirectories dirPath
+scopeRescan _ _ event = Just event
 
 -- | For non-recursive monitoring, test if an event takes place directly inside the monitored folder
 isDirectlyInside :: FilePath -> Event -> Bool

@@ -67,6 +67,9 @@ fsnEvents basePath' timestamp INo.DeletedSelf = do
   basePath <- fromRawFilePath basePath'
   return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
 fsnEvents _ _ INo.Ignored = return []
+fsnEvents basePath' timestamp INo.QOverflow = do
+  basePath <- fromRawFilePath basePath'
+  return [Rescan basePath timestamp IsDirectory RescanQueueOverflow]
 fsnEvents basePath' timestamp inoEvent = do
   basePath <- fromRawFilePath basePath'
   return [Unknown basePath timestamp IsFile (show inoEvent)]
@@ -180,4 +183,6 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
   -- since the watch above us will pick up the delete of that directory.
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
+    -- An overflow reaches every watch, and the root's Rescan already covers the subdirectories
+    INo.QOverflow | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event

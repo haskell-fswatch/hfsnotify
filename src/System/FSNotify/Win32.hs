@@ -32,6 +32,7 @@ fsnEvent :: EventIsDirectory -> FilePath -> UTCTime -> WNo.Event -> Event
 fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory AddedNoExtraInfo
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
+fsnEvent _isDirectory _basedir timestamp (WNo.NeedsRescan dir) = Rescan (normalise dir) timestamp IsDirectory RescanQueueOverflow
 
 handleWNoEvent :: EventIsDirectory -> FilePath -> ActionPredicate -> EventCallback -> WNo.Event -> IO ()
 handleWNoEvent isDirectory basedir actPred callback inoEvent = do
