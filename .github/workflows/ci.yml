@@ -51,10 +51,12 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: "latest"
 
+    # Stripping is only a binary size optimization, and on Windows it intermittently fails with
+    # "strip.exe: error: Permission denied" when something else still has the new file open
     - name: Freeze
       run: |
         cabal update
-        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
+        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct --disable-executable-stripping --disable-library-stripping
         cabal freeze
         cat cabal.project.freeze
 
@@ -128,16 +130,18 @@ jobs:
         key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
 
     # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
-    # Windows jobs would all build the default stack.yaml instead of their matrix entry
+    # Windows jobs would all build the default stack.yaml instead of their matrix entry.
+    # Stripping is only a binary size optimization, and on Windows it intermittently fails with
+    # "strip.exe: error: Permission denied" when something else still has the new file open.
     - name: Build
       shell: bash
       run: |
-        stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
+        stack build $STACK_EXTRA_ARGS --no-executable-stripping --no-library-stripping --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
       shell: bash
       run: |
-        stack test $STACK_EXTRA_ARGS
+        stack test $STACK_EXTRA_ARGS --no-executable-stripping --no-library-stripping
 
   wasm:
     runs-on: ubuntu-latest
