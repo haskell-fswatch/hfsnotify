@@ -10,23 +10,24 @@ module System.Win32.FileNotify (
   , Action(..)
   , DirectoryWatch
   , openDirectoryWatch
+  , directoryWatchOnError
+  , startDirectoryWatch
   , armDirectoryWatch
   , awaitDirectoryWatch
   , directoryWatchStopping
-  , signalReaderFinished
   , stopDirectoryWatch
-  , abandonDirectoryWatch
   ) where
 
+import Control.Concurrent.Async (Async, asyncBound, waitCatch)
 import Control.Concurrent.MVar
-import Control.Monad (unless, void)
-import Data.Char (isSpace)
+import Control.Exception (mask_, uninterruptibleMask_)
+import Control.Exception.Safe (SomeException, bracketOnError, catch, onException, throwIO, toException, tryAny)
+import Control.Monad (unless)
 import Data.Function (on)
 import Data.IORef
 import Data.Ord (comparing)
 import Foreign ((.|.), Ptr, FunPtr, alloca, callocBytes, castPtr, fillBytes, free, mallocBytes, nullFunPtr, peek, peekByteOff, plusPtr, pokeByteOff)
 import Foreign.C (peekCWStringLen)
-import Numeric (showHex)
 import System.Timeout (timeout)
 import System.Win32.File (
   FileNotificationFlag
@@ -47,43 +48,29 @@ import System.Win32.Types (
   , HANDLE
   , LPDWORD
   , LPVOID
+  , errorWin
   , failIfNull
-  , getErrorMessage
+  , failWith
   , getLastError
-  , localFree
   , nullPtr
   )
-import System.Win32.Types (peekTString)
 
 
 #include <windows.h>
 
 type Handle = HANDLE
 
--- | A directory open for change notifications, along with the storage a read in flight writes
--- into.
---
--- Reads are overlapped (asynchronous) for one reason: it lets the first read be issued by the
--- thread that sets the watch up, before anyone can act on the directory. Windows records nothing
--- for a handle until a read has been issued, so a change made before that point is lost with
--- nothing to recover it from -- waiting longer doesn't help, the change was never recorded.
 data DirectoryWatch = DirectoryWatch {
   directoryWatchHandle :: Handle
+  , dwDirectory :: FilePath
+  , dwOnError :: SomeException -> IO ()
   , dwWatchSubTree :: BOOL
   , dwMask :: FileNotificationFlag
-  -- | Signalled by the OS when a read completes, including when it completes because the read was
-  -- cancelled. We wait on this rather than on the directory handle, so that waiting doesn't
-  -- depend on the handle still being open.
   , dwCompletionEvent :: Handle
-  -- | The OS writes into these while a read is in flight, so they can't be stack allocated, and
-  -- they can only be released once we know no read is in flight. See 'stopDirectoryWatch'.
   , dwOverlapped :: Ptr ()
   , dwBuffer :: Ptr FILE_NOTIFY_INFORMATION
-  -- | Set by 'stopDirectoryWatch'. Doubles as the "cleanup has begun" flag, so stopping twice is
-  -- harmless.
   , dwStopping :: IORef Bool
-  -- | Filled by the reader when it stops and no read is in flight.
-  , dwReaderFinished :: MVar ()
+  , dwReader :: MVar (Async ())
   }
 
 -- The handle identifies the watch; the rest is just its storage.
@@ -97,51 +84,70 @@ instance Show DirectoryWatch where
 bufferSize :: Int
 bufferSize = 16384
 
--- | How long each attempt in 'stopDirectoryWatch' waits for the reader to report back, and how
--- many attempts it makes before giving up on releasing its memory.
+-- | How long 'stopDirectoryWatch' waits per attempt, and how many attempts it makes.
 cancelAttemptTimeout :: Int
 cancelAttemptTimeout = 500000
 
 cancelAttempts :: Int
 cancelAttempts = 10
 
--- | Open a directory for change notifications. Nothing is recorded until 'armDirectoryWatch' has
--- issued the first read.
-openDirectoryWatch :: FilePath -> Bool -> FileNotificationFlag -> IO DirectoryWatch
-openDirectoryWatch dir watchSubTree mask = do
-  watchHandle <- createFile dir
-    fILE_LIST_DIRECTORY -- Access mode
-    (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
-    Nothing -- security attributes
-    oPEN_EXISTING -- Create mode, we want to look at an existing directory
-    (fILE_FLAG_BACKUP_SEMANTICS .|. fILE_FLAG_OVERLAPPED) -- Directory handle, asynchronous reads
-    Nothing -- No template file
+-- | Open a directory for change notifications. Nothing is recorded until 'armDirectoryWatch'.
+openDirectoryWatch :: FilePath -> Bool -> FileNotificationFlag -> (SomeException -> IO ()) -> IO DirectoryWatch
+openDirectoryWatch dir watchSubTree mask onError =
+  bracketOnError openHandle closeHandleIgnoringExceptions $ \watchHandle ->
+  bracketOnError openCompletionEvent closeHandleIgnoringExceptions $ \completionEvent ->
+  bracketOnError (callocBytes (#size OVERLAPPED)) free $ \overlapped ->
+  bracketOnError (mallocBytes bufferSize) free $ \buffer -> do
+    stopping <- newIORef False
+    reader <- newEmptyMVar
 
-  -- Manual reset, initially unsignalled; we reset it ourselves before each read
-  completionEvent <- failIfNull "CreateEvent" $ c_CreateEventW nullPtr True False nullPtr
+    return $ DirectoryWatch {
+      directoryWatchHandle = watchHandle
+      , dwDirectory = dir
+      , dwOnError = onError
+      , dwWatchSubTree = watchSubTree
+      , dwMask = mask
+      , dwCompletionEvent = completionEvent
+      , dwOverlapped = overlapped
+      , dwBuffer = buffer
+      , dwStopping = stopping
+      , dwReader = reader
+      }
 
-  overlapped <- callocBytes (#size OVERLAPPED)
-  buffer <- mallocBytes bufferSize
-  stopping <- newIORef False
-  readerFinished <- newEmptyMVar
+  where
+    openHandle = createFile dir
+      fILE_LIST_DIRECTORY -- Access mode
+      (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
+      Nothing -- security attributes
+      oPEN_EXISTING -- Create mode, we want to look at an existing directory
+      (fILE_FLAG_BACKUP_SEMANTICS .|. fILE_FLAG_OVERLAPPED) -- Directory handle, asynchronous reads
+      Nothing -- No template file
 
-  return $ DirectoryWatch {
-    directoryWatchHandle = watchHandle
-    , dwWatchSubTree = watchSubTree
-    , dwMask = mask
-    , dwCompletionEvent = completionEvent
-    , dwOverlapped = overlapped
-    , dwBuffer = buffer
-    , dwStopping = stopping
-    , dwReaderFinished = readerFinished
-    }
+    -- Manual reset, initially unsignalled; we reset it ourselves before each read
+    openCompletionEvent = failIfNull "CreateEvent" $ c_CreateEventW nullPtr True False nullPtr
 
--- | Issue a read. Returns once the read is in flight, so changes made after this returns are
--- recorded by the OS even if nothing is waiting on them yet.
+-- | Issue the watch's first read and leave the thread that issued it reading. Returns once the
+-- read is in flight, and throws if it couldn't be issued.
 --
--- Changes that happen between reads aren't lost: the OS keeps buffering them against the handle
--- and hands them over on the next read.
-armDirectoryWatch :: DirectoryWatch -> IO (Either (ErrCode, String) ())
+-- The read is issued by the thread that goes on to own it, which is why this starts the reader
+-- rather than taking an already armed watch: Windows cancels pending overlapped I/O when the
+-- thread that issued it exits, and an RTS worker can retire mid-read.
+startDirectoryWatch :: DirectoryWatch -> IO () -> IO ()
+startDirectoryWatch dw readerLoop = do
+  armed <- newEmptyMVar
+
+  -- Masked, so an interrupt can't leave a running reader unregistered, which teardown would read
+  -- as "never started" and release the buffers under it.
+  mask_ $ do
+    reader <- asyncBound $ tryAny (armDirectoryWatch dw) >>= \case
+      Left err -> putMVar armed (Left err)
+      Right () -> putMVar armed (Right ()) >> readerLoop
+    putMVar (dwReader dw) reader
+
+  takeMVar armed >>= either throwIO return
+
+-- | Once the first read has been accepted by the OS, all events are recorded.
+armDirectoryWatch :: DirectoryWatch -> IO ()
 armDirectoryWatch dw = do
   -- The OVERLAPPED has to start out zeroed apart from the event to signal on completion
   _ <- c_ResetEvent (dwCompletionEvent dw)
@@ -150,80 +156,68 @@ armDirectoryWatch dw = do
 
   c_ReadDirectoryChangesW (directoryWatchHandle dw) (castPtr (dwBuffer dw)) (toEnum bufferSize)
       (dwWatchSubTree dw) (dwMask dw) nullPtr (castPtr (dwOverlapped dw)) nullFunPtr >>= \case
-    -- Completed without having to wait, which is allowed and fine: the results are in the buffer
-    -- and 'awaitDirectoryWatch' will hand them over straight away.
-    True -> return $ Right ()
+    -- Completed without waiting, which is fine: 'awaitDirectoryWatch' picks the results up.
+    True -> return ()
     False -> getLastError >>= \case
       -- The normal case: the read is in flight
-      err | err == eRROR_IO_PENDING -> return $ Right ()
-          | otherwise -> Left <$> lastErrorMessage err
+      err | err == eRROR_IO_PENDING -> return ()
+          | otherwise -> failWith "ReadDirectoryChangesW" err
 
--- | Wait for the read in flight to complete and decode it. Also returns when the read is
--- cancelled by 'stopDirectoryWatch', which is how the reader learns to stop.
-awaitDirectoryWatch :: DirectoryWatch -> IO (Either (ErrCode, String) [(Action, String)])
+awaitDirectoryWatch :: DirectoryWatch -> IO [(Action, String)]
 awaitDirectoryWatch dw = alloca $ \bytesReturnedPtr ->
   c_GetOverlappedResult (directoryWatchHandle dw) (castPtr (dwOverlapped dw)) bytesReturnedPtr True >>= \case
-    False -> Left <$> (getLastError >>= lastErrorMessage)
+    False -> errorWin "GetOverlappedResult"
     True -> do
       bytesReturned <- peek bytesReturnedPtr
       if bytesReturned == 0
-        -- A completion with no bytes means the OS buffer overflowed and those changes are gone.
-        -- There's nothing to decode; ideally this would reach the user as a "rescan this
-        -- directory" event.
-        then return $ Right []
-        else Right <$> readChanges (dwBuffer dw)
+        -- No bytes means the OS buffer overflowed and those changes are gone;
+        -- client should rescan.
+        then return []
+        else readChanges (dwBuffer dw)
 
--- | Whether the watch is being stopped, which tells the reader to stop rather than issue another
--- read.
+directoryWatchOnError :: DirectoryWatch -> SomeException -> IO ()
+directoryWatchOnError = dwOnError
+
 directoryWatchStopping :: DirectoryWatch -> IO Bool
 directoryWatchStopping = readIORef . dwStopping
 
--- | Called by the reader once it has stopped and no read is in flight. This is what lets
--- 'stopDirectoryWatch' release the watch's memory.
-signalReaderFinished :: DirectoryWatch -> IO ()
-signalReaderFinished dw = void $ tryPutMVar (dwReaderFinished dw) ()
-
--- | Cancel the read in flight and release the watch once its reader confirms it has stopped.
---
--- Cancelling, rather than just closing the handle, is what makes this safe. A cancelled read
--- still completes, so the reader's wait returns and we learn the OS has finished with the buffer.
--- Closing the handle cancels asynchronously and gives no such signal, leaving no moment at which
--- freeing the buffer is known to be safe.
+-- | Cancel the read in flight, wait for the reader to stop, and release the watch.
 stopDirectoryWatch :: DirectoryWatch -> IO ()
 stopDirectoryWatch dw = do
   alreadyStopping <- atomicModifyIORef' (dwStopping dw) $ \stopping -> (True, stopping)
-  unless alreadyStopping $
-    waitForReader cancelAttempts >>= \case
-      Just () -> do
-        closeHandle (directoryWatchHandle dw)
-        closeHandle (dwCompletionEvent dw)
-        freeDirectoryWatch dw
-      Nothing ->
-        -- The reader never reported back, so a read may still be in flight. Closing the directory
-        -- handle unblocks it; leak the rest rather than hand the OS freed memory to write into.
-        closeHandle (directoryWatchHandle dw)
+  unless alreadyStopping $ do
+    readerStopped <- waitForReaderToStop cancelAttempts `onException` closeDirectory
+    if readerStopped
+      then releaseEverything
+      else do
+        closeDirectory
+        dwOnError dw $ toException $ userError $
+          "stopped watching "
+          <> dwDirectory dw
+          <> " but its reader is still running, so the OS still holds its buffers"
+
   where
-    -- We re-cancel on each attempt because the reader can issue a read in the instant between
-    -- checking whether we're stopping and us cancelling, and that read needs cancelling too.
-    waitForReader attemptsLeft
-      | attemptsLeft <= (0 :: Int) = return Nothing
-      | otherwise = do
-          _ <- c_CancelIoEx (directoryWatchHandle dw) nullPtr
-          timeout cancelAttemptTimeout (takeMVar (dwReaderFinished dw)) >>= \case
-            Just () -> return $ Just ()
-            Nothing -> waitForReader (attemptsLeft - 1)
+    waitForReaderToStop attemptsLeft
+      | attemptsLeft <= (0 :: Int) = return False
+      | otherwise = tryReadMVar (dwReader dw) >>= \case
+          Nothing -> return True  -- never started, so nothing can be in flight
+          Just reader -> do
+            _ <- c_CancelIoEx (directoryWatchHandle dw) nullPtr
+            timeout cancelAttemptTimeout (waitCatch reader) >>= \case
+              Just _ -> return True
+              Nothing -> waitForReaderToStop (attemptsLeft - 1)
 
--- | Release a watch whose reader was never started, so nothing can be in flight.
-abandonDirectoryWatch :: DirectoryWatch -> IO ()
-abandonDirectoryWatch dw = do
-  closeHandle (directoryWatchHandle dw)
-  closeHandle (dwCompletionEvent dw)
-  freeDirectoryWatch dw
+    -- Uninterruptible so an async exception can't leave this half done
+    releaseEverything = uninterruptibleMask_ $ do
+      closeHandleIgnoringExceptions (directoryWatchHandle dw)
+      closeHandleIgnoringExceptions (dwCompletionEvent dw)
+      free (dwOverlapped dw)
+      free (dwBuffer dw)
 
-freeDirectoryWatch :: DirectoryWatch -> IO ()
-freeDirectoryWatch dw = do
-  free (dwOverlapped dw)
-  free (dwBuffer dw)
+    closeDirectory = uninterruptibleMask_ (closeHandleIgnoringExceptions (directoryWatchHandle dw))
+
+closeHandleIgnoringExceptions :: Handle -> IO ()
+closeHandleIgnoringExceptions h = closeHandle h `catch` \(_ :: SomeException) -> return ()
 
 data Action = FileAdded | FileRemoved | FileModified | FileRenamedOld | FileRenamedNew
   deriving (Show, Read, Eq, Ord, Enum)
@@ -239,19 +233,6 @@ readChanges pfni = do
 faToAction :: FileAction -> Action
 faToAction fa = toEnum $ fromEnum fa - 1
 
--- | Extract the failure message, as done in https://hackage.haskell.org/package/Win32-2.14.0.0/docs/src/System.Win32.WindowsString.Types.html#errorWin
-lastErrorMessage :: ErrCode -> IO (ErrCode, String)
-lastErrorMessage err_code = do
-  msg <- getErrorMessage err_code >>= \case
-    x | x == nullPtr -> return $ "Error 0x" ++ Numeric.showHex err_code ""
-    c_msg -> do
-      msg <- peekTString c_msg
-      -- We ignore failure of freeing c_msg, given we're already failing
-      _ <- localFree c_msg
-      return msg
-  let msg' = reverse $ dropWhile isSpace $ reverse msg -- drop trailing \n
-  return (err_code, msg')
-
 -------------------------------------------------------------------
 -- Low-level stuff that binds to notifications in the Win32 API
 
@@ -262,7 +243,7 @@ lastErrorMessage err_code = do
 #{enum AccessMode,
  , fILE_LIST_DIRECTORY = FILE_LIST_DIRECTORY
  }
--- there are many more cases but I only need this one.
+-- there are many more cases but we only need this one
 #endif
 
 eRROR_IO_PENDING :: ErrCode

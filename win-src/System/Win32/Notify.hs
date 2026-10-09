@@ -22,16 +22,13 @@ module System.Win32.Notify (
   ) where
 
 import Control.Concurrent
-import Control.Exception.Safe (throwIO)
+import Control.Exception.Safe (IOException, SomeException, bracketOnError, toException, try)
 import Control.Monad (forM_, forever)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Foreign.C.Error (errnoToIOError)
 import System.FilePath
-import System.IO.Error (ioeSetErrorString)
 import System.Win32.File
 import System.Win32.FileNotify
-import System.Win32.Types (c_maperrno_func, ErrCode)
 
 
 data EventVariety =
@@ -52,9 +49,7 @@ data Event
 
 type Handler = Event -> IO ()
 
--- | The watch, plus the thread that runs its handler. The reader thread isn't here on purpose: it
--- is stopped by cancelling its read rather than by being killed, since the OS writes into memory
--- it owns (see 'killWatch').
+-- | A watch, plus the thread dispatching its events.
 data WatchId = WatchId ThreadId DirectoryWatch deriving (Eq, Ord, Show)
 type WatchMap = Map WatchId Handler
 data WatchManager = WatchManager { watchManagerWatchMap :: MVar WatchMap }
@@ -68,82 +63,52 @@ killWatchManager (WatchManager mvarMap) = do
     forM_ (Map.keys watchMap) killWatch
     return mempty
 
-watchDirectory :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> Handler -> IO WatchId
-watchDirectory (WatchManager mvarMap) dir watchSubTree flags handler = do
-  dirWatch <- openDirectoryWatch dir watchSubTree flags
+watchDirectory :: WatchManager -> FilePath -> Bool -> FileNotificationFlag -> (SomeException -> IO ()) -> Handler -> IO WatchId
+watchDirectory (WatchManager mvarMap) dir watchSubTree flags onWatchError handler =
+  bracketOnError (openDirectoryWatch dir watchSubTree flags onWatchError) stopDirectoryWatch $ \dirWatch -> do
+    chanEvents <- newChan
 
-  chanEvents <- newChan
-  armed <- newEmptyMVar
+    -- Issues the first read and leaves its reader running, so we never hand out a watch that isn't
+    -- listening yet, and throws rather than returning if the read couldn't be issued
+    startDirectoryWatch dirWatch $ osEventsReader dir dirWatch chanEvents
 
-  -- The reader issues the first read and reports back once it's in flight, so we never hand out a
-  -- watch that isn't listening yet: Windows records nothing for the handle until a read has been
-  -- issued, and a change made before that is lost with nothing to recover it from.
-  --
-  -- It has to be the reader that issues it, on a bound thread, for two reasons. Windows cancels
-  -- pending overlapped I/O when the thread that issued it exits, and only the reader is
-  -- guaranteed to outlive the read; and a plain forkIO thread's FFI calls can land on different
-  -- RTS workers, which come and go.
-  _readerTid <- forkOS $ osEventsReader armed dir dirWatch chanEvents
-  takeMVar armed >>= \case
-    Right () -> return ()
-    Left err -> do
-      -- Arming is what failed, so nothing is in flight and the reader has already given up
-      abandonDirectoryWatch dirWatch
-      throwReadDirectoryChangesError err
-
-  dispatcherTid <- forkIO $ dispatcher chanEvents
-  let wid = WatchId dispatcherTid dirWatch
-  modifyMVar mvarMap $ \watchMap ->
-    return (Map.insert wid handler watchMap, wid)
+    dispatcherTid <- forkIO $ dispatcher chanEvents
+    let wid = WatchId dispatcherTid dirWatch
+    modifyMVar mvarMap $ \watchMap ->
+      return (Map.insert wid handler watchMap, wid)
 
   where
     dispatcher :: Chan [Event] -> IO ()
     dispatcher chanEvents = forever $ readChan chanEvents >>= mapM_ handler
 
--- | Issue the first read, report whether it's in flight, and then deliver events until the watch
--- is stopped.
---
--- Reporting back when it stops is part of the contract too: 'stopDirectoryWatch' can only release
--- the memory the OS writes into once it knows no read is in flight.
-osEventsReader :: MVar (Either (ErrCode, String) ()) -> FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
-osEventsReader armed dir dirWatch chanEvents =
-  armDirectoryWatch dirWatch >>= \case
-    Left err -> putMVar armed (Left err)
-    Right () -> do
-      putMVar armed (Right ())
-      loop
+osEventsReader :: FilePath -> DirectoryWatch -> Chan [Event] -> IO ()
+osEventsReader dir dirWatch chanEvents = loop
   where
-    loop = awaitDirectoryWatch dirWatch >>= \case
-      Right changes -> do
+    loop = do
+      -- Each pass is its own 'try' so the handlers don't stack up over the life of the watch
+      outcome <- try $ do
+        changes <- awaitDirectoryWatch dirWatch
         actsToEvents dir changes >>= writeChan chanEvents
         directoryWatchStopping dirWatch >>= \case
-          True -> signalReaderFinished dirWatch
-          False -> armDirectoryWatch dirWatch >>= \case
-            Right () -> loop
-            Left err -> finishWith err
-      Left err -> finishWith err
+          True -> return False
+          False -> True <$ armDirectoryWatch dirWatch
 
-    -- Either the read was cancelled because the watch is being stopped, or it failed. Either way
-    -- the OS is done with the buffer, so say so; only complain if this wasn't a stop.
-    finishWith err@(errCode, msg) = do
-      signalReaderFinished dirWatch
-      directoryWatchStopping dirWatch >>= \case
-        True -> return ()
-        False -> do
-          -- EXPERIMENT (not for merge): a reader stopping on a live watch means that watch goes
-          -- silent, so record exactly why
-          putStrLn ("WATCHDOG reader stopped on live watch " <> dir <> ": " <> show errCode <> " " <> msg)
-          throwReadDirectoryChangesError err
+      case outcome of
+        Right True -> loop
+        Right False -> return ()
+        -- A cancelled read means we're being stopped; anything else is a watch that has died, and
+        -- will report nothing more, which the user wants to know about.
+        Left (err :: IOException) -> directoryWatchStopping dirWatch >>= \case
+          True -> return ()
+          False -> directoryWatchOnError dirWatch (toException err)
 
 killWatch :: WatchId -> IO ()
 killWatch (WatchId dispatcherTid dirWatch) = do
+  -- Stopping the watch cancels the reader's read and waits for it to finish, rather than killing
+  -- it: killing it mid-read would leave us no way to know when the OS is done with its buffer.
   stopDirectoryWatch dirWatch
   killThread dispatcherTid
 
-throwReadDirectoryChangesError :: (ErrCode, String) -> IO a
-throwReadDirectoryChangesError (errCode, msg) = do
-  errno <- c_maperrno_func errCode
-  throwIO (errnoToIOError "ReadDirectoryChangesW" errno Nothing Nothing `ioeSetErrorString` msg)
 
 actsToEvents :: FilePath -> [(Action, String)] -> IO [Event]
 actsToEvents baseDir = mapM actToEvent

@@ -191,6 +191,8 @@ withTestFolder testFolderGenerator threadingMode poll recursive nested setup act
           confWatchMode = if poll then WatchModePoll pollInterval else WatchModeOS
 #endif
           , confThreadingMode = threadingMode
+          -- MEASURE (not for merge): surface anything the backend reports
+          , confOnHandlerException = \e -> putStrLn ("WATCHDOG watch error: " <> show e)
           }
 
     withRunInIO $ \runInIO ->
