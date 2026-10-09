@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -13,6 +14,7 @@
 module FSNotify.Test.EventTests where
 
 import Control.Exception.Safe (MonadThrow)
+import Control.Concurrent (threadDelay)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.List as L
@@ -158,6 +160,28 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
            | otherwise -> case events of
                [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
+
+  -- Deleting and creating a directory repeatedly used to leave it with several watches, each
+  -- reporting the same events
+  when (isLinux || isFreeBSD) $ unless poll $ when (recursive && not nested) $
+    it "reports events once for a subdirectory deleted and created again" $ withFolder $ \(TestFolderContext watchedDir _f getEvents clearEvents) -> do
+      let subdir = watchedDir </> "recreated"
+      forM_ [1 :: Int .. 3] $ \_ -> do
+        createDirectory subdir
+        removeDirectory subdir
+      createDirectory subdir
+
+      -- The watch on the new subdirectory is added when its creation event arrives
+      liftIO $ threadDelay 2_000_000
+      liftIO clearEvents
+
+      let f = subdir </> "testfile"
+      liftIO $ writeFile f "foo"
+
+      waitForEvents getEvents $ \events ->
+        case [event | event@(Added {}) <- events, eventPath event `equalFilePath` f] of
+          [_] -> return ()
+          added -> expectationFailure $ "Expected one Added for " <> show f <> ", got " <> show (length added) <> ": " <> show events
 
   when (isLinux || isFreeBSD) $ unless poll $ do
     let setup f = liftIO $ do

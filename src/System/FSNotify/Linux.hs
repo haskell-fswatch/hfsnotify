@@ -141,6 +141,10 @@ watchDirectoryRecursively :: INotifyListener -> RecursiveWatches -> ActionPredic
 watchDirectoryRecursively listener@(INotifyListener {listenerINotify}) wdVar actPred callback isRootWatchedDir rawFilePath = do
   modifyMVar_ wdVar $ \case
     Nothing -> return Nothing
+    -- Watching a directory twice doubles its events: inotify reuses the descriptor and hinotify
+    -- combines the callbacks on it
+    Just wds | Map.member rawFilePath wds -> return $ Just wds
+
     Just wds -> do
       watchStillExistsVar <- newMVar True
       hinotifyPath <- rawToHinotifyPath rawFilePath
