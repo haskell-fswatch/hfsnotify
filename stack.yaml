@@ -1,12 +1,11 @@
-resolver: lts-24.6
+resolver: lts-24.62
 
 packages:
 - '.'
 
 nix:
-  pure: false
-  packages:
-  - zlib
+  enable: false
+system-ghc: true
 
 # Uncomment these to test with text-2.1.2, which exports "show" by default
 # - text-2.1.2

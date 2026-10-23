@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  pull_request:
   push:
   workflow_dispatch:
 
@@ -18,9 +17,11 @@ jobs:
           - "9.0.2"
           - "9.2.8"
           - "9.4.8"
-          - "9.6.6"
+          - "9.6.7"
           - "9.8.4"
-          - "9.10.1"
+          - "9.10.3"
+          - "9.12.4"
+          - "9.14.1"
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
@@ -28,6 +29,10 @@ jobs:
           ghc: 8.10.7
         - os: macOS-latest
           ghc: 9.0.2
+        # fast-logger, which the test suite pulls in via monad-logger, imports GHC.IO.SubSystem on
+        # Windows, and that only exists from GHC 9.0 on
+        - os: windows-latest
+          ghc: 8.10.7
 
     steps:
     - uses: actions/checkout@v4
@@ -46,10 +51,15 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: "latest"
 
+    # Installing happy intermittently fails on Windows with "strip.exe: error: Permission denied",
+    # when something else still has the new happy.exe open. Stripping only saves binary size, and
+    # the configure flag for it only covers our own packages, but this covers happy.
     - name: Freeze
+      shell: bash
       run: |
         cabal update
         cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
+        printf 'package happy\n  executable-stripping: False\n' >> cabal.project.local
         cabal freeze
         cat cabal.project.freeze
 
@@ -57,7 +67,7 @@ jobs:
       id: cache-restore
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key2
 
     - name: Build
       run: cabal build all
@@ -69,7 +79,7 @@ jobs:
       if: always() && steps.cache-restore.outputs.cache-hit != 'true'
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key1
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-key2
 
   stack:
     name: ${{ matrix.os }} / ${{ matrix.stack-yaml }}
@@ -85,6 +95,7 @@ jobs:
         - stack-ghc96.yaml
         - stack-ghc98.yaml
         - stack.yaml # Current dev version at ghc910
+        - stack-ghc912.yaml
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
@@ -92,7 +103,7 @@ jobs:
           stack-yaml: stack-ghc90.yaml
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
@@ -115,17 +126,34 @@ jobs:
         stack setup $STACK_EXTRA_ARGS
         echo STACK_EXTRA_ARGS="$STACK_EXTRA_ARGS" >> $GITHUB_ENV
 
+    # Installing happy intermittently fails on Windows with "strip.exe: error: Permission denied",
+    # when something else still has the new happy.exe open. Stripping only saves binary size, and
+    # the stack build flag for it doesn't reach snapshot dependencies, but this does.
+    - name: Don't strip happy
+      shell: bash
+      run: |
+        cat >> ${{matrix.stack-yaml}} <<'EOF'
+
+        configure-options:
+          happy:
+          - --disable-executable-stripping
+        EOF
+
     - uses: actions/cache@v4
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key3
+        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key4
 
+    # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
+    # Windows jobs would all build the default stack.yaml instead of their matrix entry
     - name: Build
+      shell: bash
       run: |
         stack build $STACK_EXTRA_ARGS --test --bench --no-run-tests --no-run-benchmarks
 
     - name: Test
+      shell: bash
       run: |
         stack test $STACK_EXTRA_ARGS
 
@@ -147,7 +175,11 @@ jobs:
     - name: Setup ghc-wasm32-wasi
       run: |
         cd "$(mktemp -d)"
-        curl -L "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" | tar xz --strip-components=1
+        # gitlab.haskell.org intermittently rate limits CI runners, which otherwise shows up as
+        # "gzip: stdin: not in gzip format" when we pipe an HTML error page into tar
+        curl -fL --retry 5 --retry-delay 15 --retry-all-errors \
+          "https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/archive/${GHC_WASM_META_REV}/ghc-wasm-meta.tar.gz" \
+          | tar xz --strip-components=1
         ./setup.sh
         ~/.ghc-wasm/add_to_github_path.sh
 
@@ -205,9 +237,9 @@ jobs:
             echo "::endgroup::"
 
             echo "::group::Build with Cabal"
-            cabal build --with-compiler=ghc-9.6.7
+            cabal build --enable-tests --with-compiler=ghc-9.6.7
             echo "::endgroup::"
 
             echo "::group::Test with Cabal"
-            cabal test --with-compiler=ghc-9.6.7
+            cabal test --enable-tests --with-compiler=ghc-9.6.7
             echo "::endgroup::"

@@ -43,7 +43,7 @@ data PollManager = PollManager {
   }
 
 generateEvent :: UTCTime -> EventIsDirectory -> EventType -> FilePath -> Maybe Event
-generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir)
+generateEvent timestamp isDir AddedEvent filePath = Just (Added filePath timestamp isDir AddedNoExtraInfo)
 generateEvent timestamp isDir ModifiedEvent filePath = Just (Modified filePath timestamp isDir)
 generateEvent timestamp isDir RemovedEvent filePath = Just (Removed filePath timestamp isDir)
 

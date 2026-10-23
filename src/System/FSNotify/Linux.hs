@@ -53,13 +53,13 @@ fsnEvents basePath' timestamp (INo.Closed (boolToIsDirectory -> isDir) (Just raw
   fromHinotifyPath raw >>= \name -> return [CloseWrite (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.Created (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
-  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir AddedByCreate]
 fsnEvents basePath' timestamp (INo.MovedOut (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
 fsnEvents basePath' timestamp (INo.MovedIn (boolToIsDirectory -> isDir) raw _cookie) = do
   basePath <- fromRawFilePath basePath'
-  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir]
+  fromHinotifyPath raw >>= \name -> return [Added (basePath </> name) timestamp isDir AddedByMove]
 fsnEvents basePath' timestamp (INo.Deleted (boolToIsDirectory -> isDir) raw) = do
   basePath <- fromRawFilePath basePath'
   fromHinotifyPath raw >>= \name -> return [Removed (basePath </> name) timestamp isDir]
@@ -67,6 +67,9 @@ fsnEvents basePath' timestamp INo.DeletedSelf = do
   basePath <- fromRawFilePath basePath'
   return [WatchedDirectoryRemoved basePath timestamp IsDirectory]
 fsnEvents _ _ INo.Ignored = return []
+fsnEvents basePath' timestamp INo.QOverflow = do
+  basePath <- fromRawFilePath basePath'
+  return [Rescan basePath timestamp IsDirectory RescanQueueOverflow]
 fsnEvents basePath' timestamp inoEvent = do
   basePath <- fromRawFilePath basePath'
   return [Unknown basePath timestamp IsFile (show inoEvent)]
@@ -100,7 +103,7 @@ instance FileListener INotifyListener () where
         when wse $ INo.removeWatch wd
         return False
 
-  listenRecursive _conf listener initialPath actPred callback = do
+  listenRecursive conf listener initialPath actPred callback = do
     -- wdVar stores the list of created watch descriptors. We use it to
     -- cancel the whole recursive listening task.
     --
@@ -113,10 +116,11 @@ instance FileListener INotifyListener () where
     let
       removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
         modifyMVar_ watchStillExistsVar $ \wse -> do
-          when wse $
-            handle (\(e :: SomeException) -> putStrLn ("Error removing watch: " <> show wd <> " (" <> show e <> ")"))
-                   (INo.removeWatch wd)
+          when wse $ handle (reportRemoveFailure wd) (INo.removeWatch wd)
           return False
+
+      reportRemoveFailure wd (e :: SomeException) = confOnHandlerException conf $ toException $
+        userError ("error removing inotify watch " <> show wd <> ": " <> show e)
 
       stopListening = modifyMVar_ wdVar $ \x -> maybe (return ()) removeWatches x >> return Nothing
 
@@ -163,7 +167,9 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
         let modTime = modificationTimeHiRes fileStatus
         when (modTime > timestampBeforeAddingWatch) $ do
           let isDir = if isDirectory fileStatus then IsDirectory else IsFile
-          let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir)
+          -- We don't know whether these files were created in place or moved in, since we're
+          -- synthesizing events we may have missed before the watch was in place.
+          let addedEvent = (Added (newDir </> newPath) (posixSecondsToUTCTime timestampBeforeAddingWatch) isDir AddedNoExtraInfo)
           when (actPred addedEvent) $ callback addedEvent
 
     _ -> return ()
@@ -177,4 +183,6 @@ handleRecursiveEvent baseDir actPred callback watchStillExistsVar isRootWatchedD
   -- since the watch above us will pick up the delete of that directory.
   case event of
     INo.DeletedSelf | not isRootWatchedDir -> return ()
+    -- An overflow reaches every watch, and the root's Rescan already covers the subdirectories
+    INo.QOverflow | not isRootWatchedDir -> return ()
     _ -> handleInoEvent actPred callback baseDir watchStillExistsVar event

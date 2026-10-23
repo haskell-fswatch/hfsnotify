@@ -27,9 +27,12 @@ type NativeManager = WNo.WatchManager
 
 -- Win32-notify has (temporarily?) dropped support for Renamed events.
 fsnEvent :: EventIsDirectory -> FilePath -> UTCTime -> WNo.Event -> Event
-fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory
+-- Note that a file moved into the watched directory also shows up as a Created event, so we
+-- can't tell the two apart here.
+fsnEvent isDirectory basedir timestamp (WNo.Created name) = Added (normalise (basedir </> name)) timestamp isDirectory AddedNoExtraInfo
 fsnEvent isDirectory basedir timestamp (WNo.Modified name) = Modified (normalise (basedir </> name)) timestamp isDirectory
 fsnEvent isDirectory basedir timestamp (WNo.Deleted name) = Removed (normalise (basedir </> name)) timestamp isDirectory
+fsnEvent _isDirectory _basedir timestamp (WNo.NeedsRescan dir) = Rescan (normalise dir) timestamp IsDirectory RescanQueueOverflow
 
 handleWNoEvent :: EventIsDirectory -> FilePath -> ActionPredicate -> EventCallback -> WNo.Event -> IO ()
 handleWNoEvent isDirectory basedir actPred callback inoEvent = do
@@ -38,7 +41,7 @@ handleWNoEvent isDirectory basedir actPred callback inoEvent = do
   when (actPred event) $ callback event
 
 watchDirectory :: Bool -> WatchConfig -> WNo.WatchManager -> FilePath -> ActionPredicate -> EventCallback -> IO (IO ())
-watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
+watchDirectory isRecursive conf watchManager@(WNo.WatchManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
 
   let fileFlags = foldl (.|.) 0 [WNo.fILE_NOTIFY_CHANGE_FILE_NAME
@@ -48,8 +51,9 @@ watchDirectory isRecursive _conf watchManager@(WNo.WatchManager mvarMap) path ac
 
   -- Start one watch for file events and one for directory events
   -- (There seems to be no other way to provide isDirectory information)
-  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags (handleWNoEvent IsFile path' actPred callback)
-  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags (handleWNoEvent IsDirectory path' actPred callback)
+  let onWatchError = confOnHandlerException conf
+  wid1 <- WNo.watchDirectory watchManager path' isRecursive fileFlags onWatchError (handleWNoEvent IsFile path' actPred callback)
+  wid2 <- WNo.watchDirectory watchManager path' isRecursive dirFlags onWatchError (handleWNoEvent IsDirectory path' actPred callback)
 
   -- The StopListening action should make sure to remove the watches from the manager after they're killed.
   -- Otherwise, a call to killSession would cause us to try to kill them again, resulting in an invalid handle error.

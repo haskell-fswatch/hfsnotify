@@ -58,16 +58,40 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
     let wrapper action = if | isWin -> liftIO (writeFile f "foo") >> action
                             | otherwise -> withFile f AppendMode $ \_ -> action
 
+    -- The Windows and polling backends can't tell how a file came to be
+    let expectedExtraInfo = if | poll || isWin -> AddedNoExtraInfo
+                               | otherwise -> AddedByCreate
+
     wrapper $
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isWin && not poll -> case events of
                -- On Windows, we sometimes get an extra modified event
-               (sortEvents -> [Added {..}, Modified {}]) | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               (sortEvents -> [Added {..}, Modified {}]) | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo == expectedExtraInfo -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
            | otherwise -> case events of
-               [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo == expectedExtraInfo -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events
+
+  it "works with a file moved in" $ withFolder $ \(TestFolderContext watchedDir f getEvents _clearEvents) -> do
+    -- Write the file outside the watched directory, then rename it in. This is the atomic write
+    -- pattern that AddedByMove exists to identify.
+    let source = takeDirectory watchedDir </> (takeFileName watchedDir <> "-source")
+
+    -- FreeBSD's libinotify derives its events from kqueue, so it may report a move-in as a
+    -- plain creation.
+    let expectedExtraInfos = if | poll || isWin -> [AddedNoExtraInfo]
+                                | isFreeBSD -> [AddedByMove, AddedByCreate]
+                                | otherwise -> [AddedByMove]
+
+    liftIO $ writeFile source "foo"
+    renamePath source f
+
+    waitForEvents getEvents $ \events ->
+      if | nested && not recursive -> events `shouldBe` []
+         | otherwise -> case events of
+             [Added {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile && eventAddedExtraInfo `elem` expectedExtraInfos -> return ()
+             _ -> expectationFailure $ "Got wrong events: " <> show events
 
   it "works with a new directory" $ withFolder $ \(TestFolderContext _watchedDir f getEvents _clearEvents) -> do
     createDirectory f
@@ -111,6 +135,12 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
          | isWin -> case events of
              [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
+         | isMac -> case events of
+             -- Current macOS versions set the "modified" flag on a touch, where older ones set
+             -- only the "inode metadata modified" flag
+             [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+             [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+             _ -> expectationFailure $ "Got wrong events: " <> show events
          | otherwise -> case events of
              [ModifiedAttributes {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
              _ -> expectationFailure $ "Got wrong events: " <> show events
@@ -120,7 +150,9 @@ eventTests' testFolderGenerator threadingMode poll recursive nested = do
       waitForEvents getEvents $ \events ->
         if | nested && not recursive -> events `shouldBe` []
            | isMac || isFreeBSD -> case events of
-               [Modified {..}] | poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
+               -- A write shows up as either event here, depending on the macOS version and on
+               -- which flags FSEvents happens to coalesce
+               [Modified {..}] | eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                [ModifiedAttributes {..}] | not poll && eventPath `equalFilePath` f && eventIsDirectory == IsFile -> return ()
                _ -> expectationFailure $ "Got wrong events: " <> show events <> " (wanted file path " <> show f <> ")"
            | otherwise -> case events of
@@ -163,3 +195,4 @@ sortEvents = L.sortBy (comparing eventToNum)
     eventToNum (WatchedDirectoryRemoved {}) = 5
     eventToNum (CloseWrite {}) = 6
     eventToNum (Unknown {}) = 7
+    eventToNum (Rescan {}) = 8
