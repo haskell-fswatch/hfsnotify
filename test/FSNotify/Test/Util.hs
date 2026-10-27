@@ -137,6 +137,27 @@ withRandomTempDirectory (TestFolderGenerator {..}) action = do
            (removePathForcibly dir)
            (action dir)
 
+-- | Watch a fresh temporary directory (non-recursively) with the given config, and give the
+-- action the directory plus a way to read the events collected so far.
+withWatchedTempDirectory :: (
+  MonadUnliftIO m, MonadLogger m
+  )
+  => TestFolderGenerator
+  -> WatchConfig
+  -> (FilePath -> IO [Event] -> m a)
+  -> m a
+withWatchedTempDirectory testFolderGenerator conf action =
+  withRandomTempDirectory testFolderGenerator $ \watchedDir' -> do
+    info [i|Got temp directory: #{watchedDir'}|]
+
+    withRunInIO $ \runInIO ->
+      withManagerConf conf $ \mgr -> do
+        eventsVar <- newIORef []
+        bracket
+          (watchDir mgr watchedDir' (const True) (\ev -> atomicModifyIORef' eventsVar (\evs -> (ev:evs, ()))))
+          (\stop -> stop)
+          (\_ -> runInIO $ action watchedDir' (readIORef eventsVar))
+
 withTestFolder :: (
   MonadUnliftIO m, MonadLogger m
   )

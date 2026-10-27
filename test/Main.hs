@@ -1,5 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -14,7 +16,9 @@ import Prelude hiding (FilePath)
 import System.FSNotify
 import System.FilePath
 import Test.Sandwich
+import UnliftIO.Concurrent (threadDelay)
 import UnliftIO.IORef
+import UnliftIO.Process (callProcess)
 
 
 main :: IO ()
@@ -44,6 +48,37 @@ main =
               readIORef exceptions >>= (`shouldBe` 1)
 
             stop
+
+      -- confIgnoreSelf is implemented with the FSEvents kFSEventStreamCreateFlagIgnoreSelf flag,
+      -- so it only filters our own events on macOS. Everywhere else it does nothing.
+      forM_ [False, True] $ \ignoreSelf ->
+        it [i|respects the confIgnoreSelf option (#{ignoreSelf})|] $ do
+          let conf = defaultConfig { confIgnoreSelf = ignoreSelf }
+
+          withWatchedTempDirectory testFolderGenerator conf $ \watchedDir' getEvents' -> do
+            let ourFile = watchedDir' </> "testfile"
+            liftIO $ writeFile ourFile "foo"
+
+            if | isMac && ignoreSelf -> do
+                   threadDelay 2_000_000
+                   liftIO getEvents' >>= (`shouldBe` [])
+               | otherwise -> waitUntil 5.0 $ do
+                   events <- liftIO getEvents'
+                   unless (any ((`equalFilePath` ourFile) . eventPath) events) $
+                     expectationFailure [i|Expected an event for #{ourFile}, but got: #{events}|]
+
+      when isMac $
+        it "still reports other processes' events when confIgnoreSelf is set" $ do
+          let conf = defaultConfig { confIgnoreSelf = True }
+
+          withWatchedTempDirectory testFolderGenerator conf $ \watchedDir' getEvents' -> do
+            let theirFile = watchedDir' </> "testfile"
+            callProcess "touch" [theirFile]
+
+            waitUntil 5.0 $ do
+              events <- liftIO getEvents'
+              unless (any ((`equalFilePath` theirFile) . eventPath) events) $
+                expectationFailure [i|Expected an event for #{theirFile}, but got: #{events}|]
 
     describe "SingleThread" $ eventTests testFolderGenerator SingleThread
     describe "ThreadPerWatch" $ eventTests testFolderGenerator ThreadPerWatch
