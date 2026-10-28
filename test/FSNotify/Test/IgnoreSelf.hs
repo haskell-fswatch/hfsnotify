@@ -34,7 +34,14 @@ tests = describe "Ignore self" $ parallelWithoutDirectory $ do
 
         if | isMac && ignoreSelf -> do
                threadDelay 2_000_000
-               liftIO readEvents >>= (`shouldBe` [])
+
+               -- FSEvents' filtering is best effort: it loses track of who caused an event when
+               -- it coalesces ours with another process's, and then reports it. So we require
+               -- that the creation we caused goes unreported, not that nothing at all arrives.
+               events <- liftIO readEvents
+               case [ev | ev@(Added {}) <- events, eventPath ev `equalFilePath` ourFile] of
+                 [] -> return ()
+                 added -> expectationFailure [i|Expected no Added event for #{ourFile}, but got: #{added}|]
            | otherwise -> waitUntil 5.0 $ do
                events <- liftIO readEvents
                unless (any ((`equalFilePath` ourFile) . eventPath) events) $
