@@ -54,28 +54,17 @@ jobs:
           .stack-work
         key: debug-ignore-self-${{ hashFiles('stack.yaml.lock') }}
 
-    # --repeat 0 means "run until something fails". The isolated jobs run the ignore self tests on
-    # their own, the full ones run the whole suite, so we can tell whether the failure needs the
-    # load of the rest of the suite.
-    - name: Loop until failure
+    # The isolated jobs repeat the ignore self tests on their own, the full ones repeat the whole
+    # suite, so we can tell whether the failure needs the load of the rest of the suite. Sandwich
+    # reports how many repeats failed and exits non-zero if any did, so a red job is a repro.
+    # Repeat counts are sized to fit the step timeout.
+    - name: Repeat until failure
+      timeout-minutes: 45
       env:
         FSNOTIFY_DEBUG: 1
       run: |
         if [ "${{ matrix.mode }}" = "isolated" ]; then
-          args='--filter "Ignore self" --repeat 0'
+          stack test --ta '--filter "Ignore self" --repeat 150'
         else
-          args='--repeat 0'
+          stack test --ta '--repeat 25'
         fi
-
-        set +e
-        timeout 2400 stack test --ta "$args"
-        code=$?
-        set -e
-
-        if [ "$code" -eq 124 ]; then
-          echo "NO REPRO: ran out the clock without a failure"
-          exit 0
-        fi
-
-        echo "REPRO: test run exited $code"
-        exit 1
