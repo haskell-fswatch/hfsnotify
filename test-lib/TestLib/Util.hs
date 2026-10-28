@@ -25,6 +25,7 @@ module TestLib.Util (
   -- * Watching a test folder
   , withRandomTempDirectory
   , withWatchedTempDirectory
+  , DirChoice(..)
   , withTestFolder
   , TestFolderContext(..)
 
@@ -48,6 +49,7 @@ import Control.Retry
 import Data.String.Interpolate
 import System.FSNotify
 import System.FilePath
+import System.Random (randomRIO)
 import Test.Sandwich
 import UnliftIO hiding (poll, Handler)
 import UnliftIO.Concurrent
@@ -210,16 +212,30 @@ withRandomTempDirectory action = do
            (removePathForcibly dir)
            (action dir)
 
+-- | Debug branch only: whether to watch the per-test directory, whose name repeats from one
+-- run to the next, or a freshly named directory inside it that no earlier run has used.
+data DirChoice = ReusedDir | UniqueDir
+  deriving (Eq, Show)
+
 -- | Watch a fresh temporary directory (non-recursively) with the given config, and give the
 -- action the directory plus a way to read the events collected so far.
 withWatchedTempDirectory :: (
   MonadUnliftIO m, MonadLogger m, HasTestFolderGeneratorMonad context m
   )
-  => WatchConfig
+  => DirChoice
+  -> WatchConfig
   -> (FilePath -> IO [Event] -> m a)
   -> m a
-withWatchedTempDirectory conf action =
-  withRandomTempDirectory $ \watchedDir' -> do
+withWatchedTempDirectory dirChoice conf action =
+  withRandomTempDirectory $ \parentDir -> do
+    watchedDir' <- case dirChoice of
+      ReusedDir -> return parentDir
+      UniqueDir -> do
+        n <- liftIO (randomRIO (0, maxBound :: Int))
+        let unique = parentDir </> ("unique_" <> show n)
+        createDirectory unique
+        return unique
+
     info [i|Got temp directory: #{watchedDir'}|]
 
     withRunInIO $ \runInIO ->
