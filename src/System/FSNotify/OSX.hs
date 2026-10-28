@@ -189,10 +189,14 @@ listenFn handler conf (OSXManager mvarMap) path actPred callback = do
 
   eventStream <- FSE.eventStreamCreateSince [path'] sinceId 0.0 True (confIgnoreSelf conf) True onEvent
 
-  -- Don't report the watch as established until the sentinel says events are live
-  sentinel <- timeout historyDoneTimeout (takeMVar historyDone)
-  when (debugEvents && sentinel == Nothing) $
-    hPutStrLn stderr ("[fsnotify-debug] history done TIMED OUT watch=" ++ path')
+  -- Don't report the watch as established until the sentinel says events are live. Read it
+  -- rather than take it: the events after this have to see that it arrived.
+  sentinel <- timeout historyDoneTimeout (readMVar historyDone)
+  when (sentinel == Nothing) $ do
+    when debugEvents $
+      hPutStrLn stderr ("[fsnotify-debug] history done TIMED OUT watch=" ++ path')
+    -- Deliver events rather than treat everything as historical and drop it all
+    void $ tryPutMVar historyDone ()
 
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream callback) watchMap)
   return $ do
