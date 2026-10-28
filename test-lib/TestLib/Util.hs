@@ -46,7 +46,6 @@ import Control.Exception.Safe (Handler(..))
 import Control.Monad.Logger
 import Control.Retry
 import Data.String.Interpolate
-import Data.Typeable (Typeable)
 import System.FSNotify
 import System.FilePath
 import Test.Sandwich
@@ -56,6 +55,11 @@ import UnliftIO.Directory
 
 #if !MIN_VERSION_base(4,11,0)
 import Data.Monoid
+#endif
+
+#if !MIN_VERSION_sandwich(0,3,0)
+-- Sandwich didn't have HasBaseContextMonad yet
+import Control.Monad.Reader (MonadReader)
 #endif
 
 #ifdef mingw32_HOST_OS
@@ -140,7 +144,7 @@ waitUntil timeInSeconds action = withRunInIO $ \runInIO ->
 
 -- | The type of the @tests@ exported by each discovered test module.
 type TestSpec = forall context. (
-  HasBaseContext context, HasTestFolderGenerator context, Typeable context
+  HasBaseContext context, HasTestFolderGenerator context
   ) => SpecFree context IO ()
 
 -- | Combiner for 'Test.Sandwich.TH.getSpecFromFolder': run the discovered modules in parallel,
@@ -167,6 +171,17 @@ testFolderGenerator = Label
 
 type HasTestFolderGenerator context = HasLabel context "testFolderGenerator" TestFolderGenerator
 
+-- | What the helpers below need in order to 'getContext' the generator.
+#if MIN_VERSION_sandwich(0,3,0)
+type HasTestFolderGeneratorMonad context m = (
+  HasBaseContextMonad context m, HasTestFolderGenerator context
+  )
+#else
+type HasTestFolderGeneratorMonad context m = (
+  HasBaseContext context, MonadReader context m, HasTestFolderGenerator context
+  )
+#endif
+
 newTestFolderGenerator :: MonadUnliftIO m => FilePath -> m TestFolderGenerator
 newTestFolderGenerator dir = TestFolderGenerator dir <$> newMVar 0
 
@@ -176,7 +191,7 @@ withTestFolderGenerator action = do
     newTestFolderGenerator dir >>= action
 
 withRandomTempDirectory :: (
-  MonadUnliftIO m, HasBaseContextMonad context m, HasTestFolderGenerator context
+  MonadUnliftIO m, HasTestFolderGeneratorMonad context m
   )
   => (FilePath -> m a)
   -> m a
@@ -192,7 +207,7 @@ withRandomTempDirectory action = do
 -- | Watch a fresh temporary directory (non-recursively) with the given config, and give the
 -- action the directory plus a way to read the events collected so far.
 withWatchedTempDirectory :: (
-  MonadUnliftIO m, MonadLogger m, HasBaseContextMonad context m, HasTestFolderGenerator context
+  MonadUnliftIO m, MonadLogger m, HasTestFolderGeneratorMonad context m
   )
   => WatchConfig
   -> (FilePath -> IO [Event] -> m a)
@@ -210,7 +225,7 @@ withWatchedTempDirectory conf action =
           (\_ -> runInIO $ action watchedDir' (readIORef eventsVar))
 
 withTestFolder :: (
-  MonadUnliftIO m, MonadLogger m, HasBaseContextMonad context m, HasTestFolderGenerator context
+  MonadUnliftIO m, MonadLogger m, HasTestFolderGeneratorMonad context m
   )
   => ThreadingMode
   -> Bool

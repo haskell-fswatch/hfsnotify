@@ -135,6 +135,7 @@ test-suite tests
     , filepath
     , fsnotify
     , monad-logger
+    , mtl
     , random
     , retry
     , safe-exceptions
