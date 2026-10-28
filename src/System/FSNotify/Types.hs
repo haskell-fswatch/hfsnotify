@@ -128,9 +128,6 @@ data WatchConfig = WatchConfig
   , -- | If 'True', ignore events caused by the current process.
     -- Only supported on macOS, via the FSEvents @kFSEventStreamCreateFlagIgnoreSelf@ flag.
     -- On other platforms it has no effect.
-    --
-    -- The filtering is best effort: FSEvents occasionally reports an event caused by this
-    -- process anyway, so don't rely on never seeing one.
     confIgnoreSelf :: Bool
   }
 

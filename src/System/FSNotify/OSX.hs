@@ -19,16 +19,19 @@ import Data.Bits
 import Data.List (isPrefixOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (isJust, mapMaybe)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Unique
 import Data.Word
 import Prelude hiding (FilePath)
 import System.Directory
+import System.Environment (lookupEnv)
 import System.FSNotify.Listener
 import System.FSNotify.Path (canonicalizeDirPath)
 import System.FSNotify.Types
 import System.FilePath
+import System.IO (hPutStrLn, stderr)
+import System.IO.Unsafe (unsafePerformIO)
 import qualified System.OSX.FSEvents as FSE
 
 
@@ -103,10 +106,20 @@ rescanReason e
   | FSE.eventFlags e .&. FSE.eventFlagUserDropped /= 0 = RescanUserDropped
   | otherwise = RescanCoalesced
 
+-- | Debug branch only: with FSNOTIFY_DEBUG set, report every raw FSEvents event along with the
+-- watch it arrived on, so we can tell a misrouted event from one FSEvents shouldn't have sent.
+debugEvents :: Bool
+debugEvents = unsafePerformIO (isJust <$> lookupEnv "FSNOTIFY_DEBUG")
+{-# NOINLINE debugEvents #-}
+
 handleFSEEvent :: Bool -> ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO ()
 handleFSEEvent isRecursive actPred callback dirPath fseEvent = do
   currentTime <- getCurrentTime
   events <- fsnEvents currentTime fseEvent
+
+  when debugEvents $
+    hPutStrLn stderr ("[fsnotify-debug] watch=" ++ dirPath ++ " raw=" ++ show fseEvent ++ " events=" ++ show events)
+
   forM_ (mapMaybe (scopeRescan isRecursive dirPath) events) $ \event ->
     when (actPred event && (isRecursive || isDirectlyInside dirPath event || isRescan event)) $
       callback event

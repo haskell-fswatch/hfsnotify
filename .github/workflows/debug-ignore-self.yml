@@ -1,0 +1,81 @@
+name: Debug ignore self
+
+# Hunts the rare macOS failure where a watch with confIgnoreSelf set reports an event anyway.
+# Each job loops the tests until one fails, then stops, so a red job means we caught it.
+
+on:
+  push:
+    branches:
+      - 'debug/**'
+  workflow_dispatch:
+
+jobs:
+  repro:
+    name: ${{ matrix.mode }} ${{ matrix.shard }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [isolated, full]
+        shard: [1, 2, 3]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (macOS)
+      run: |
+        # https://gitlab.haskell.org/ghc/ghc/-/issues/20592#note_391266
+        echo "C_INCLUDE_PATH=`xcrun --show-sdk-path`/usr/include/ffi" >> "$GITHUB_ENV"
+
+    - uses: haskell-actions/setup@v2
+      name: Setup Haskell (Stack)
+      with:
+        enable-stack: true
+        stack-no-global: true
+        stack-version: "latest"
+
+    - uses: actions/cache/restore@v4
+      id: cache-restore
+      with:
+        path: |
+          ~/.stack
+          .stack-work
+        key: debug-ignore-self-${{ hashFiles('stack.yaml.lock') }}
+
+    - name: Build
+      run: stack build --test --no-run-tests
+
+    - uses: actions/cache/save@v4
+      if: always() && steps.cache-restore.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.stack
+          .stack-work
+        key: debug-ignore-self-${{ hashFiles('stack.yaml.lock') }}
+
+    # --repeat 0 means "run until something fails". The isolated jobs run the ignore self tests on
+    # their own, the full ones run the whole suite, so we can tell whether the failure needs the
+    # load of the rest of the suite.
+    - name: Loop until failure
+      env:
+        FSNOTIFY_DEBUG: 1
+      run: |
+        if [ "${{ matrix.mode }}" = "isolated" ]; then
+          args='--filter "Ignore self" --repeat 0'
+        else
+          args='--repeat 0'
+        fi
+
+        set +e
+        timeout 2400 stack test --ta "$args"
+        code=$?
+        set -e
+
+        if [ "$code" -eq 124 ]; then
+          echo "NO REPRO: ran out the clock without a failure"
+          exit 0
+        fi
+
+        echo "REPRO: test run exited $code"
+        exit 1

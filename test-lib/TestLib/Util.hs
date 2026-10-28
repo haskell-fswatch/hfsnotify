@@ -200,6 +200,12 @@ withRandomTempDirectory action = do
   testId <- modifyMVar testFolderGeneratorId $ \x ->
     return (x + 1, x)
   let dir = testFolderGeneratorRootDir </> ("test_" <> show testId)
+
+  -- Debug branch only: the per-test logs with this in them don't leave the CI runner, so print
+  -- the directory each test got to stdout, where we can match it against a failure.
+  nodeFolder <- getCurrentFolder
+  liftIO $ putStrLn [i|[temp-dir] #{dir} for #{nodeFolder}|]
+
   bracket_ (createDirectory dir)
            (removePathForcibly dir)
            (action dir)

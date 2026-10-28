@@ -2,6 +2,9 @@ name: CI
 
 on:
   push:
+    # Debug branches have their own workflow; don't tie up runners with the full matrix
+    branches-ignore:
+      - 'debug/**'
   workflow_dispatch:
 
 jobs:
