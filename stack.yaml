@@ -2,6 +2,9 @@ resolver: lts-24.62
 
 packages:
 - '.'
+# Debug branch only: a patched hfsevents that can start a stream from a given event ID and so
+# deliver the HistoryDone sentinel. Not buildable off darwin, so this is inert on other platforms.
+- 'vendor/hfsevents'
 
 nix:
   enable: false

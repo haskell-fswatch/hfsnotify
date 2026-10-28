@@ -32,6 +32,7 @@ import System.FSNotify.Types
 import System.FilePath
 import System.IO (hPutStrLn, stderr)
 import System.IO.Unsafe (unsafePerformIO)
+import System.Timeout (timeout)
 import qualified System.OSX.FSEvents as FSE
 
 
@@ -112,6 +113,10 @@ debugEvents :: Bool
 debugEvents = unsafePerformIO (isJust <$> lookupEnv "FSNOTIFY_DEBUG")
 {-# NOINLINE debugEvents #-}
 
+-- | How long to wait for the HistoryDone sentinel before giving up and watching anyway.
+historyDoneTimeout :: Int
+historyDoneTimeout = 2000000
+
 handleFSEEvent :: Bool -> ActionPredicate -> EventCallback -> FilePath -> FSE.Event -> IO ()
 handleFSEEvent isRecursive actPred callback dirPath fseEvent = do
   currentTime <- getCurrentTime
@@ -159,7 +164,36 @@ listenFn :: (
 listenFn handler conf (OSXManager mvarMap) path actPred callback = do
   path' <- canonicalizeDirPath path
   unique <- newUnique
-  eventStream <- FSE.eventStreamCreate [path'] 0.0 True (confIgnoreSelf conf) True (handler actPred callback path')
+
+  -- Start the stream from the current event ID instead of "since now". Supplying an ID makes
+  -- FSEvents replay whatever happened while the stream was being set up and then send a
+  -- HistoryDone sentinel. That sentinel is the documented point from which events are live, and
+  -- @kFSEventStreamCreateFlagIgnoreSelf@ has no effect on the historical events before it.
+  sinceId <- FSE.getCurrentEventId
+  historyDone <- newEmptyMVar
+
+  let onEvent fseEvent
+        | FSE.eventFlags fseEvent .&. FSE.eventFlagHistoryDone /= 0 = do
+            when debugEvents $
+              hPutStrLn stderr ("[fsnotify-debug] history done watch=" ++ path')
+            void $ tryPutMVar historyDone ()
+        | otherwise = do
+            live <- not <$> isEmptyMVar historyDone
+            if live || not (confIgnoreSelf conf)
+              then void $ handler actPred callback path' fseEvent
+              else
+                -- Historical events say nothing about which process caused them, so with
+                -- confIgnoreSelf set they could be ours and we can't tell
+                when debugEvents $
+                  hPutStrLn stderr ("[fsnotify-debug] dropped historical watch=" ++ path' ++ " raw=" ++ show fseEvent)
+
+  eventStream <- FSE.eventStreamCreateSince [path'] sinceId 0.0 True (confIgnoreSelf conf) True onEvent
+
+  -- Don't report the watch as established until the sentinel says events are live
+  sentinel <- timeout historyDoneTimeout (takeMVar historyDone)
+  when (debugEvents && sentinel == Nothing) $
+    hPutStrLn stderr ("[fsnotify-debug] history done TIMED OUT watch=" ++ path')
+
   modifyMVar_ mvarMap $ \watchMap -> return (Map.insert unique (WatchData eventStream callback) watchMap)
   return $ do
     FSE.eventStreamDestroy eventStream
