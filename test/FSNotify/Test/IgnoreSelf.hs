@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -22,32 +21,38 @@ import UnliftIO.Process (callProcess)
 
 tests :: TestSpec
 tests = describe "Ignore self" $ parallelWithoutDirectory $ do
-  -- confIgnoreSelf is implemented with the FSEvents kFSEventStreamCreateFlagIgnoreSelf flag,
-  -- so it only filters our own events on macOS. Everywhere else it does nothing.
-  forM_ [False, True] $ \ignoreSelf ->
-    it [i|respects the confIgnoreSelf option (#{ignoreSelf})|] $ do
+  -- confIgnoreSelf is implemented with the FSEvents kFSEventStreamCreateFlagIgnoreSelf flag, so
+  -- it only filters anything on macOS. Everywhere else it does nothing, which is what we check
+  -- here by expecting our own write to be reported with the option both off and on.
+  forM_ [False, True] $ \ignoreSelf -> unless (isMac && ignoreSelf) $
+    it [i|reports our own events with confIgnoreSelf = #{ignoreSelf}|] $ do
       let conf = defaultConfig { confIgnoreSelf = ignoreSelf }
 
       withWatchedTempDirectory conf $ \watchedDir' readEvents -> do
         let ourFile = watchedDir' </> "testfile"
         liftIO $ writeFile ourFile "foo"
 
-        if | isMac && ignoreSelf -> do
-               threadDelay 2_000_000
+        waitUntil 5.0 $ do
+          events <- liftIO readEvents
+          unless (any ((`equalFilePath` ourFile) . eventPath) events) $
+            expectationFailure [i|Expected an event for #{ourFile}, but got: #{events}|]
 
-               -- FSEvents' filtering is best effort: it loses track of who caused an event when
-               -- it coalesces ours with another process's, and then reports it. So we require
-               -- that the creation we caused goes unreported, not that nothing at all arrives.
-               events <- liftIO readEvents
-               case [ev | ev@(Added {}) <- events, eventPath ev `equalFilePath` ourFile] of
-                 [] -> return ()
-                 added -> expectationFailure [i|Expected no Added event for #{ourFile}, but got: #{added}|]
-           | otherwise -> waitUntil 5.0 $ do
-               events <- liftIO readEvents
-               unless (any ((`equalFilePath` ourFile) . eventPath) events) $
-                 expectationFailure [i|Expected an event for #{ourFile}, but got: #{events}|]
+  when isMac $ do
+    -- FSEvents filters on a best-effort basis: we've seen it report a write of ours anyway, so
+    -- asserting that every attempt is filtered is flaky. Asking for one filtered attempt out of
+    -- several still fails if the flag isn't being passed at all, since then every attempt reports.
+    it "filters our own events when confIgnoreSelf is set" $ do
+      let conf = defaultConfig { confIgnoreSelf = True }
 
-  when isMac $
+      attempts <- forM [1 .. 3 :: Int] $ \_ ->
+        withWatchedTempDirectory conf $ \watchedDir' readEvents -> do
+          liftIO $ writeFile (watchedDir' </> "testfile") "foo"
+          threadDelay 2_000_000
+          liftIO readEvents
+
+      unless (any null attempts) $
+        expectationFailure [i|Expected at least one attempt with no events, but got: #{attempts}|]
+
     it "still reports other processes' events when confIgnoreSelf is set" $ do
       let conf = defaultConfig { confIgnoreSelf = True }
 

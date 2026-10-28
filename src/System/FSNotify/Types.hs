@@ -129,8 +129,8 @@ data WatchConfig = WatchConfig
     -- Only supported on macOS, via the FSEvents @kFSEventStreamCreateFlagIgnoreSelf@ flag.
     -- On other platforms it has no effect.
     --
-    -- The filtering is best effort: FSEvents can still report an event this process caused, if
-    -- it coalesced that event with one from another process.
+    -- The filtering is best effort: FSEvents occasionally reports an event caused by this
+    -- process anyway, so don't rely on never seeing one.
     confIgnoreSelf :: Bool
   }
 
