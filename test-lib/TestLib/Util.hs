@@ -11,12 +11,42 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module FSNotify.Test.Util where
+module TestLib.Util (
+  -- * Spec type for discovered test modules
+  TestSpec
+  , discoveredInParallel
+
+  -- * The test folder generator context
+  , TestFolderGenerator
+  , HasTestFolderGenerator
+  , testFolderGenerator
+  , withTestFolderGenerator
+
+  -- * Watching a test folder
+  , withRandomTempDirectory
+  , withWatchedTempDirectory
+  , withTestFolder
+  , TestFolderContext(..)
+
+  -- * Platform
+  , isMac
+  , isWin
+  , isLinux
+  , isFreeBSD
+  , haveNativeWatcher
+  , changeFileAttributes
+  , createSymLink
+
+  -- * Misc
+  , waitUntil
+  , parallelWithoutDirectory
+  ) where
 
 import Control.Exception.Safe (Handler(..))
 import Control.Monad.Logger
 import Control.Retry
 import Data.String.Interpolate
+import Data.Typeable (Typeable)
 import System.FSNotify
 import System.FilePath
 import Test.Sandwich
@@ -108,6 +138,17 @@ waitUntil timeInSeconds action = withRunInIO $ \runInIO ->
     policy = limitRetriesByCumulativeDelay (round (timeInSeconds * 1000000.0)) $ capDelay 1000000 $ exponentialBackoff 1000
 
 
+-- | The type of the @tests@ exported by each discovered test module.
+type TestSpec = forall context. (
+  HasBaseContext context, HasTestFolderGenerator context, Typeable context
+  ) => SpecFree context IO ()
+
+-- | Combiner for 'Test.Sandwich.TH.getSpecFromFolder': run the discovered modules in parallel,
+-- without adding a node for the folder they were found in.
+discoveredInParallel :: String -> SpecFree context m () -> SpecFree context m ()
+discoveredInParallel _folderName = parallelWithoutDirectory
+
+
 data TestFolderContext = TestFolderContext {
   watchedDir :: FilePath
   , filePath :: FilePath
@@ -115,10 +156,16 @@ data TestFolderContext = TestFolderContext {
   , clearEvents :: IO ()
   }
 
+-- | Hands out a fresh directory per test, under one temporary root for the whole run.
 data TestFolderGenerator = TestFolderGenerator {
   testFolderGeneratorRootDir :: FilePath
   , testFolderGeneratorId :: MVar Int
   }
+
+testFolderGenerator :: Label "testFolderGenerator" TestFolderGenerator
+testFolderGenerator = Label
+
+type HasTestFolderGenerator context = HasLabel context "testFolderGenerator" TestFolderGenerator
 
 newTestFolderGenerator :: MonadUnliftIO m => FilePath -> m TestFolderGenerator
 newTestFolderGenerator dir = TestFolderGenerator dir <$> newMVar 0
@@ -128,8 +175,13 @@ withTestFolderGenerator action = do
   withSystemTempDirectory "hfsnotify-tests" $ \dir ->
     newTestFolderGenerator dir >>= action
 
-withRandomTempDirectory :: MonadUnliftIO m => TestFolderGenerator -> (FilePath -> m a) -> m a
-withRandomTempDirectory (TestFolderGenerator {..}) action = do
+withRandomTempDirectory :: (
+  MonadUnliftIO m, HasBaseContextMonad context m, HasTestFolderGenerator context
+  )
+  => (FilePath -> m a)
+  -> m a
+withRandomTempDirectory action = do
+  TestFolderGenerator {..} <- getContext testFolderGenerator
   testId <- modifyMVar testFolderGeneratorId $ \x ->
     return (x + 1, x)
   let dir = testFolderGeneratorRootDir </> ("test_" <> show testId)
@@ -140,14 +192,13 @@ withRandomTempDirectory (TestFolderGenerator {..}) action = do
 -- | Watch a fresh temporary directory (non-recursively) with the given config, and give the
 -- action the directory plus a way to read the events collected so far.
 withWatchedTempDirectory :: (
-  MonadUnliftIO m, MonadLogger m
+  MonadUnliftIO m, MonadLogger m, HasBaseContextMonad context m, HasTestFolderGenerator context
   )
-  => TestFolderGenerator
-  -> WatchConfig
+  => WatchConfig
   -> (FilePath -> IO [Event] -> m a)
   -> m a
-withWatchedTempDirectory testFolderGenerator conf action =
-  withRandomTempDirectory testFolderGenerator $ \watchedDir' -> do
+withWatchedTempDirectory conf action =
+  withRandomTempDirectory $ \watchedDir' -> do
     info [i|Got temp directory: #{watchedDir'}|]
 
     withRunInIO $ \runInIO ->
@@ -159,18 +210,17 @@ withWatchedTempDirectory testFolderGenerator conf action =
           (\_ -> runInIO $ action watchedDir' (readIORef eventsVar))
 
 withTestFolder :: (
-  MonadUnliftIO m, MonadLogger m
+  MonadUnliftIO m, MonadLogger m, HasBaseContextMonad context m, HasTestFolderGenerator context
   )
-  => TestFolderGenerator
-  -> ThreadingMode
+  => ThreadingMode
   -> Bool
   -> Bool
   -> Bool
   -> (FilePath -> m b)
   -> (b -> TestFolderContext -> m a)
   -> m a
-withTestFolder testFolderGenerator threadingMode poll recursive nested setup action = do
-  withRandomTempDirectory testFolderGenerator $ \watchedDir' -> do
+withTestFolder threadingMode poll recursive nested setup action = do
+  withRandomTempDirectory $ \watchedDir' -> do
     info [i|Got temp directory: #{watchedDir'}|]
     let fileName = "testfile"
     let baseDir = if nested then watchedDir' </> "subdir" else watchedDir'

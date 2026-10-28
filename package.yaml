@@ -114,9 +114,12 @@ tests:
     main: Main.hs
     source-dirs:
     - test
+    - test-lib
     ghc-options:
     - -threaded
     - -Wall
+    # Generates the imports for the test modules discovered by FSNotify.Test
+    build-tools: sandwich:sandwich-discover
     dependencies:
     - async >= 2
     - base >= 4.3.1.0
