@@ -44,24 +44,45 @@ tests = describe "Ignore self" $ parallelWithoutDirectory $ do
                  expectationFailure [i|Expected an event for #{ourFile}, but got: #{events}|]
 
   when isMac $ do
-    -- Which factor makes FSEvents report a write of ours despite the flag? Repeating these and
-    -- comparing failure counts separates reuse of a directory name from writing to a watch that
-    -- has only just been created.
-    forM_ [(dirChoice, settle) | dirChoice <- [ReusedDir, UniqueDir], settle <- [False, True]] $
-      \(dirChoice, settle) -> do
-        let label = [i|#{dirLabel dirChoice}/#{settleLabel settle}|]
-
-        it [i|filters our own write (#{label})|] $ do
+    -- How wide is the window where the flag doesn't apply? Each of these waits a different
+    -- amount after the watch starts before writing, so the failure counts profile the window.
+    let settles = [("immediate", 0), ("50ms", 50_000), ("200ms", 200_000), ("1s", 1_000_000)] :: [(String, Int)]
+    forM_ settles $
+      \(settleLabel, settleMicros) ->
+        it [i|filters our own write (settle #{settleLabel})|] $ do
           let conf = defaultConfig { confIgnoreSelf = True }
 
-          withWatchedTempDirectory dirChoice conf $ \watchedDir' readEvents -> do
-            when settle $ threadDelay 1_000_000
+          withWatchedTempDirectory UniqueDir conf $ \watchedDir' readEvents -> do
+            when (settleMicros > 0) $ threadDelay settleMicros
             liftIO $ writeFile (watchedDir' </> "testfile") "foo"
             threadDelay 2_000_000
 
             events <- liftIO readEvents
             unless (null events) $
-              expectationFailure $ describeUnexpected label watchedDir' events
+              expectationFailure $ describeUnexpected [i|settle #{settleLabel}|] watchedDir' events
+
+    -- Instead of waiting a fixed time, wait for proof that the stream is delivering: another
+    -- process touches a sentinel file, and the flag never filters another process's events. If
+    -- this never leaks, it's a readiness signal we can wait on rather than a sleep to tune.
+    it "filters our own write (sentinel handshake)" $ do
+      let conf = defaultConfig { confIgnoreSelf = True }
+
+      withWatchedTempDirectory UniqueDir conf $ \watchedDir' readEvents -> do
+        let sentinel = watchedDir' </> "sentinel"
+        callProcess "touch" [sentinel]
+
+        waitUntil 10.0 $ do
+          events <- liftIO readEvents
+          unless (any ((`equalFilePath` sentinel) . eventPath) events) $
+            expectationFailure [i|Sentinel event for #{sentinel} hasn't arrived yet|]
+
+        liftIO $ writeFile (watchedDir' </> "testfile") "foo"
+        threadDelay 2_000_000
+
+        events <- liftIO readEvents
+        let oursOnly = filter (not . (`equalFilePath` sentinel) . eventPath) events
+        unless (null oursOnly) $
+          expectationFailure $ describeUnexpected "sentinel handshake" watchedDir' oursOnly
 
     it "still reports other processes' events when confIgnoreSelf is set" $ do
       let conf = defaultConfig { confIgnoreSelf = True }
@@ -74,14 +95,6 @@ tests = describe "Ignore self" $ parallelWithoutDirectory $ do
           events <- liftIO readEvents
           unless (any ((`equalFilePath` theirFile) . eventPath) events) $
             expectationFailure [i|Expected an event for #{theirFile}, but got: #{events}|]
-
-dirLabel :: DirChoice -> String
-dirLabel ReusedDir = "reused dir"
-dirLabel UniqueDir = "unique dir"
-
-settleLabel :: Bool -> String
-settleLabel True = "settled"
-settleLabel False = "immediate"
 
 -- | Say, for each unexpected event, whether it happened in the directory this watch was for.
 -- A foreign directory means the event reached the wrong watch; our own means FSEvents reported
