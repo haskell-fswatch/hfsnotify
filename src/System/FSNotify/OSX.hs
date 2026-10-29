@@ -187,7 +187,12 @@ listenFn handler conf (OSXManager mvarMap) path actPred callback = do
                 when debugEvents $
                   hPutStrLn stderr ("[fsnotify-debug] dropped historical watch=" ++ path' ++ " raw=" ++ show fseEvent)
 
-  eventStream <- FSE.eventStreamCreateSince [path'] sinceId 0.0 True (confIgnoreSelf conf) True onEvent
+  -- MarkSelf tags events FSEvents attributes to us with eventFlagOwnEvent, so a leaked event
+  -- tells us whether the attribution was lost or the filter simply didn't apply it
+  eventStream <- FSE.eventStreamCreateSince [path'] sinceId 0.0 True (confIgnoreSelf conf) True True onEvent
+
+  when debugEvents $
+    hPutStrLn stderr ("[fsnotify-debug] watch created watch=" ++ path' ++ " ignoreSelf=" ++ show (confIgnoreSelf conf))
 
   -- Don't report the watch as established until the sentinel says events are live. Read it
   -- rather than take it: the events after this have to see that it arrived.

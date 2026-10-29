@@ -28,7 +28,7 @@ tests = describe "Ignore self" $ parallelWithoutDirectory $ do
     it [i|respects the confIgnoreSelf option (#{ignoreSelf})|] $ do
       let conf = defaultConfig { confIgnoreSelf = ignoreSelf }
 
-      withWatchedTempDirectory ReusedDir conf $ \watchedDir' readEvents -> do
+      withWatchedTempDirectory UniqueDir conf $ \watchedDir' readEvents -> do
         let ourFile = watchedDir' </> "testfile"
         liftIO $ writeFile ourFile "foo"
 
@@ -87,7 +87,7 @@ tests = describe "Ignore self" $ parallelWithoutDirectory $ do
     it "still reports other processes' events when confIgnoreSelf is set" $ do
       let conf = defaultConfig { confIgnoreSelf = True }
 
-      withWatchedTempDirectory ReusedDir conf $ \watchedDir' readEvents -> do
+      withWatchedTempDirectory UniqueDir conf $ \watchedDir' readEvents -> do
         let theirFile = watchedDir' </> "testfile"
         callProcess "touch" [theirFile]
 

@@ -6,6 +6,7 @@ module System.OSX.FSEvents
   ( EventStream
   , eventStreamCreate
   , eventStreamCreateSince
+  , eventFlagOwnEvent
   , getCurrentEventId
   , eventStreamDestroy
   , Event (..)
@@ -115,7 +116,8 @@ eventStreamCreate :: [FilePath]      -- ^ The paths to watch
                   -> Bool            -- ^ Get file-level notifications instead of directory level 
                   -> (Event -> IO a) -- ^ The action to run when an event has taken place
                   -> IO EventStream  -- ^ The event stream, use this to destroy the stream
-eventStreamCreate ps = eventStreamCreateSince ps 0
+eventStreamCreate ps latency nodefer noself filelevel =
+  eventStreamCreateSince ps 0 latency nodefer noself False filelevel
 
 -- | Like 'eventStreamCreate', but starts from the given event ID rather than
 -- \"since now\". Supplying an ID means the stream replays the events after it and
@@ -126,10 +128,11 @@ eventStreamCreateSince :: [FilePath]      -- ^ The paths to watch
                        -> Double          -- ^ Latency
                        -> Bool            -- ^ Process event immediately if no other events received for at least latency
                        -> Bool            -- ^ Ignore events caused by current process
+                       -> Bool            -- ^ Tag events caused by current process with 'eventFlagOwnEvent'
                        -> Bool            -- ^ Get file-level notifications instead of directory level
                        -> (Event -> IO a) -- ^ The action to run when an event has taken place
                        -> IO EventStream  -- ^ The event stream, use this to destroy the stream
-eventStreamCreateSince ps since latency nodefer noself filelevel a = withCStringArray0 ps $ \pp ->
+eventStreamCreateSince ps since latency nodefer noself markself filelevel a = withCStringArray0 ps $ \pp ->
   alloca $ \pfd -> do
   alloca $ \ppw -> do
     when (latency < 0) $ ioError (userError "latency must be nonnegative")
@@ -143,6 +146,7 @@ eventStreamCreateSince ps since latency nodefer noself filelevel a = withCString
         where
           flags = condFlag createFlagNoDefer nodefer .|.
                   condFlag createFlagIgnoreSelf noself .|.
+                  condFlag createFlagMarkSelf markself .|.
                   condFlag createFlagFileEvents filelevel
 
 condFlag :: Word32 -> Bool -> Word32
@@ -157,6 +161,14 @@ createFlagIgnoreSelf = 0x00000008
 
 createFlagFileEvents :: Word32
 createFlagFileEvents = 0x00000010
+
+createFlagMarkSelf :: Word32
+createFlagMarkSelf = 0x00000020
+
+-- | Set on an event that FSEvents attributes to the current process. Only ever set when the
+-- stream was created with the MarkSelf flag.
+eventFlagOwnEvent :: Word64
+eventFlagOwnEvent = 0x00080000
 
 -- |  Destroy an event stream, the callback action will not be run for new events
 -- (but there may be pending events remaining)
