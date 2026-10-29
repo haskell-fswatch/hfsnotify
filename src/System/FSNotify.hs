@@ -56,6 +56,7 @@ module System.FSNotify (
   , confWatchMode
   , confThreadingMode
   , confOnHandlerException
+  , confIgnoreSelf
   , WatchMode(..)
   , ThreadingMode(..)
 
@@ -122,6 +123,7 @@ defaultConfig = WatchConfig {
 #endif
   , confThreadingMode = SingleThread
   , confOnHandlerException = defaultOnHandlerException
+  , confIgnoreSelf = False
   }
 
 defaultOnHandlerException :: SomeException -> IO ()

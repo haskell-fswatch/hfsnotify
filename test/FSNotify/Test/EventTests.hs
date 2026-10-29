@@ -10,7 +10,9 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant multi-way if" #-}
 
-module FSNotify.Test.EventTests where
+module FSNotify.Test.EventTests (
+  tests
+  ) where
 
 import Control.Exception.Safe (MonadThrow)
 import Control.Monad
@@ -18,32 +20,43 @@ import Control.Monad.IO.Class
 import qualified Data.List as L
 import Data.Monoid
 import Data.Ord (comparing)
-import FSNotify.Test.Util
 import Prelude hiding (FilePath)
 import System.FSNotify
 import System.FilePath
 import System.IO (hPutStr)
 import Test.Sandwich
+import TestLib.Util
 import UnliftIO hiding (poll)
 import UnliftIO.Directory
 
 
+tests :: TestSpec
+tests = describe "Event tests" $ parallelWithoutDirectory $
+  forM_ threadingModes $ \(label, threadingMode) ->
+    describe label $ eventTests threadingMode
+  where
+    threadingModes = [
+      ("SingleThread", SingleThread)
+      , ("ThreadPerWatch", ThreadPerWatch)
+      , ("ThreadPerEvent", ThreadPerEvent)
+      ]
+
 eventTests :: (
-  MonadUnliftIO m, MonadThrow m
-  ) => TestFolderGenerator -> ThreadingMode -> SpecFree context m ()
-eventTests testFolderGenerator threadingMode = describe "Tests" $ parallelWithoutDirectory $ do
+  MonadUnliftIO m, MonadThrow m, HasBaseContext context, HasTestFolderGenerator context
+  ) => ThreadingMode -> SpecFree context m ()
+eventTests threadingMode = parallelWithoutDirectory $ do
   let pollOptions = if haveNativeWatcher then [False, True] else [True]
 
   forM_ pollOptions $ \poll -> describe (if poll then "Polling" else "Native") $ parallelWithoutDirectory $ do
     forM_ [False, True] $ \recursive -> describe (if recursive then "Recursive" else "Non-recursive") $ parallelWithoutDirectory $
       forM_ [False, True] $ \nested -> describe (if nested then "Nested" else "Non-nested") $ parallelWithoutDirectory $
-        eventTests' testFolderGenerator threadingMode poll recursive nested
+        eventTests' threadingMode poll recursive nested
 
 eventTests' :: (
-  MonadUnliftIO m, MonadThrow m
-  ) => TestFolderGenerator -> ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
-eventTests' testFolderGenerator threadingMode poll recursive nested = do
-  let withFolder' = withTestFolder testFolderGenerator threadingMode poll recursive nested
+  MonadUnliftIO m, MonadThrow m, HasBaseContext context, HasTestFolderGenerator context
+  ) => ThreadingMode -> Bool -> Bool -> Bool -> SpecFree context m ()
+eventTests' threadingMode poll recursive nested = do
+  let withFolder' = withTestFolder threadingMode poll recursive nested
   let withFolder action = withFolder' (const $ return ()) (\() ctx -> action ctx)
   let waitForEvents getEvents action = waitUntil 5.0 (liftIO getEvents >>= action)
 

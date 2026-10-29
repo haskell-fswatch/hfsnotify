@@ -125,6 +125,10 @@ data WatchConfig = WatchConfig
     confThreadingMode :: ThreadingMode
   , -- | Called when a handler throws an exception or a watch fails internally
     confOnHandlerException :: SomeException -> IO ()
+  , -- | If 'True', ignore events caused by the current process.
+    -- Only supported on macOS, via the FSEvents @kFSEventStreamCreateFlagIgnoreSelf@ flag.
+    -- On other platforms it has no effect.
+    confIgnoreSelf :: Bool
   }
 
 type IOEvent = IORef Event
