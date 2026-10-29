@@ -116,6 +116,7 @@ test-suite tests
       FSNotify.Test
       FSNotify.Test.Configuration
       FSNotify.Test.EventTests
+      FSNotify.Test.IgnoreSelf
       TestLib.Util
       Paths_fsnotify
   hs-source-dirs:
