@@ -113,14 +113,19 @@ test-suite tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+      FSNotify.Test
+      FSNotify.Test.Configuration
       FSNotify.Test.EventTests
-      FSNotify.Test.Util
+      TestLib.Util
       Paths_fsnotify
   hs-source-dirs:
       test
+      test-lib
   default-extensions:
       ScopedTypeVariables
   ghc-options: -threaded -Wall
+  build-tool-depends:
+      sandwich:sandwich-discover
   build-depends:
       async >=2
     , base >=4.3.1.0
@@ -129,6 +134,7 @@ test-suite tests
     , filepath
     , fsnotify
     , monad-logger
+    , mtl
     , random
     , retry
     , safe-exceptions
