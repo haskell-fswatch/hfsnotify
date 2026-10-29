@@ -11,7 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        # macOS is pinned to 15 because macos-latest moved to an Xcode 26 image whose SDK .tbd
+        # files declare an arm64e.x1 architecture that the ld shipped with these GHCs can't parse.
+        os: [ubuntu-latest, macos-15, windows-latest]
         ghc:
           - "8.10.7"
           - "9.0.2"
@@ -25,9 +27,9 @@ jobs:
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
-        - os: macOS-latest
+        - os: macos-15
           ghc: 8.10.7
-        - os: macOS-latest
+        - os: macos-15
           ghc: 9.0.2
         # fast-logger, which the test suite pulls in via monad-logger, imports GHC.IO.SubSystem on
         # Windows, and that only exists from GHC 9.0 on
@@ -87,7 +89,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        # macOS is pinned to 15 because macos-latest moved to an Xcode 26 image whose SDK .tbd
+        # files declare an arm64e.x1 architecture that the ld shipped with these GHCs can't parse.
+        os: [ubuntu-latest, macos-15, windows-latest]
         stack-yaml:
         - stack-ghc90.yaml
         - stack-ghc92.yaml
@@ -99,7 +103,7 @@ jobs:
         exclude:
         # These don't work on GitHub CI anymore because they need llvm@13, which became
         # disabled on 12/31/2024
-        - os: macOS-latest
+        - os: macos-15
           stack-yaml: stack-ghc90.yaml
 
     steps:
