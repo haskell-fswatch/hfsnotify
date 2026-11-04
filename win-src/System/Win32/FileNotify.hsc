@@ -175,7 +175,9 @@ awaitDirectoryWatch dw = alloca $ \bytesReturnedPtr ->
       bytesReturned <- peek bytesReturnedPtr
       if bytesReturned == 0
         then return Overflowed
-        else Changes <$> readChanges (dwBuffer dw)
+        -- Entries that don't fit in what was returned mean the buffer can't be
+        -- trusted, so treat it like an overflow and have the directory rescanned
+        else maybe Overflowed Changes <$> readChanges (min bufferSize (fromEnum bytesReturned)) (dwBuffer dw)
 
 directoryWatchOnError :: DirectoryWatch -> SomeException -> IO ()
 directoryWatchOnError = dwOnError
@@ -224,15 +226,28 @@ closeHandleIgnoringExceptions h = closeHandle h `catch` \(_ :: SomeException) ->
 data Action = FileAdded | FileRemoved | FileModified | FileRenamedOld | FileRenamedNew
   deriving (Show, Read, Eq, Ord, Enum)
 
-readChanges :: Ptr FILE_NOTIFY_INFORMATION -> IO [(Action, String)]
-readChanges pfni = do
-  fni <- peekFNI pfni
-  let nioff = fromEnum $ fniNextEntryOffset fni
-  entries <- if nioff == 0 then return [] else readChanges $ pfni `plusPtr` nioff
-  -- Skip actions we don't know, rather than crashing on them
-  return $ case faToAction (fniAction fni) of
-    Just action -> (action, fniFileName fni) : entries
-    Nothing -> entries
+-- | Parse the first @size@ bytes of the buffer, or return 'Nothing' if an entry
+-- doesn't fit inside them.
+readChanges :: Int -> Ptr FILE_NOTIFY_INFORMATION -> IO (Maybe [(Action, String)])
+readChanges size buf = go 0
+  where
+    go offset
+      | offset + fileNameOffset > size = return Nothing
+      | otherwise = peekFNI (buf `plusPtr` offset) (size - offset) >>= \case
+          Nothing -> return Nothing
+          Just fni -> do
+            let nioff = fromEnum $ fniNextEntryOffset fni
+                rest
+                  | nioff == 0 = return (Just [])
+                  -- Entries are DWORD aligned, and each one starts after the last
+                  | nioff `mod` 4 /= 0 = return Nothing
+                  | otherwise = go (offset + nioff)
+            fmap (maybe id (:) (entry fni)) <$> rest
+
+    -- Skip actions we don't know, rather than crashing on them
+    entry fni = (\action -> (action, fniFileName fni)) <$> faToAction (fniAction fni)
+
+    fileNameOffset = (#offset FILE_NOTIFY_INFORMATION, FileName)
 
 faToAction :: FileAction -> Maybe Action
 faToAction fa
@@ -285,15 +300,20 @@ data FILE_NOTIFY_INFORMATION = FILE_NOTIFY_INFORMATION
 -- sizeOfFNI :: FILE_NOTIFY_INFORMATION -> Int
 -- sizeOfFNI fni =  (#size FILE_NOTIFY_INFORMATION) + (#size WCHAR) * (length (fniFileName fni) - 1)
 
-peekFNI :: Ptr FILE_NOTIFY_INFORMATION -> IO FILE_NOTIFY_INFORMATION
-peekFNI buf = do
+-- | Read an entry whose header is known to fit in the @available@ bytes, or
+-- return 'Nothing' if its file name runs past them.
+peekFNI :: Ptr FILE_NOTIFY_INFORMATION -> Int -> IO (Maybe FILE_NOTIFY_INFORMATION)
+peekFNI buf available = do
   neof <- (#peek FILE_NOTIFY_INFORMATION, NextEntryOffset) buf
   acti <- (#peek FILE_NOTIFY_INFORMATION, Action) buf
-  fnle <- (#peek FILE_NOTIFY_INFORMATION, FileNameLength) buf
-  fnam <- peekCWStringLen
-            (buf `plusPtr` (#offset FILE_NOTIFY_INFORMATION, FileName), -- start of array
-            fromEnum (fnle :: DWORD) `div` 2 ) -- fnle is the length in *bytes*, and a WCHAR is 2 bytes
-  return $ FILE_NOTIFY_INFORMATION neof acti fnam
+  fnle <- fromEnum <$> ((#peek FILE_NOTIFY_INFORMATION, FileNameLength) buf :: IO DWORD)
+  if (#offset FILE_NOTIFY_INFORMATION, FileName) + fnle > available
+    then return Nothing
+    else do
+      fnam <- peekCWStringLen
+                (buf `plusPtr` (#offset FILE_NOTIFY_INFORMATION, FileName), -- start of array
+                fnle `div` 2) -- fnle is the length in *bytes*, and a WCHAR is 2 bytes
+      return $ Just $ FILE_NOTIFY_INFORMATION neof acti fnam
 
 -- The interruptible qualifier will keep threads listening for events from hanging blocking when killed
 #if __GLASGOW_HASKELL__ >= 701
