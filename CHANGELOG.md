@@ -7,6 +7,7 @@ Version 0.5.0.0
 * Windows: fix race that caused events immediately after `watchDir`/`watchTree` to be lost. Reads are now overlapped (#131)
 * New `Rescan` event, reported when the OS lost events and a directory should be rescanned (#127)
 * New `confIgnoreSelf` option to ignore events caused by the current process, on macOS (#136, closes #48)
+* Windows: don't crash on unknown or malformed change notifications; a buffer that can't be parsed is reported as a `Rescan` (closes #113)
 
 Version 0.4.4.0
 ----------
