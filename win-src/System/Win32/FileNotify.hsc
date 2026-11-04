@@ -227,13 +227,21 @@ data Action = FileAdded | FileRemoved | FileModified | FileRenamedOld | FileRena
 readChanges :: Ptr FILE_NOTIFY_INFORMATION -> IO [(Action, String)]
 readChanges pfni = do
   fni <- peekFNI pfni
-  let entry = (faToAction $ fniAction fni, fniFileName fni)
-      nioff = fromEnum $ fniNextEntryOffset fni
+  let nioff = fromEnum $ fniNextEntryOffset fni
   entries <- if nioff == 0 then return [] else readChanges $ pfni `plusPtr` nioff
-  return $ entry:entries
+  -- Skip actions we don't know, rather than crashing on them
+  return $ case faToAction (fniAction fni) of
+    Just action -> (action, fniFileName fni) : entries
+    Nothing -> entries
 
-faToAction :: FileAction -> Action
-faToAction fa = toEnum $ fromEnum fa - 1
+faToAction :: FileAction -> Maybe Action
+faToAction fa
+  | fa == _fILE_ACTION_ADDED = Just FileAdded
+  | fa == _fILE_ACTION_REMOVED = Just FileRemoved
+  | fa == _fILE_ACTION_MODIFIED = Just FileModified
+  | fa == _fILE_ACTION_RENAMED_OLD_NAME = Just FileRenamedOld
+  | fa == _fILE_ACTION_RENAMED_NEW_NAME = Just FileRenamedNew
+  | otherwise = Nothing
 
 -------------------------------------------------------------------
 -- Low-level stuff that binds to notifications in the Win32 API
