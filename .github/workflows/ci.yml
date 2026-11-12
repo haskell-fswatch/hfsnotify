@@ -39,10 +39,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies (macOS)
+    - name: Set libffi include path (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew update
         # https://gitlab.haskell.org/ghc/ghc/-/issues/20592#note_391266
         echo "C_INCLUDE_PATH=`xcrun --show-sdk-path`/usr/include/ffi" >> "$GITHUB_ENV"
 
@@ -109,10 +108,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies (macOS)
+    - name: Set libffi include path (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew update
         # https://gitlab.haskell.org/ghc/ghc/-/issues/20592#note_391266
         echo "C_INCLUDE_PATH=`xcrun --show-sdk-path`/usr/include/ffi" >> "$GITHUB_ENV"
 
@@ -143,11 +141,18 @@ jobs:
           - --disable-executable-stripping
         EOF
 
+    # The cached ~/.stack includes GHC itself, configured for the runner image it was installed on, so
+    # it has to be keyed on the image (e.g. ubuntu24 vs ubuntu26) to stay usable when the image changes
+    - name: Get runner image
+      id: runner-image
+      shell: bash
+      run: echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
     - uses: actions/cache@v4
       name: Cache ~/.stack
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.stack-yaml }}-stack-key4
+        key: ${{ runner.os }}-${{ steps.runner-image.outputs.image }}-${{ matrix.stack-yaml }}-stack-key4
 
     # These need to run in bash: in PowerShell, $STACK_EXTRA_ARGS expands to nothing, so the
     # Windows jobs would all build the default stack.yaml instead of their matrix entry
