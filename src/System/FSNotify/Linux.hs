@@ -22,6 +22,8 @@ import Data.Monoid
 import Data.String
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX
+import Foreign.C.Error (Errno(..), eINVAL)
+import GHC.IO.Exception (IOException(..))
 import Prelude hiding (FilePath)
 import System.FSNotify.Find
 import System.FSNotify.Linux.Util
@@ -82,6 +84,16 @@ handleInoEvent actPred callback basePath watchStillExistsVar inoEvent = do
   events <- fsnEvents basePath currentTime inoEvent
   forM_ events $ \event -> when (actPred event) $ callback event
 
+-- | Remove a watch, ignoring EINVAL. The kernel drops a watch by itself when the watched directory is
+-- deleted, and if we stop before hinotify has delivered the DeletedSelf event, inotify_rm_watch fails
+-- with EINVAL because the watch is already gone.
+removeWatchIfPresent :: INo.WatchDescriptor -> IO ()
+removeWatchIfPresent wd = E.handle handler (INo.removeWatch wd)
+  where
+    handler (e :: IOException)
+      | fmap Errno (ioe_errno e) == Just eINVAL = return ()
+      | otherwise = E.throwIO e
+
 varieties :: [INo.EventVariety]
 varieties = [INo.Create, INo.Delete, INo.MoveIn, INo.MoveOut, INo.Attrib, INo.Modify, INo.CloseWrite, INo.DeleteSelf]
 
@@ -100,7 +112,7 @@ instance FileListener INotifyListener () where
     wd <- INo.addWatch listenerINotify varieties hinotifyPath (handleInoEvent actPred callback canonicalRawPath watchStillExistsVar)
     return $
       modifyMVar_ watchStillExistsVar $ \wse -> do
-        when wse $ INo.removeWatch wd
+        when wse $ removeWatchIfPresent wd
         return False
 
   listenRecursive conf listener initialPath actPred callback = do
@@ -116,7 +128,7 @@ instance FileListener INotifyListener () where
     let
       removeWatches wds = forM_ wds $ \(wd, watchStillExistsVar) ->
         modifyMVar_ watchStillExistsVar $ \wse -> do
-          when wse $ handle (reportRemoveFailure wd) (INo.removeWatch wd)
+          when wse $ handle (reportRemoveFailure wd) (removeWatchIfPresent wd)
           return False
 
       reportRemoveFailure wd (e :: SomeException) = confOnHandlerException conf $ toException $
