@@ -39,6 +39,7 @@ import System.Win32.File (
   , fILE_FLAG_BACKUP_SEMANTICS
   , fILE_FLAG_OVERLAPPED
   , fILE_LIST_DIRECTORY
+  , fILE_SHARE_DELETE
   , fILE_SHARE_READ
   , fILE_SHARE_WRITE
   )
@@ -118,7 +119,7 @@ openDirectoryWatch dir watchSubTree mask onError =
   where
     openHandle = createFile dir
       fILE_LIST_DIRECTORY -- Access mode
-      (fILE_SHARE_READ .|. fILE_SHARE_WRITE) -- Share mode
+      (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE) -- Share mode; DELETE lets the watched directory be renamed or removed
       Nothing -- security attributes
       oPEN_EXISTING -- Create mode, we want to look at an existing directory
       (fILE_FLAG_BACKUP_SEMANTICS .|. fILE_FLAG_OVERLAPPED) -- Directory handle, asynchronous reads

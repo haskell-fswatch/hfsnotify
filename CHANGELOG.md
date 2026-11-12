@@ -8,6 +8,7 @@ Version 0.5.0.0
 * New `Rescan` event, reported when the OS lost events and a directory should be rescanned (#127)
 * New `confIgnoreSelf` option to ignore events caused by the current process, on macOS (#136, closes #48)
 * Windows: don't crash on unknown or malformed change notifications; a buffer that can't be parsed is reported as a `Rescan` (closes #113)
+* Windows: open watched directories with `FILE_SHARE_DELETE`, so they can still be renamed or removed while watched
 
 Version 0.4.4.0
 ----------
