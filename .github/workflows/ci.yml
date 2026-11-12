@@ -39,6 +39,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # Ubuntu 26.04 no longer ships gold with binutils, but older GHCs (seen with 9.2 and 9.4) can still
+    # end up with -fuse-ld=gold in their settings, and then nothing links
+    - name: Install gold (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y binutils-gold
+
     - name: Set libffi include path (macOS)
       if: runner.os == 'macOS'
       run: |
@@ -107,6 +113,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    # Ubuntu 26.04 no longer ships gold with binutils, but older GHCs (seen with 9.2 and 9.4) can still
+    # end up with -fuse-ld=gold in their settings, and then nothing links
+    - name: Install gold (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y binutils-gold
 
     - name: Set libffi include path (macOS)
       if: runner.os == 'macOS'
